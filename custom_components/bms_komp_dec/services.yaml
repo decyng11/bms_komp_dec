@@ -1,0 +1,194 @@
+test_schedule:
+  name: Testuj harmonogram
+  description: Sprawdza harmonogram w trybie próbnym (bez wykonywania komend) i wypisuje wynik do logów.
+
+suggest_schedule:
+  name: Zaproponuj harmonogram
+  description: Analizuje prognozy PV, zużycia, G12w i RCE. Zwraca propozycje godzin (usługa z odpowiedzią).
+
+apply_schedule_times:
+  name: Zastosuj godziny
+  description: Zapisuje wybrane godziny do encji time.bms_*.
+  fields:
+    times:
+      name: Godziny
+      description: 'Słownik {time_key: "HH:MM"}'
+      required: true
+      example: '{"bateria_sprzedaz_start": "17:00", "bateria_sprzedaz_stop": "20:00"}'
+      selector:
+        object: {}
+
+auto_apply_now:
+  name: Zastosuj propozycję automatycznie
+  description: Generuje propozycję i stosuje ją z zabezpieczeniami (limit przesunięcia, spójność par, brak trwających operacji).
+  fields:
+    dry_run:
+      name: Tylko podgląd
+      description: "Przejdź przez wszystkie zabezpieczenia i pokaż zmiany, ale nic nie zapisuj (puste = według przełącznika „Auto-stosowanie: tylko podgląd”)."
+      required: false
+      selector:
+        boolean: {}
+
+undo_auto_apply:
+  name: Cofnij automatyczne godziny
+  description: Przywraca godziny sprzed ostatniego automatycznego zastosowania propozycji.
+
+watch_write:
+  name: Kontroluj wartość po zapisie
+  description: Zgłasza zapis parametru falownika; integracja sprawdzi go po 1, 3 i 6 minutach i wyśle powiadomienie, gdy wartość się zmieni (administrator).
+  fields:
+    entity_id:
+      name: Encja
+      required: true
+      example: number.inverter_zero_export_power
+      selector:
+        entity: {}
+    expected:
+      name: Oczekiwana wartość
+      required: true
+      example: "20"
+      selector:
+        text: {}
+    label:
+      name: Opis
+      required: false
+      selector:
+        text: {}
+    tolerance:
+      name: Tolerancja
+      required: false
+      selector:
+        number:
+          min: 0
+          max: 1000
+          step: 0.1
+          mode: box
+    previous:
+      name: Poprzednia wartość
+      required: false
+      selector:
+        text: {}
+    source:
+      name: Źródło
+      required: false
+      selector:
+        text: {}
+
+watch_status:
+  name: Stan kontroli po zapisie
+  description: Zwraca listę kontrolowanych zapisów i wyniki sprawdzeń (administrator).
+
+watch_clear:
+  name: Wyczyść kontrolę po zapisie
+  description: Usuwa jedną kontrolę (id) albo wszystkie zakończone (administrator).
+  fields:
+    id:
+      name: Identyfikator
+      required: false
+      selector:
+        text: {}
+
+health_check:
+  name: Test instalacji (kreator)
+  description: Sprawdza encje falownika, czujniki, ceny, taryfę i pokazuje, co zrobiłby każdy przycisk — bez zmiany ustawień (administrator).
+
+monthly_report:
+  name: Raport miesięczny
+  description: Zwraca bilans, energię, autokonsumpcję i szacunek oszczędności za miesiąc (domyślnie bieżący; rok i miesiąc podaje się razem).
+  fields:
+    year:
+      name: Rok
+      required: false
+      selector:
+        number:
+          min: 2000
+          max: 2100
+          mode: box
+    month:
+      name: Miesiąc
+      required: false
+      selector:
+        number:
+          min: 1
+          max: 12
+          mode: box
+
+get_plan:
+  name: Plan 24 h
+  description: Zwraca przewidywaną krzywą SOC z zaplanowanym ładowaniem i sprzedażą.
+  fields:
+    force:
+      name: Przelicz teraz
+      required: false
+      selector:
+        boolean: {}
+
+diag_store_get_all:
+  name: Diagnostyka — odczyt magazynu
+  description: Zwraca dziennik zmian, kopie bezpieczeństwa i profile zapisane w HA (administrator).
+
+diag_store_set:
+  name: Diagnostyka — zapis do magazynu
+  description: Zapisuje wartość JSON pod kluczem (log, auto, profiles, prefix, watch, alarms, backups) (administrator).
+  fields:
+    key:
+      name: Klucz
+      required: true
+      selector:
+        text: {}
+    value:
+      name: Wartość
+      required: true
+      selector:
+        object: {}
+
+diag_store_delete:
+  name: Diagnostyka — usuń klucz
+  description: Usuwa zapisany klucz z magazynu (administrator).
+  fields:
+    key:
+      name: Klucz
+      required: true
+      selector:
+        text: {}
+
+notify_settings_get:
+  name: Ustawienia powiadomień — odczyt
+  description: Zwraca ustawienia konfiguratora powiadomień i katalog rodzajów (administrator).
+
+notify_settings_set:
+  name: Ustawienia powiadomień — zapis
+  description: Zapisuje ustawienia konfiguratora powiadomień (rodzaje, telefon, odstęp, cisza nocna, progi, godziny podsumowań) — administrator.
+  fields:
+    settings:
+      name: Ustawienia
+      description: 'Obiekt {"kinds": {...}, "sched": {...}} w formacie zwracanym przez notify_settings_get.'
+      required: true
+      selector:
+        object: {}
+
+notify_test:
+  name: Powiadomienie testowe
+  description: Wysyła powiadomienie testowe (z pominięciem ciszy nocnej i odstępów) — administrator.
+
+devices_get:
+  name: Urządzenia — odczyt
+  description: Lista dodatkowych urządzeń, ich zużycie, koszty, cykle, plan dla elastycznych i (opcjonalnie) historia do wykresów.
+  fields:
+    history:
+      name: Z historią
+      description: Dołącz dane dzienne (do 400 dni) i godzinowe (do 62 dni).
+      required: false
+      selector:
+        boolean: {}
+
+devices_set:
+  name: Urządzenia — zapis
+  description: Zapisuje listę dodatkowych urządzeń (administrator).
+  fields:
+    devices:
+      name: Urządzenia
+      description: 'Lista obiektów {"name", "category", "power_eid", "energy_eid", "room", …}.'
+      required: true
+      selector:
+        object: {}

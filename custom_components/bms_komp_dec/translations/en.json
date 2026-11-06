@@ -1,0 +1,428 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Add to BMS komp-dec",
+        "description": "What do you want to add?",
+        "menu_options": {
+          "wizard": "Wizard: inverter + planner in one go (recommended)",
+          "bms": "BMS planner (controls the inverter through its entities)",
+          "inverter": "Inverter connected directly (experimental, without ha-solarman)"
+        }
+      },
+      "bms": {
+        "title": "BMS komp-dec",
+        "description": "Select the source entities. Empty = defaults.",
+        "data": {
+          "soc": "Battery SOC entity",
+          "pv_power": "PV power",
+          "load_power": "Load power",
+          "battery_power": "Battery power",
+          "grid_power": "Grid power (+import / −export)",
+          "energy_pv_today": "PV energy today",
+          "energy_load_today": "Load energy today",
+          "energy_grid_export_today": "Grid export today",
+          "energy_grid_import_today": "Grid import today",
+          "energy_batt_charge_today": "Battery charge today",
+          "energy_batt_discharge_today": "Battery discharge today",
+          "work_mode": "Inverter work mode (select)",
+          "charge_current": "Max charge current (number)",
+          "battery_capacity_kwh": "Battery capacity (kWh)",
+          "max_charge_power_w": "Max charge power (W)",
+          "max_discharge_power_w": "Max discharge power (W)",
+          "target_soc_grid_charge": "Grid charge target SOC (%)",
+          "min_sell_margin": "Initial min. sell margin (PLN/kWh)",
+          "price_buy_entity": "Buy price entity (G12w)",
+          "price_sell_entity": "Sell price entity (RCE)",
+          "pv_forecast_today": "PV forecast today (Solcast)",
+          "pv_forecast_tomorrow": "PV forecast tomorrow (Solcast)",
+          "export_surplus": "Export surplus power (number)",
+          "tou_select": "Time of Use (select)",
+          "notify_service": "Phone notification service (e.g. notify.mobile_app_phone; empty = Home Assistant notifications only)",
+          "tariff_peaks": "Tariff peak hours (e.g. 6-13,15-22; \"none\" = flat tariff)",
+          "tariff_weekend_offpeak": "Weekends fully off-peak (G12w: yes)",
+          "tariff_holiday_offpeak": "Public holidays fully off-peak (G12w: yes)",
+          "pv1_voltage": "PV1 voltage",
+          "pv1_current": "PV1 current",
+          "pv2_voltage": "PV2 voltage",
+          "pv2_current": "PV2 current",
+          "grid_power_l1": "Grid power L1",
+          "grid_power_l2": "Grid power L2",
+          "grid_power_l3": "Grid power L3",
+          "grid_voltage_l1": "Grid voltage L1",
+          "grid_voltage_l2": "Grid voltage L2",
+          "grid_voltage_l3": "Grid voltage L3",
+          "grid_current_l1": "Grid current L1",
+          "load_power_l1": "Load power L1",
+          "load_power_l2": "Load power L2",
+          "load_power_l3": "Load power L3",
+          "load_voltage_l1": "Load voltage L1",
+          "load_current_l1": "Load current L1",
+          "battery_voltage": "Battery voltage",
+          "battery_current": "Battery current",
+          "battery_temperature": "Battery temperature",
+          "tariff_mode": "Tariff mode",
+          "grid_current_l2": "Grid current L2",
+          "grid_current_l3": "Grid current L3",
+          "load_voltage_l2": "Load voltage L2",
+          "load_voltage_l3": "Load voltage L3",
+          "load_current_l2": "Load current L2",
+          "load_current_l3": "Load current L3"
+        },
+        "data_description": {
+          "tariff_mode": "Auto/dynamic: peak hours are computed every day from the buy entity's hourly price list (e.g. Pstryk). A day without a full price list uses the peak windows above."
+        }
+      },
+      "inverter": {
+        "title": "Inverter (direct connection)",
+        "description": "Experimental. Connects straight to the Solarman logger (port 8899) without the ha-solarman integration. A logger usually accepts only one local connection at a time, so for testing disable ha-solarman or remove its entry for this inverter. Writing to the inverter is off by default.",
+        "data": {
+          "name": "Name",
+          "host": "Logger IP address or host name",
+          "port": "Port",
+          "transport": "Transport",
+          "lookup_file": "Inverter profile",
+          "allow_write": "Allow writing to the inverter"
+        },
+        "data_description": {
+          "allow_write": "When off, the integration only reads. Turn on to let number / select / switch / time entities write to the inverter registers."
+        },
+        "sections": {
+          "additional_options": {
+            "name": "Additional options",
+            "description": "Change only if the profile needs it (number of MPPT inputs, phases, battery packs…).",
+            "data": {
+              "mod": "Profile variant (mod)",
+              "mppt": "Number of MPPT inputs",
+              "phase": "Number of phases",
+              "pack": "Number of battery packs (-1 = detect)",
+              "battery_nominal_voltage": "Battery nominal voltage (V)",
+              "battery_life_cycle_rating": "Battery life cycle rating (cycles)",
+              "mb_slave_id": "Modbus slave ID"
+            }
+          }
+        }
+      },
+      "reconfigure": {
+        "title": "BMS komp-dec reconfiguration",
+        "description": "Change entities and parameters. Saving reloads the integration (no need to remove it).",
+        "data": {
+          "soc": "Battery SOC entity",
+          "pv_power": "PV power",
+          "load_power": "Load power",
+          "battery_power": "Battery power",
+          "grid_power": "Grid power (+import / −export)",
+          "energy_pv_today": "PV energy today",
+          "energy_load_today": "Load energy today",
+          "energy_grid_export_today": "Grid export today",
+          "energy_grid_import_today": "Grid import today",
+          "energy_batt_charge_today": "Battery charge today",
+          "energy_batt_discharge_today": "Battery discharge today",
+          "work_mode": "Inverter work mode (select)",
+          "charge_current": "Max charge current (number)",
+          "battery_capacity_kwh": "Battery capacity (kWh)",
+          "max_charge_power_w": "Max charge power (W)",
+          "max_discharge_power_w": "Max discharge power (W)",
+          "target_soc_grid_charge": "Grid charge target SOC (%)",
+          "min_sell_margin": "Initial min. sell margin (PLN/kWh)",
+          "price_buy_entity": "Buy price entity (G12w)",
+          "price_sell_entity": "Sell price entity (RCE)",
+          "pv_forecast_today": "PV forecast today (Solcast)",
+          "pv_forecast_tomorrow": "PV forecast tomorrow (Solcast)",
+          "auto_detect": "Re-detect entities (overrides selected entities)",
+          "export_surplus": "Export surplus power (number)",
+          "tou_select": "Time of Use (select)",
+          "notify_service": "Phone notification service (e.g. notify.mobile_app_phone; empty = Home Assistant notifications only)",
+          "tariff_peaks": "Tariff peak hours (e.g. 6-13,15-22; \"none\" = flat tariff)",
+          "tariff_weekend_offpeak": "Weekends fully off-peak (G12w: yes)",
+          "tariff_holiday_offpeak": "Public holidays fully off-peak (G12w: yes)",
+          "pv1_voltage": "PV1 voltage",
+          "pv1_current": "PV1 current",
+          "pv2_voltage": "PV2 voltage",
+          "pv2_current": "PV2 current",
+          "grid_power_l1": "Grid power L1",
+          "grid_power_l2": "Grid power L2",
+          "grid_power_l3": "Grid power L3",
+          "grid_voltage_l1": "Grid voltage L1",
+          "grid_voltage_l2": "Grid voltage L2",
+          "grid_voltage_l3": "Grid voltage L3",
+          "grid_current_l1": "Grid current L1",
+          "load_power_l1": "Load power L1",
+          "load_power_l2": "Load power L2",
+          "load_power_l3": "Load power L3",
+          "load_voltage_l1": "Load voltage L1",
+          "load_current_l1": "Load current L1",
+          "battery_voltage": "Battery voltage",
+          "battery_current": "Battery current",
+          "battery_temperature": "Battery temperature",
+          "tariff_mode": "Tariff mode",
+          "grid_current_l2": "Grid current L2",
+          "grid_current_l3": "Grid current L3",
+          "load_voltage_l2": "Load voltage L2",
+          "load_voltage_l3": "Load voltage L3",
+          "load_current_l2": "Load current L2",
+          "load_current_l3": "Load current L3"
+        },
+        "data_description": {
+          "tariff_mode": "Auto/dynamic: peak hours are computed every day from the buy entity's hourly price list (e.g. Pstryk). A day without a full price list uses the peak windows above."
+        }
+      },
+      "wizard": {
+        "title": "BMS komp-dec wizard",
+        "description": "The wizard adds the inverter, waits for its entities to appear, matches them to the planner and saves everything. Writing to the inverter and auto-apply stay off until you enable them.",
+        "data": {
+          "connection": "Where should the inverter data come from?"
+        }
+      },
+      "wizard_inverter": {
+        "title": "Wizard: inverter (direct connection)",
+        "description": "Experimental. Connects straight to the Solarman logger (port 8899) without the ha-solarman integration. A logger usually accepts only one local connection at a time, so for testing disable ha-solarman or remove its entry for this inverter. Writing to the inverter is off by default.",
+        "data": {
+          "name": "Name",
+          "host": "Logger IP address or host name",
+          "port": "Port",
+          "transport": "Transport",
+          "lookup_file": "Inverter profile",
+          "allow_write": "Allow writing to the inverter"
+        },
+        "data_description": {
+          "allow_write": "When off, the integration only reads. Turn on to let number / select / switch / time entities write to the inverter registers."
+        },
+        "sections": {
+          "additional_options": {
+            "name": "Additional options",
+            "description": "Change only if the profile needs it (number of MPPT inputs, phases, battery packs…).",
+            "data": {
+              "mod": "Profile variant (mod)",
+              "mppt": "Number of MPPT inputs",
+              "phase": "Number of phases",
+              "pack": "Number of battery packs (-1 = detect)",
+              "battery_nominal_voltage": "Battery nominal voltage (V)",
+              "battery_life_cycle_rating": "Battery life cycle rating (cycles)",
+              "mb_slave_id": "Modbus slave ID"
+            }
+          }
+        }
+      },
+      "wizard_match": {
+        "title": "Wizard: entity matching and settings",
+        "description": "Detected: {summary}\n\nCheck the matched entities. The wizard will not accept entities that do not exist or have the wrong type (e.g. a voltage instead of a current). Other settings (phases L1–L3, PV, battery) are in the collapsible section.\n\nProblems: {problems}",
+        "data": {
+          "soc": "Battery SOC entity",
+          "pv_power": "PV power",
+          "load_power": "Load power",
+          "battery_power": "Battery power",
+          "grid_power": "Grid power (+import / −export)",
+          "battery_capacity_kwh": "Battery capacity (kWh)",
+          "tariff_mode": "Tariff mode",
+          "price_sell_entity": "Sell price entity (RCE)",
+          "price_buy_entity": "Buy price entity (G12w)",
+          "pv_forecast_today": "PV forecast today (Solcast)",
+          "pv_forecast_tomorrow": "PV forecast tomorrow (Solcast)"
+        },
+        "sections": {
+          "details": {
+            "name": "Phases, PV, battery and control (optional)",
+            "data": {
+              "pv1_voltage": "PV1 voltage",
+              "pv1_current": "PV1 current",
+              "pv2_voltage": "PV2 voltage",
+              "pv2_current": "PV2 current",
+              "grid_voltage_l1": "Grid voltage L1",
+              "grid_voltage_l2": "Grid voltage L2",
+              "grid_voltage_l3": "Grid voltage L3",
+              "grid_current_l1": "Grid current L1",
+              "grid_current_l2": "Grid current L2",
+              "grid_current_l3": "Grid current L3",
+              "grid_power_l1": "Grid power L1",
+              "grid_power_l2": "Grid power L2",
+              "grid_power_l3": "Grid power L3",
+              "load_voltage_l1": "Load voltage L1",
+              "load_voltage_l2": "Load voltage L2",
+              "load_voltage_l3": "Load voltage L3",
+              "load_current_l1": "Load current L1",
+              "load_current_l2": "Load current L2",
+              "load_current_l3": "Load current L3",
+              "load_power_l1": "Load power L1",
+              "load_power_l2": "Load power L2",
+              "load_power_l3": "Load power L3",
+              "battery_voltage": "Battery voltage",
+              "battery_current": "Battery current",
+              "battery_temperature": "Battery temperature",
+              "work_mode": "Inverter work mode (select)",
+              "charge_current": "Max charge current (number)",
+              "export_surplus": "Export surplus power (number)",
+              "energy_pv_today": "PV energy today",
+              "energy_load_today": "Load energy today",
+              "energy_grid_export_today": "Grid export today",
+              "energy_grid_import_today": "Grid import today",
+              "energy_batt_charge_today": "Battery charge today",
+              "energy_batt_discharge_today": "Battery discharge today",
+              "tou_select": "Time of Use (select)"
+            }
+          }
+        }
+      },
+      "wizard_wait": {
+        "title": "Inverter is not responding yet",
+        "description": "The inverter is added and connected, but it has not returned its first readings yet (battery, PV, grid, load). This is normal for the first minute. Press Submit to check again. Nothing is added a second time."
+      }
+    },
+    "abort": {
+      "single_instance_allowed": "BMS komp-dec is already configured.",
+      "reconfigure_successful": "Configuration saved, integration reloaded.",
+      "unknown": "Unknown error.",
+      "already_configured_device": "An inverter with this address is already added.",
+      "name_in_use": "This name is already used by another inverter."
+    },
+    "error": {
+      "invalid_peaks": "Invalid peak hours. Use the format 6-13,15-22 (whole hours, ascending, non-overlapping; \"none\" = flat tariff).",
+      "invalid_notify": "Invalid service name. Use the format notify.mobile_app_phone (lowercase letters, digits, underscores).",
+      "cannot_connect": "The host name could not be resolved.",
+      "invalid_host": "Invalid host address.",
+      "timeout_connect": "Timed out while resolving the host address.",
+      "unknown": "Unknown error.",
+      "already_configured_device": "An inverter with this address is already added.",
+      "name_in_use": "This name is already used by another inverter.",
+      "setup_failed": "The inverter did not load in time. Check the logger IP address and port, and that nothing else (e.g. ha-solarman) holds its single connection. The entry was removed.",
+      "core_missing": "The main entities are missing (SOC, PV, load, battery and grid power). Select them in the form.",
+      "entities_missing": "The selected entities do not exist in Home Assistant: {problems}",
+      "wrong_type": "Entities have the wrong type or unit: {problems}",
+      "no_data": "The inverter is still not returning data. Check the logger IP address and port, wait a moment and submit again."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "BMS komp-dec settings",
+        "description": "Change entities and parameters. Saving reloads the integration (no need to remove it).",
+        "data": {
+          "soc": "Battery SOC entity",
+          "pv_power": "PV power",
+          "load_power": "Load power",
+          "battery_power": "Battery power",
+          "grid_power": "Grid power (+import / −export)",
+          "energy_pv_today": "PV energy today",
+          "energy_load_today": "Load energy today",
+          "energy_grid_export_today": "Grid export today",
+          "energy_grid_import_today": "Grid import today",
+          "energy_batt_charge_today": "Battery charge today",
+          "energy_batt_discharge_today": "Battery discharge today",
+          "work_mode": "Inverter work mode (select)",
+          "charge_current": "Max charge current (number)",
+          "battery_capacity_kwh": "Battery capacity (kWh)",
+          "max_charge_power_w": "Max charge power (W)",
+          "max_discharge_power_w": "Max discharge power (W)",
+          "target_soc_grid_charge": "Grid charge target SOC (%)",
+          "min_sell_margin": "Initial min. sell margin (PLN/kWh)",
+          "price_buy_entity": "Buy price entity (G12w)",
+          "price_sell_entity": "Sell price entity (RCE)",
+          "pv_forecast_today": "PV forecast today (Solcast)",
+          "pv_forecast_tomorrow": "PV forecast tomorrow (Solcast)",
+          "auto_detect": "Re-detect entities (overrides selected entities)",
+          "export_surplus": "Export surplus power (number)",
+          "tou_select": "Time of Use (select)",
+          "notify_service": "Phone notification service (e.g. notify.mobile_app_phone; empty = Home Assistant notifications only)",
+          "tariff_peaks": "Tariff peak hours (e.g. 6-13,15-22; \"none\" = flat tariff)",
+          "tariff_weekend_offpeak": "Weekends fully off-peak (G12w: yes)",
+          "tariff_holiday_offpeak": "Public holidays fully off-peak (G12w: yes)",
+          "pv1_voltage": "PV1 voltage",
+          "pv1_current": "PV1 current",
+          "pv2_voltage": "PV2 voltage",
+          "pv2_current": "PV2 current",
+          "grid_power_l1": "Grid power L1",
+          "grid_power_l2": "Grid power L2",
+          "grid_power_l3": "Grid power L3",
+          "grid_voltage_l1": "Grid voltage L1",
+          "grid_voltage_l2": "Grid voltage L2",
+          "grid_voltage_l3": "Grid voltage L3",
+          "grid_current_l1": "Grid current L1",
+          "load_power_l1": "Load power L1",
+          "load_power_l2": "Load power L2",
+          "load_power_l3": "Load power L3",
+          "load_voltage_l1": "Load voltage L1",
+          "load_current_l1": "Load current L1",
+          "battery_voltage": "Battery voltage",
+          "battery_current": "Battery current",
+          "battery_temperature": "Battery temperature",
+          "tariff_mode": "Tariff mode",
+          "grid_current_l2": "Grid current L2",
+          "grid_current_l3": "Grid current L3",
+          "load_voltage_l2": "Load voltage L2",
+          "load_voltage_l3": "Load voltage L3",
+          "load_current_l2": "Load current L2",
+          "load_current_l3": "Load current L3"
+        },
+        "data_description": {
+          "tariff_mode": "Auto/dynamic: peak hours are computed every day from the buy entity's hourly price list (e.g. Pstryk). A day without a full price list uses the peak windows above."
+        }
+      },
+      "inverter": {
+        "title": "Inverter settings",
+        "description": "Change the connection or turn writing on or off. Saving reloads this inverter.",
+        "data": {
+          "host": "Logger IP address or host name",
+          "port": "Port",
+          "transport": "Transport",
+          "lookup_file": "Inverter profile",
+          "allow_write": "Allow writing to the inverter"
+        },
+        "data_description": {
+          "allow_write": "When off, the integration only reads. Turn on to let number / select / switch / time entities write to the inverter registers."
+        },
+        "sections": {
+          "additional_options": {
+            "name": "Additional options",
+            "description": "Change only if the profile needs it (number of MPPT inputs, phases, battery packs…).",
+            "data": {
+              "mod": "Profile variant (mod)",
+              "mppt": "Number of MPPT inputs",
+              "phase": "Number of phases",
+              "pack": "Number of battery packs (-1 = detect)",
+              "battery_nominal_voltage": "Battery nominal voltage (V)",
+              "battery_life_cycle_rating": "Battery life cycle rating (cycles)",
+              "mb_slave_id": "Modbus slave ID"
+            }
+          }
+        }
+      }
+    },
+    "error": {
+      "invalid_peaks": "Invalid peak hours. Use the format 6-13,15-22 (whole hours, ascending, non-overlapping; \"none\" = flat tariff).",
+      "invalid_notify": "Invalid service name. Use the format notify.mobile_app_phone (lowercase letters, digits, underscores).",
+      "cannot_connect": "The host name could not be resolved.",
+      "invalid_host": "Invalid host address.",
+      "timeout_connect": "Timed out while resolving the host address.",
+      "unknown": "Unknown error.",
+      "already_configured_device": "An inverter with this address is already added.",
+      "name_in_use": "This name is already used by another inverter.",
+      "setup_failed": "The inverter did not load in time. Check the logger IP address and port, and that nothing else (e.g. ha-solarman) holds its single connection. The entry was removed.",
+      "core_missing": "The main entities are missing (SOC, PV, load, battery and grid power). Select them in the form.",
+      "entities_missing": "The selected entities do not exist in Home Assistant: {problems}",
+      "wrong_type": "Entities have the wrong type or unit: {problems}",
+      "no_data": "The inverter is still not returning data. Check the logger IP address and port, wait a moment and submit again."
+    }
+  },
+  "selector": {
+    "transport": {
+      "options": {
+        "tcp": "Solarman V5 (TCP)",
+        "modbus_tcp": "Modbus TCP",
+        "modbus_rtu": "Modbus RTU over TCP"
+      }
+    },
+    "tariff_mode": {
+      "options": {
+        "auto": "Auto — hourly buy prices when the buy entity provides them (dynamic tariff, e.g. Pstryk), otherwise fixed windows",
+        "zone": "Zone (fixed peak windows: G11/G12/G12w…)",
+        "dynamic": "Dynamic — hourly buy prices (fixed windows only for days without prices)"
+      }
+    },
+    "wizard_connection": {
+      "options": {
+        "direct": "Direct connection to the Solarman logger (the wizard adds the inverter)",
+        "solarman": "I already have the inverter in ha-solarman (use its entities)"
+      }
+    }
+  }
+}

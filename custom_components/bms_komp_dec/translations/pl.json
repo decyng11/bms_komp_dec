@@ -1,0 +1,428 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Dodaj do BMS komp-dec",
+        "description": "Co chcesz dodać?",
+        "menu_options": {
+          "wizard": "Kreator: falownik + planer w jednym (zalecane)",
+          "bms": "Planer BMS (steruje falownikiem przez jego encje)",
+          "inverter": "Falownik połączony bezpośrednio (eksperymentalne, bez ha-solarman)"
+        }
+      },
+      "bms": {
+        "title": "BMS komp-dec",
+        "description": "Podaj encje źródłowe. Puste = wartości domyślne.",
+        "data": {
+          "soc": "Encja SOC baterii",
+          "pv_power": "Moc PV",
+          "load_power": "Moc zużycia",
+          "battery_power": "Moc baterii",
+          "grid_power": "Moc sieci (+import / −eksport)",
+          "energy_pv_today": "Energia PV dziś",
+          "energy_load_today": "Zużycie dziś",
+          "energy_grid_export_today": "Eksport do sieci dziś",
+          "energy_grid_import_today": "Import z sieci dziś",
+          "energy_batt_charge_today": "Ładowanie baterii dziś",
+          "energy_batt_discharge_today": "Rozładowanie baterii dziś",
+          "work_mode": "Tryb pracy falownika (select)",
+          "charge_current": "Maks. prąd ładowania (number)",
+          "battery_capacity_kwh": "Pojemność baterii (kWh)",
+          "max_charge_power_w": "Maks. moc ładowania (W)",
+          "max_discharge_power_w": "Maks. moc rozładowania (W)",
+          "target_soc_grid_charge": "Docelowy SOC ładowania z sieci (%)",
+          "min_sell_margin": "Początkowa min. marża sprzedaży (PLN/kWh)",
+          "price_buy_entity": "Encja ceny zakupu (G12w)",
+          "price_sell_entity": "Encja ceny sprzedaży (RCE)",
+          "pv_forecast_today": "Prognoza PV dziś (Solcast)",
+          "pv_forecast_tomorrow": "Prognoza PV jutro (Solcast)",
+          "export_surplus": "Moc eksportu/nadwyżki (number, Export Surplus Power)",
+          "tou_select": "Time of Use (select)",
+          "notify_service": "Usługa powiadomień na telefon (np. notify.mobile_app_telefon; puste = tylko powiadomienia w HA)",
+          "tariff_peaks": "Godziny szczytu taryfy (np. 6-13,15-22; „brak” = taryfa jednostrefowa)",
+          "tariff_weekend_offpeak": "Weekendy całodobowo w strefie taniej (G12w: tak)",
+          "tariff_holiday_offpeak": "Święta ustawowe całodobowo w strefie taniej (G12w: tak)",
+          "pv1_voltage": "Napięcie PV1",
+          "pv1_current": "Prąd PV1",
+          "pv2_voltage": "Napięcie PV2",
+          "pv2_current": "Prąd PV2",
+          "grid_power_l1": "Moc sieci L1",
+          "grid_power_l2": "Moc sieci L2",
+          "grid_power_l3": "Moc sieci L3",
+          "grid_voltage_l1": "Napięcie sieci L1",
+          "grid_voltage_l2": "Napięcie sieci L2",
+          "grid_voltage_l3": "Napięcie sieci L3",
+          "grid_current_l1": "Prąd sieci L1",
+          "load_power_l1": "Moc zużycia L1",
+          "load_power_l2": "Moc zużycia L2",
+          "load_power_l3": "Moc zużycia L3",
+          "load_voltage_l1": "Napięcie odbiorów L1",
+          "load_current_l1": "Prąd odbiorów L1",
+          "battery_voltage": "Napięcie baterii",
+          "battery_current": "Prąd baterii",
+          "battery_temperature": "Temperatura baterii",
+          "tariff_mode": "Tryb taryfy",
+          "grid_current_l2": "Prąd sieci L2",
+          "grid_current_l3": "Prąd sieci L3",
+          "load_voltage_l2": "Napięcie domu L2",
+          "load_voltage_l3": "Napięcie domu L3",
+          "load_current_l2": "Prąd domu L2",
+          "load_current_l3": "Prąd domu L3"
+        },
+        "data_description": {
+          "tariff_mode": "Auto/dynamiczna: godziny szczytu są liczone każdego dnia z listy cen godzinowych encji zakupu (np. Pstryk). Dzień bez pełnej listy cen używa okien szczytu podanych wyżej."
+        }
+      },
+      "inverter": {
+        "title": "Falownik (połączenie bezpośrednie)",
+        "description": "Funkcja eksperymentalna. Łączy się wprost z loggerem Solarman (port 8899), bez integracji ha-solarman. Logger zwykle przyjmuje tylko jedno połączenie lokalne naraz, więc na czas testów wyłącz ha-solarman albo usuń jej wpis tego falownika. Zapis do falownika jest domyślnie wyłączony.",
+        "data": {
+          "name": "Nazwa",
+          "host": "Adres IP loggera lub nazwa hosta",
+          "port": "Port",
+          "transport": "Transport",
+          "lookup_file": "Profil falownika",
+          "allow_write": "Zezwól na zapis do falownika"
+        },
+        "data_description": {
+          "allow_write": "Gdy wyłączone, integracja tylko czyta. Włącz, aby encje number / select / switch / time mogły zapisywać do rejestrów falownika."
+        },
+        "sections": {
+          "additional_options": {
+            "name": "Opcje dodatkowe",
+            "description": "Zmieniaj tylko, jeśli profil tego wymaga (liczba wejść MPPT, faz, pakietów baterii…).",
+            "data": {
+              "mod": "Wariant profilu (mod)",
+              "mppt": "Liczba wejść MPPT",
+              "phase": "Liczba faz",
+              "pack": "Liczba pakietów baterii (-1 = wykryj)",
+              "battery_nominal_voltage": "Napięcie nominalne baterii (V)",
+              "battery_life_cycle_rating": "Żywotność baterii (liczba cykli)",
+              "mb_slave_id": "Adres Modbus (slave ID)"
+            }
+          }
+        }
+      },
+      "reconfigure": {
+        "title": "Rekonfiguracja BMS komp-dec",
+        "description": "Zmień encje i parametry. Zmiana przeładuje integrację (bez usuwania).",
+        "data": {
+          "soc": "Encja SOC baterii",
+          "pv_power": "Moc PV",
+          "load_power": "Moc zużycia",
+          "battery_power": "Moc baterii",
+          "grid_power": "Moc sieci (+import / −eksport)",
+          "energy_pv_today": "Energia PV dziś",
+          "energy_load_today": "Zużycie dziś",
+          "energy_grid_export_today": "Eksport do sieci dziś",
+          "energy_grid_import_today": "Import z sieci dziś",
+          "energy_batt_charge_today": "Ładowanie baterii dziś",
+          "energy_batt_discharge_today": "Rozładowanie baterii dziś",
+          "work_mode": "Tryb pracy falownika (select)",
+          "charge_current": "Maks. prąd ładowania (number)",
+          "battery_capacity_kwh": "Pojemność baterii (kWh)",
+          "max_charge_power_w": "Maks. moc ładowania (W)",
+          "max_discharge_power_w": "Maks. moc rozładowania (W)",
+          "target_soc_grid_charge": "Docelowy SOC ładowania z sieci (%)",
+          "min_sell_margin": "Początkowa min. marża sprzedaży (PLN/kWh)",
+          "price_buy_entity": "Encja ceny zakupu (G12w)",
+          "price_sell_entity": "Encja ceny sprzedaży (RCE)",
+          "pv_forecast_today": "Prognoza PV dziś (Solcast)",
+          "pv_forecast_tomorrow": "Prognoza PV jutro (Solcast)",
+          "auto_detect": "Wykryj encje ponownie (nadpisze wybrane encje)",
+          "export_surplus": "Moc eksportu/nadwyżki (number, Export Surplus Power)",
+          "tou_select": "Time of Use (select)",
+          "notify_service": "Usługa powiadomień na telefon (np. notify.mobile_app_telefon; puste = tylko powiadomienia w HA)",
+          "tariff_peaks": "Godziny szczytu taryfy (np. 6-13,15-22; „brak” = taryfa jednostrefowa)",
+          "tariff_weekend_offpeak": "Weekendy całodobowo w strefie taniej (G12w: tak)",
+          "tariff_holiday_offpeak": "Święta ustawowe całodobowo w strefie taniej (G12w: tak)",
+          "pv1_voltage": "Napięcie PV1",
+          "pv1_current": "Prąd PV1",
+          "pv2_voltage": "Napięcie PV2",
+          "pv2_current": "Prąd PV2",
+          "grid_power_l1": "Moc sieci L1",
+          "grid_power_l2": "Moc sieci L2",
+          "grid_power_l3": "Moc sieci L3",
+          "grid_voltage_l1": "Napięcie sieci L1",
+          "grid_voltage_l2": "Napięcie sieci L2",
+          "grid_voltage_l3": "Napięcie sieci L3",
+          "grid_current_l1": "Prąd sieci L1",
+          "load_power_l1": "Moc zużycia L1",
+          "load_power_l2": "Moc zużycia L2",
+          "load_power_l3": "Moc zużycia L3",
+          "load_voltage_l1": "Napięcie odbiorów L1",
+          "load_current_l1": "Prąd odbiorów L1",
+          "battery_voltage": "Napięcie baterii",
+          "battery_current": "Prąd baterii",
+          "battery_temperature": "Temperatura baterii",
+          "tariff_mode": "Tryb taryfy",
+          "grid_current_l2": "Prąd sieci L2",
+          "grid_current_l3": "Prąd sieci L3",
+          "load_voltage_l2": "Napięcie domu L2",
+          "load_voltage_l3": "Napięcie domu L3",
+          "load_current_l2": "Prąd domu L2",
+          "load_current_l3": "Prąd domu L3"
+        },
+        "data_description": {
+          "tariff_mode": "Auto/dynamiczna: godziny szczytu są liczone każdego dnia z listy cen godzinowych encji zakupu (np. Pstryk). Dzień bez pełnej listy cen używa okien szczytu podanych wyżej."
+        }
+      },
+      "wizard": {
+        "title": "Kreator BMS komp-dec",
+        "description": "Kreator doda falownik, poczeka aż jego encje się pojawią, dopasuje je do planera i zapisze całość. Zapis do falownika i „Auto-stosowanie” zostają wyłączone, dopóki ich sam nie włączysz.",
+        "data": {
+          "connection": "Skąd mają pochodzić dane falownika?"
+        }
+      },
+      "wizard_inverter": {
+        "title": "Kreator: falownik (połączenie bezpośrednie)",
+        "description": "Funkcja eksperymentalna. Łączy się wprost z loggerem Solarman (port 8899), bez integracji ha-solarman. Logger zwykle przyjmuje tylko jedno połączenie lokalne naraz, więc na czas testów wyłącz ha-solarman albo usuń jej wpis tego falownika. Zapis do falownika jest domyślnie wyłączony.",
+        "data": {
+          "name": "Nazwa",
+          "host": "Adres IP loggera lub nazwa hosta",
+          "port": "Port",
+          "transport": "Transport",
+          "lookup_file": "Profil falownika",
+          "allow_write": "Zezwól na zapis do falownika"
+        },
+        "data_description": {
+          "allow_write": "Gdy wyłączone, integracja tylko czyta. Włącz, aby encje number / select / switch / time mogły zapisywać do rejestrów falownika."
+        },
+        "sections": {
+          "additional_options": {
+            "name": "Opcje dodatkowe",
+            "description": "Zmieniaj tylko, jeśli profil tego wymaga (liczba wejść MPPT, faz, pakietów baterii…).",
+            "data": {
+              "mod": "Wariant profilu (mod)",
+              "mppt": "Liczba wejść MPPT",
+              "phase": "Liczba faz",
+              "pack": "Liczba pakietów baterii (-1 = wykryj)",
+              "battery_nominal_voltage": "Napięcie nominalne baterii (V)",
+              "battery_life_cycle_rating": "Żywotność baterii (liczba cykli)",
+              "mb_slave_id": "Adres Modbus (slave ID)"
+            }
+          }
+        }
+      },
+      "wizard_match": {
+        "title": "Kreator: dopasowanie encji i ustawienia",
+        "description": "Wykryto: {summary}\n\nSprawdź dopasowane encje. Kreator nie zatwierdzi encji, które nie istnieją albo mają zły typ (np. napięcie zamiast prądu). Reszta ustawień (fazy L1–L3, PV, bateria) jest w rozwijanej sekcji.\n\nProblemy: {problems}",
+        "data": {
+          "soc": "Encja SOC baterii",
+          "pv_power": "Moc PV",
+          "load_power": "Moc zużycia",
+          "battery_power": "Moc baterii",
+          "grid_power": "Moc sieci (+import / −eksport)",
+          "battery_capacity_kwh": "Pojemność baterii (kWh)",
+          "tariff_mode": "Tryb taryfy",
+          "price_sell_entity": "Encja ceny sprzedaży (RCE)",
+          "price_buy_entity": "Encja ceny zakupu (G12w)",
+          "pv_forecast_today": "Prognoza PV dziś (Solcast)",
+          "pv_forecast_tomorrow": "Prognoza PV jutro (Solcast)"
+        },
+        "sections": {
+          "details": {
+            "name": "Fazy, PV, bateria i sterowanie (opcjonalne)",
+            "data": {
+              "pv1_voltage": "Napięcie PV1",
+              "pv1_current": "Prąd PV1",
+              "pv2_voltage": "Napięcie PV2",
+              "pv2_current": "Prąd PV2",
+              "grid_voltage_l1": "Napięcie sieci L1",
+              "grid_voltage_l2": "Napięcie sieci L2",
+              "grid_voltage_l3": "Napięcie sieci L3",
+              "grid_current_l1": "Prąd sieci L1",
+              "grid_current_l2": "Prąd sieci L2",
+              "grid_current_l3": "Prąd sieci L3",
+              "grid_power_l1": "Moc sieci L1",
+              "grid_power_l2": "Moc sieci L2",
+              "grid_power_l3": "Moc sieci L3",
+              "load_voltage_l1": "Napięcie odbiorów L1",
+              "load_voltage_l2": "Napięcie domu L2",
+              "load_voltage_l3": "Napięcie domu L3",
+              "load_current_l1": "Prąd odbiorów L1",
+              "load_current_l2": "Prąd domu L2",
+              "load_current_l3": "Prąd domu L3",
+              "load_power_l1": "Moc zużycia L1",
+              "load_power_l2": "Moc zużycia L2",
+              "load_power_l3": "Moc zużycia L3",
+              "battery_voltage": "Napięcie baterii",
+              "battery_current": "Prąd baterii",
+              "battery_temperature": "Temperatura baterii",
+              "work_mode": "Tryb pracy falownika (select)",
+              "charge_current": "Maks. prąd ładowania (number)",
+              "export_surplus": "Moc eksportu/nadwyżki (number, Export Surplus Power)",
+              "energy_pv_today": "Energia PV dziś",
+              "energy_load_today": "Zużycie dziś",
+              "energy_grid_export_today": "Eksport do sieci dziś",
+              "energy_grid_import_today": "Import z sieci dziś",
+              "energy_batt_charge_today": "Ładowanie baterii dziś",
+              "energy_batt_discharge_today": "Rozładowanie baterii dziś",
+              "tou_select": "Time of Use (select)"
+            }
+          }
+        }
+      },
+      "wizard_wait": {
+        "title": "Falownik jeszcze nie odpowiada",
+        "description": "Falownik jest dodany i połączony, ale nie zwrócił jeszcze pierwszych odczytów (bateria, PV, sieć, dom). To normalne przez pierwsze kilkadziesiąt sekund. Kliknij „Zatwierdź”, żeby sprawdzić ponownie. Nic nie zostanie dodane drugi raz."
+      }
+    },
+    "abort": {
+      "single_instance_allowed": "Integracja BMS komp-dec jest już skonfigurowana.",
+      "reconfigure_successful": "Konfiguracja zapisana, integracja przeładowana.",
+      "unknown": "Nieznany błąd.",
+      "already_configured_device": "Falownik o tym adresie jest już dodany.",
+      "name_in_use": "Ta nazwa jest już używana przez inny falownik."
+    },
+    "error": {
+      "invalid_peaks": "Nieprawidłowe godziny szczytu. Użyj formatu 6-13,15-22 (pełne godziny, rosnąco, bez nachodzenia; „brak” = taryfa jednostrefowa).",
+      "invalid_notify": "Nieprawidłowa nazwa usługi. Użyj formatu notify.mobile_app_telefon (małe litery, cyfry, podkreślenia).",
+      "cannot_connect": "Nie udało się rozpoznać nazwy hosta.",
+      "invalid_host": "Nieprawidłowy adres hosta.",
+      "timeout_connect": "Przekroczono czas rozpoznawania adresu hosta.",
+      "unknown": "Nieznany błąd.",
+      "already_configured_device": "Falownik o tym adresie jest już dodany.",
+      "name_in_use": "Ta nazwa jest już używana przez inny falownik.",
+      "setup_failed": "Falownik nie załadował się w wyznaczonym czasie. Sprawdź adres IP loggera, port i czy nic innego (np. ha-solarman) nie trzyma jego jedynego połączenia. Wpis został usunięty.",
+      "core_missing": "Brakuje głównych encji (SOC, moc PV, zużycia, baterii, sieci). Wybierz je w formularzu.",
+      "entities_missing": "Wybrane encje nie istnieją w Home Assistant: {problems}",
+      "wrong_type": "Encje mają zły typ lub jednostkę: {problems}",
+      "no_data": "Falownik nadal nie zwraca danych. Sprawdź adres IP loggera i port, poczekaj chwilę i zatwierdź ponownie."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Konfiguracja BMS komp-dec",
+        "description": "Zmień encje i parametry. Zmiana przeładuje integrację (bez usuwania).",
+        "data": {
+          "soc": "Encja SOC baterii",
+          "pv_power": "Moc PV",
+          "load_power": "Moc zużycia",
+          "battery_power": "Moc baterii",
+          "grid_power": "Moc sieci (+import / −eksport)",
+          "energy_pv_today": "Energia PV dziś",
+          "energy_load_today": "Zużycie dziś",
+          "energy_grid_export_today": "Eksport do sieci dziś",
+          "energy_grid_import_today": "Import z sieci dziś",
+          "energy_batt_charge_today": "Ładowanie baterii dziś",
+          "energy_batt_discharge_today": "Rozładowanie baterii dziś",
+          "work_mode": "Tryb pracy falownika (select)",
+          "charge_current": "Maks. prąd ładowania (number)",
+          "battery_capacity_kwh": "Pojemność baterii (kWh)",
+          "max_charge_power_w": "Maks. moc ładowania (W)",
+          "max_discharge_power_w": "Maks. moc rozładowania (W)",
+          "target_soc_grid_charge": "Docelowy SOC ładowania z sieci (%)",
+          "min_sell_margin": "Początkowa min. marża sprzedaży (PLN/kWh)",
+          "price_buy_entity": "Encja ceny zakupu (G12w)",
+          "price_sell_entity": "Encja ceny sprzedaży (RCE)",
+          "pv_forecast_today": "Prognoza PV dziś (Solcast)",
+          "pv_forecast_tomorrow": "Prognoza PV jutro (Solcast)",
+          "auto_detect": "Wykryj encje ponownie (nadpisze wybrane encje)",
+          "export_surplus": "Moc eksportu/nadwyżki (number, Export Surplus Power)",
+          "tou_select": "Time of Use (select)",
+          "notify_service": "Usługa powiadomień na telefon (np. notify.mobile_app_telefon; puste = tylko powiadomienia w HA)",
+          "tariff_peaks": "Godziny szczytu taryfy (np. 6-13,15-22; „brak” = taryfa jednostrefowa)",
+          "tariff_weekend_offpeak": "Weekendy całodobowo w strefie taniej (G12w: tak)",
+          "tariff_holiday_offpeak": "Święta ustawowe całodobowo w strefie taniej (G12w: tak)",
+          "pv1_voltage": "Napięcie PV1",
+          "pv1_current": "Prąd PV1",
+          "pv2_voltage": "Napięcie PV2",
+          "pv2_current": "Prąd PV2",
+          "grid_power_l1": "Moc sieci L1",
+          "grid_power_l2": "Moc sieci L2",
+          "grid_power_l3": "Moc sieci L3",
+          "grid_voltage_l1": "Napięcie sieci L1",
+          "grid_voltage_l2": "Napięcie sieci L2",
+          "grid_voltage_l3": "Napięcie sieci L3",
+          "grid_current_l1": "Prąd sieci L1",
+          "load_power_l1": "Moc zużycia L1",
+          "load_power_l2": "Moc zużycia L2",
+          "load_power_l3": "Moc zużycia L3",
+          "load_voltage_l1": "Napięcie odbiorów L1",
+          "load_current_l1": "Prąd odbiorów L1",
+          "battery_voltage": "Napięcie baterii",
+          "battery_current": "Prąd baterii",
+          "battery_temperature": "Temperatura baterii",
+          "tariff_mode": "Tryb taryfy",
+          "grid_current_l2": "Prąd sieci L2",
+          "grid_current_l3": "Prąd sieci L3",
+          "load_voltage_l2": "Napięcie domu L2",
+          "load_voltage_l3": "Napięcie domu L3",
+          "load_current_l2": "Prąd domu L2",
+          "load_current_l3": "Prąd domu L3"
+        },
+        "data_description": {
+          "tariff_mode": "Auto/dynamiczna: godziny szczytu są liczone każdego dnia z listy cen godzinowych encji zakupu (np. Pstryk). Dzień bez pełnej listy cen używa okien szczytu podanych wyżej."
+        }
+      },
+      "inverter": {
+        "title": "Ustawienia falownika",
+        "description": "Zmień połączenie albo włącz lub wyłącz zapis. Zapis przeładuje ten falownik.",
+        "data": {
+          "host": "Adres IP loggera lub nazwa hosta",
+          "port": "Port",
+          "transport": "Transport",
+          "lookup_file": "Profil falownika",
+          "allow_write": "Zezwól na zapis do falownika"
+        },
+        "data_description": {
+          "allow_write": "Gdy wyłączone, integracja tylko czyta. Włącz, aby encje number / select / switch / time mogły zapisywać do rejestrów falownika."
+        },
+        "sections": {
+          "additional_options": {
+            "name": "Opcje dodatkowe",
+            "description": "Zmieniaj tylko, jeśli profil tego wymaga (liczba wejść MPPT, faz, pakietów baterii…).",
+            "data": {
+              "mod": "Wariant profilu (mod)",
+              "mppt": "Liczba wejść MPPT",
+              "phase": "Liczba faz",
+              "pack": "Liczba pakietów baterii (-1 = wykryj)",
+              "battery_nominal_voltage": "Napięcie nominalne baterii (V)",
+              "battery_life_cycle_rating": "Żywotność baterii (liczba cykli)",
+              "mb_slave_id": "Adres Modbus (slave ID)"
+            }
+          }
+        }
+      }
+    },
+    "error": {
+      "invalid_peaks": "Nieprawidłowe godziny szczytu. Użyj formatu 6-13,15-22 (pełne godziny, rosnąco, bez nachodzenia; „brak” = taryfa jednostrefowa).",
+      "invalid_notify": "Nieprawidłowa nazwa usługi. Użyj formatu notify.mobile_app_telefon (małe litery, cyfry, podkreślenia).",
+      "cannot_connect": "Nie udało się rozpoznać nazwy hosta.",
+      "invalid_host": "Nieprawidłowy adres hosta.",
+      "timeout_connect": "Przekroczono czas rozpoznawania adresu hosta.",
+      "unknown": "Nieznany błąd.",
+      "already_configured_device": "Falownik o tym adresie jest już dodany.",
+      "name_in_use": "Ta nazwa jest już używana przez inny falownik.",
+      "setup_failed": "Falownik nie załadował się w wyznaczonym czasie. Sprawdź adres IP loggera, port i czy nic innego (np. ha-solarman) nie trzyma jego jedynego połączenia. Wpis został usunięty.",
+      "core_missing": "Brakuje głównych encji (SOC, moc PV, zużycia, baterii, sieci). Wybierz je w formularzu.",
+      "entities_missing": "Wybrane encje nie istnieją w Home Assistant: {problems}",
+      "wrong_type": "Encje mają zły typ lub jednostkę: {problems}",
+      "no_data": "Falownik nadal nie zwraca danych. Sprawdź adres IP loggera i port, poczekaj chwilę i zatwierdź ponownie."
+    }
+  },
+  "selector": {
+    "transport": {
+      "options": {
+        "tcp": "Solarman V5 (TCP)",
+        "modbus_tcp": "Modbus TCP",
+        "modbus_rtu": "Modbus RTU przez TCP"
+      }
+    },
+    "tariff_mode": {
+      "options": {
+        "auto": "Auto — ceny godzinowe zakupu, gdy encja zakupu je podaje (taryfa dynamiczna, np. Pstryk), inaczej stałe okna",
+        "zone": "Strefowa (stałe okna szczytu: G11/G12/G12w…)",
+        "dynamic": "Dynamiczna — godzinowe ceny zakupu (stałe okna tylko w dni bez cen)"
+      }
+    },
+    "wizard_connection": {
+      "options": {
+        "direct": "Połączenie bezpośrednie z loggerem Solarman (kreator doda falownik)",
+        "solarman": "Mam już falownik w integracji ha-solarman (użyj jej encji)"
+      }
+    }
+  }
+}

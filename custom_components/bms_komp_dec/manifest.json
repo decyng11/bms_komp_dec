@@ -1,0 +1,20 @@
+{
+  "domain": "bms_komp_dec",
+  "name": "BMS komp-dec",
+  "codeowners": [
+    "@decyng11"
+  ],
+  "config_flow": true,
+  "dependencies": [
+    "recorder",
+    "http",
+    "frontend",
+    "network"
+  ],
+  "documentation": "https://github.com/decyng11/bms_komp_dec",
+  "integration_type": "hub",
+  "iot_class": "local_polling",
+  "issue_tracker": "https://github.com/decyng11/bms_komp_dec/issues",
+  "requirements": [],
+  "version": "0.8.2"
+}
