@@ -12,7 +12,7 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import EVENT_HOMEASSISTANT_STARTED
 from homeassistant.core import HomeAssistant, ServiceCall, SupportsResponse
 from homeassistant.exceptions import HomeAssistantError, Unauthorized
-from homeassistant.helpers import entity_registry as er
+from homeassistant.helpers import config_validation as cv, entity_registry as er
 from homeassistant.helpers.event import async_track_time_change
 from homeassistant.util import dt as dt_util
 
@@ -30,6 +30,7 @@ from .tariff import make_profile, profile_from_config, set_profile
 
 _LOGGER = logging.getLogger(__name__)
 _FRONTEND_DIR = Path(__file__).parent / "frontend"
+CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)  # konfiguracja tylko z interfejsu
 _JS_URL = f"/{DOMAIN}/bms-panel.js"
 _VENDOR_FILES = ("chart.umd.min.js", "chartjs-adapter-date-fns.bundle.min.js")
 # moduły karty ładowane na żądanie przez bms-panel.js (Diagnostyka, dodatki: plan 24 h / raport / kreator)

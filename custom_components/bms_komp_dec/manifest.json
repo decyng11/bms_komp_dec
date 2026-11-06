@@ -1,6 +1,9 @@
 {
   "domain": "bms_komp_dec",
   "name": "BMS komp-dec",
+  "after_dependencies": [
+    "forecast_solar"
+  ],
   "codeowners": [
     "@decyng11"
   ],
