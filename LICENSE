@@ -1,0 +1,42 @@
+BMS komp-dec — Licencja (wszelkie prawa zastrzeżone)
+Copyright (c) 2026 decyng11. Wszelkie prawa zastrzeżone.
+
+1. Oprogramowanie (kod integracji „BMS komp-dec” oraz karty „Centrum Energii”, wraz z dokumentacją)
+   jest własnością autora. Udostępnienie kodu w repozytorium nie oznacza udzielenia licencji
+   w zakresie szerszym niż opisany w punkcie 2.
+
+2. Wolno bez opłat pobrać oprogramowanie i zainstalować je we własnej instalacji Home Assistant
+   wyłącznie do osobistego, niekomercyjnego użytku, a także przeglądać kod źródłowy.
+
+3. Bez uprzedniej pisemnej zgody autora nie wolno:
+   a) kopiować ani rozpowszechniać oprogramowania lub jego części (w tym publikować kopii
+      w innych repozytoriach, sklepach z dodatkami i serwisach),
+   b) modyfikować oprogramowania w celu dalszego udostępniania ani tworzyć na jego podstawie
+      utworów zależnych,
+   c) sprzedawać, odpłatnie instalować, wynajmować ani w inny sposób wykorzystywać
+      oprogramowania komercyjnie,
+   d) usuwać ani zmieniać informacji o autorze i licencji.
+
+4. Komponenty osób trzecich znajdujące się w folderze custom_components/bms_komp_dec/direct/
+   (pochodzące z ha-solarman i pysolarman — licencja MIT, oraz z umodbus — Mozilla Public
+   License 2.0) NIE są objęte niniejszą licencją. Obowiązują dla nich ich własne licencje,
+   zawarte w plikach LICENSE-*.txt w tym folderze.
+
+5. Oprogramowanie jest udostępniane „tak jak jest” (AS IS), bez jakiejkolwiek gwarancji.
+   Oprogramowanie może sterować falownikiem i magazynem energii; autor nie ponosi
+   odpowiedzialności za szkody wynikłe z jego użycia, w tym za uszkodzenie urządzeń,
+   utratę energii lub koszty energii, w najszerszym zakresie dopuszczalnym przez prawo.
+
+W sprawie zgody na inne wykorzystanie: https://github.com/decyng11/bms_komp_dec/issues
+
+---
+
+BMS komp-dec — License (All rights reserved)
+Copyright (c) 2026 decyng11. All rights reserved.
+
+You may download this software and install it in your own Home Assistant instance solely for
+personal, non-commercial use, and you may view the source code. Any other copying, distribution,
+modification for redistribution, derivative works, or commercial use requires the author's prior
+written permission. Third-party components in custom_components/bms_komp_dec/direct/ remain under
+their own licenses (MIT, MPL-2.0; see LICENSE-*.txt there). THE SOFTWARE IS PROVIDED "AS IS",
+WITHOUT WARRANTY OF ANY KIND; THE AUTHOR IS NOT LIABLE FOR ANY DAMAGES ARISING FROM ITS USE.

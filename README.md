@@ -52,6 +52,8 @@ Lista zmian: [CHANGELOG.md](CHANGELOG.md).
 2. Uzupełnij `CHANGELOG.md`.
 3. `git tag v0.8.2 && git push origin v0.8.2` — akcja **Wydanie** sprawdzi zgodność wersji i doda `bms_komp_dec.zip` do wydania.
 
-## Licencje
+## Licencja
 
-W folderze `custom_components/bms_komp_dec/direct/` jest kod z projektów ha-solarman i pysolarman (licencja MIT) oraz umodbus (Mozilla Public License 2.0) — ich licencje są w plikach `LICENSE-*.txt` w tym folderze i muszą tam zostać.
+Wszelkie prawa zastrzeżone — szczegóły w pliku [LICENSE](LICENSE). Integrację można bezpłatnie zainstalować we własnym Home Assistant do użytku osobistego; kopiowanie, rozpowszechnianie, przerabianie do dalszego udostępniania i użycie komercyjne wymagają zgody autora.
+
+W folderze `custom_components/bms_komp_dec/direct/` jest kod z projektów ha-solarman i pysolarman (licencja MIT) oraz umodbus (Mozilla Public License 2.0) — obowiązują dla niego jego własne licencje, zawarte w plikach `LICENSE-*.txt` w tym folderze.
