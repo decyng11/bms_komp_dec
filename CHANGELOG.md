@@ -1,3 +1,8 @@
+# BMS komp-dec — zmiany w 0.8.3 (z 0.8.2)
+
+- Dołączone lokalne kopie bibliotek wykresów (Chart.js 4.4.1 i chartjs-adapter-date-fns 3.0.0, licencja MIT) w `frontend/vendor/` — wykres „Przebieg mocy, SOC i cen” działa także wtedy, gdy przeglądarka nie ma dostępu do internetu.
+- Działanie integracji i karty bez zmian.
+
 # BMS komp-dec — zmiany w 0.8.2 (z 0.8.1)
 
 - Integracja przygotowana do wydania na GitHubie (repozytorium `decyng11/bms_komp_dec`): manifest z adresem dokumentacji i zgłoszeń, plik `hacs.json`, automatyczne sprawdzanie kodu i budowanie paczki `bms_komp_dec.zip` przy każdym wydaniu.

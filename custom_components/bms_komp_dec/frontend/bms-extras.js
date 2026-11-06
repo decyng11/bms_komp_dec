@@ -542,6 +542,6 @@
 
   };
   install.contract = 1;
-  install.version = '0.8.2';
+  install.version = '0.8.3';
   window.__bmsExtrasInstall = install;
 })();

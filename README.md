@@ -50,7 +50,7 @@ Lista zmian: [CHANGELOG.md](CHANGELOG.md).
 
 1. Zmień wersję w `custom_components/bms_komp_dec/manifest.json` (oraz `VERSION` w `const.py` i `CARD_VERSION` w `frontend/bms-panel.js`, `install.version` w modułach `frontend/bms-*.js` — wszystkie muszą być równe).
 2. Uzupełnij `CHANGELOG.md`.
-3. `git tag v0.8.2 && git push origin v0.8.2` — akcja **Wydanie** sprawdzi zgodność wersji i doda `bms_komp_dec.zip` do wydania.
+3. `git tag v0.8.3 && git push origin v0.8.3` — akcja **Wydanie** sprawdzi zgodność wersji i doda `bms_komp_dec.zip` do wydania.
 
 ## Licencja
 
