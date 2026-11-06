@@ -1,3 +1,12 @@
+# BMS komp-dec — zmiany w 0.8.4 (z 0.8.3)
+
+## Urządzenia: wyszukiwanie liczników kWh w Home Assistant
+- **Nowy przycisk „🔍 Wyszukaj urządzenia”** w zakładce Urządzenia (administrator). Integracja szuka encji z jednostką Wh / kWh / MWh, grupuje je po urządzeniu HA i do każdego dobiera encję mocy (W / kW) tego samego urządzenia. Gdy urządzenie ma kilka liczników, wybiera całkowity (ze statystykami, bez „dziś / miesiąc” w nazwie) — pozostałe są do wyboru na liście.
+- **Propozycja dla każdego urządzenia:** nazwa (z urządzenia HA), pomieszczenie (z obszaru HA), kategoria odgadnięta z nazwy (pralka, bojler, pompa ciepła, ładowarka, lodówka…), aktualna moc, oznaczenia „panel Energia”, „niedostępne”, „bez historii” (encja bez `state_class` — historia sprzed dodania nie zostanie uzupełniona). Nazwę, kategorię, pomieszczenie i encje można zmienić przed dodaniem.
+- **Urządzenia z panelu Energia** („Urządzenia indywidualne”) są na początku listy i od razu zaznaczone; ich encja mocy z panelu ma pierwszeństwo.
+- **Pomijane:** encje BMS i falowników, liczniki domu z panelu Energia (sieć, PV, bateria) razem z ich urządzeniami, encje z konfiguracji BMS, prognozy PV, kopie liczników z Utility Meter, encje wyłączone i urządzenia już dodane. Pod listą widać, ile czego pominięto.
+- **„Dodaj zaznaczone”** zapisuje urządzenia z domyślnymi ustawieniami kategorii (próg pracy, cykle, powiadomienia — do zmiany w „Edytuj”); działa limit 40 urządzeń. Wyszukiwanie niczego nie zapisuje samo — nowa usługa `devices_discover` (tylko administrator) zwraca propozycje.
+
 # BMS komp-dec — zmiany w 0.8.3 (z 0.8.2)
 
 - Dołączone lokalne kopie bibliotek wykresów (Chart.js 4.4.1 i chartjs-adapter-date-fns 3.0.0, licencja MIT) w `frontend/vendor/` — wykres „Przebieg mocy, SOC i cen” działa także wtedy, gdy przeglądarka nie ma dostępu do internetu.

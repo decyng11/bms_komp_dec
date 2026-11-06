@@ -39,7 +39,7 @@ _SERVICES = (
     "test_schedule", "suggest_schedule", "apply_schedule_times", "undo_auto_apply", "auto_apply_now",
     "watch_write", "watch_status", "watch_clear", "health_check", "monthly_report", "get_plan",
     "diag_store_get_all", "diag_store_set", "diag_store_delete",
-    "notify_settings_get", "notify_settings_set", "notify_test", "devices_get", "devices_set",
+    "notify_settings_get", "notify_settings_set", "notify_test", "devices_get", "devices_set", "devices_discover",
 )
 _SUGGEST_HOUR = 16   # RCE na jutro jest publikowane po południu — wcześniej propozycja bazowała na starych danych
 
@@ -388,8 +388,15 @@ def _register_services(hass: HomeAssistant) -> None:
         dropped = len([x for x in items if isinstance(x, dict)]) - len(saved)
         return {"devices": saved, "dropped": max(0, dropped)}
 
+    async def handle_devices_discover(call):
+        await _require_admin(hass, call)
+        rt = _need_runtime(hass)
+        from .discover import async_discover
+        return await async_discover(hass, dict(rt.cfg or {}), list(rt.devices.devices))
+
     for name, handler, resp in (
         ("devices_get", handle_devices_get, SupportsResponse.ONLY),
+        ("devices_discover", handle_devices_discover, SupportsResponse.ONLY),
         ("devices_set", handle_devices_set, SupportsResponse.OPTIONAL),
         ("notify_settings_get", handle_notify_get, SupportsResponse.ONLY),
         ("notify_settings_set", handle_notify_set, SupportsResponse.OPTIONAL),

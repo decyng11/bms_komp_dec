@@ -6,7 +6,7 @@ Integracja Home Assistant do zarządzania domowym magazynem energii z falownikie
 
 - **Planer 24 h:** ładowanie z sieci w najtańszych godzinach, sprzedaż z baterii w drogich, blokada ładowania z PV przy wysokich cenach; taryfy strefowe (G12w i inne) oraz dynamiczne (Pstryk).
 - **Prognozy:** zużycie domu (z podziałem na duże urządzenia), produkcja PV (Solcast albo Forecast.Solar), ceny RCE.
-- **Karta „Centrum Energii”:** przepływ energii na żywo, plan, bilans w zł, raport miesięczny, zdrowie baterii, urządzenia (wykresy 1 dzień – 12 miesięcy, koszty, cykle).
+- **Karta „Centrum Energii”:** przepływ energii na żywo, plan, bilans w zł, raport miesięczny, zdrowie baterii, urządzenia (wyszukiwanie liczników kWh w HA, wykresy 1 dzień – 12 miesięcy, koszty, cykle).
 - **Powiadomienia z konfiguratorem:** ponad 35 rodzajów, cisza nocna, podsumowania dzienne, tygodniowe i miesięczne.
 - **Diagnostyka (za hasłem):** kreator instalacji, parametry falownika, strefy czasowe, alarmy, wykresy serwisowe, kopie ustawień.
 

@@ -78,7 +78,7 @@
       _devTick() {
         if (this._activeTab !== 'dev') return;
         const s = this._dvS();
-        if (s.edit) return;                                       // nie przerysowujemy formularza w trakcie edycji
+        if (s.edit || s.disc) return;                             // nie przerysowujemy formularza w trakcie edycji / wyszukiwania
         if (Date.now() - s.fetchedAt > 300000 && !s.loading) { this._dvLoad(); return; }
         this._dvLive();
       },
@@ -293,15 +293,16 @@
         const root = this._el('devRoot'); if (!root) return;
         const s = this._dvS();
         if (s.edit) { root.innerHTML = this._dvEditor(); return; }
+        if (s.disc) { root.innerHTML = this._dvDiscView(); return; }
         if (s.loading && !s.data) { root.innerHTML = '<div class="chart-empty">Wczytuję urządzenia…</div>'; return; }
         if (s.err && !s.data) { root.innerHTML = `<div class="chart-empty" style="color:var(--red);">Nie udało się wczytać urządzeń: ${dvEsc(s.err)}<br><button class="dv-btn sec" data-dv="reload" style="margin-top:10px;">Spróbuj ponownie</button><div class="dv-note">Wymaga integracji 0.8.1 lub nowszej.</div></div>`; return; }
         const devs = this._dvDevs(); const admin = this._dvAdmin();
-        const head = `<div class="dv-bar">${admin ? `<button class="dv-btn" data-dv="add" ${devs.length >= ((s.data && s.data.max_devices) || 40) ? 'disabled' : ''}>➕ Dodaj urządzenie</button>` : ''}
+        const head = `<div class="dv-bar">${admin ? `<button class="dv-btn" data-dv="add" ${devs.length >= ((s.data && s.data.max_devices) || 40) ? 'disabled' : ''}>➕ Dodaj urządzenie</button><button class="dv-btn sec" data-dv="disc" ${devs.length >= ((s.data && s.data.max_devices) || 40) ? 'disabled' : ''}>🔍 Wyszukaj urządzenia</button>` : ''}
           <button class="dv-btn sec" data-dv="csv" ${devs.length ? '' : 'disabled'}>⬇ CSV</button><button class="dv-btn sec" data-dv="reload">⟳ Odśwież</button>
           <span class="dv-note" style="margin:0;">${dvEsc(s.msg || '')}</span></div>`;
         if (!devs.length) {
           root.innerHTML = `<div class="section"><div class="section-title">🔌 Urządzenia</div><div class="chart-card full" style="padding:14px 16px;">${head}
-            <div class="chart-empty">Nie dodano jeszcze żadnego urządzenia.${admin ? ' Kliknij „Dodaj urządzenie” i wskaż jego encję mocy (W) lub energii (kWh).' : ' Urządzenia może dodać administrator.'}</div></div></div>`;
+            <div class="chart-empty">Nie dodano jeszcze żadnego urządzenia.${admin ? ' Kliknij „Wyszukaj urządzenia”, żeby znaleźć liczniki kWh w Home Assistant, albo „Dodaj urządzenie” i wskaż encję ręcznie.' : ' Urządzenia może dodać administrator.'}</div></div></div>`;
           return;
         }
         const rooms = Array.from(new Set(devs.map((d) => d.room).filter(Boolean)));
@@ -376,10 +377,20 @@
         else if (a === 'save') this._dvSave();
         else if (a === 'del') this._dvDelete();
         else if (a === 'csv') this._dvCsv();
+        else if (a === 'disc') this._dvDiscover();
+        else if (a === 'disc-cancel') { s.disc = null; this._dvRender(); }
+        else if (a === 'disc-add') this._dvDiscAdd();
+        else if (a === 'disc-all' || a === 'disc-none') { this._dvDiscCollect(); const on = a === 'disc-all'; Object.values((s.disc && s.disc.picks) || {}).forEach((p) => { p.on = on; }); this._dvRender(); }
       },
       _dvChange(ev) {
         const t = ev.target; const s = this._dvS();
         if (t.dataset && t.dataset.dv === 'filter') { s.sel = t.value; this._dvRender(); return; }
+        if (t.dataset && t.dataset.dvd && s.disc) {
+          const p = (s.disc.picks || {})[t.dataset.k]; if (!p) return;
+          if (t.type === 'checkbox') p.on = !!t.checked; else p[t.dataset.dvd] = String(t.value).trim();
+          if (t.dataset.dvd === 'category' || t.type === 'checkbox') { this._dvDiscCollect(); this._dvRender(); }
+          return;
+        }
         if (!s.edit || !t.dataset || !t.dataset.dvf) return;
         const f = t.dataset.dvf;
         if (f === 'category') { s.edit = Object.assign(this._dvDefaultsFor(t.value, s.edit), { id: s.edit.id, _new: s.edit._new, room: s.edit.room, power_eid: s.edit.power_eid, energy_eid: s.edit.energy_eid }); this._dvRender(); return; }
@@ -419,6 +430,91 @@
         if (!confirm(`Usunąć „${e.name}”? Zebrane dane tego urządzenia zostaną skasowane.`)) return;
         try { await this._dvPersist(this._dvDevs().filter((d) => d.id !== e.id), '🗑 Usunięto'); } catch (err) { const m = this._el('dvMsg'); if (m) m.textContent = '❌ ' + dvErr(err); }
       },
+      // ------------------------------------------------------------ wyszukiwanie urządzeń (liczniki kWh w HA)
+      async _dvDiscover() {
+        const s = this._dvS();
+        s.disc = { loading: true, err: '', data: null, picks: {}, msg: '' }; this._dvRender();
+        try {
+          const d = dvResp(await dvCall(this, 'devices_discover', {})) || {};
+          const picks = {};
+          (d.candidates || []).forEach((c) => {
+            picks[c.key] = { on: !!c.energy_dashboard && !c.unavailable, name: c.name, category: c.category || 'other', room: c.room || '', energy_eid: c.energy_eid || '', power_eid: c.power_eid || '' };
+          });
+          if (s.disc) { s.disc.data = d; s.disc.picks = picks; }
+        } catch (e) { if (s.disc) s.disc.err = dvErr(e); }
+        if (s.disc) s.disc.loading = false;
+        this._dvRender();
+      },
+      _dvDiscCollect() {
+        const s = this._dvS(); const root = this._el('devRoot'); if (!root || !s.disc) return;
+        root.querySelectorAll('[data-dvd]').forEach((el) => {
+          const p = (s.disc.picks || {})[el.dataset.k]; if (!p) return;
+          if (el.type === 'checkbox') p.on = !!el.checked; else p[el.dataset.dvd] = String(el.value).trim();
+        });
+      },
+      _dvDiscView() {
+        const s = this._dvS(); const ds = s.disc;
+        const wrap = (body) => `<div class="section"><div class="section-title">🔍 Wyszukane urządzenia z licznikiem kWh</div><div class="chart-card full" style="padding:14px 16px;">${body}</div></div>`;
+        if (ds.loading) return wrap('<div class="chart-empty">Szukam liczników energii w Home Assistant…</div>');
+        if (ds.err) return wrap(`<div class="chart-empty" style="color:var(--red);">Nie udało się wyszukać: ${dvEsc(ds.err)}</div><div class="dv-note">Wymaga integracji 0.8.4 lub nowszej i konta administratora.</div><div class="dv-bar" style="margin-top:10px;"><button class="dv-btn sec" data-dv="disc">Spróbuj ponownie</button><button class="dv-btn sec" data-dv="disc-cancel">Wróć</button></div>`);
+        const d = ds.data || {}; const list = d.candidates || []; const sk = d.skipped || {};
+        const cats = (s.data && s.data.categories) || []; const groups = (s.data && s.data.groups) || [];
+        const free = d.free_slots == null ? 40 : d.free_slots;
+        const picked = list.filter((c) => (ds.picks[c.key] || {}).on).length;
+        const skipNote = [sk.home ? `${sk.home} liczników domu (sieć, PV, bateria, encje z konfiguracji BMS)` : '', sk.bms ? `${sk.bms} encji BMS / falownika` : '',
+          sk.helper ? `${sk.helper} pomocniczych (Utility Meter, prognozy, inne falowniki)` : '', sk.added ? `${sk.added} już dodanych` : ''].filter(Boolean).join(', ');
+        if (!list.length) {
+          return wrap(`<div class="chart-empty">Nie znalazłem nowych urządzeń z licznikiem kWh.</div>${skipNote ? `<div class="dv-note">Pominięto: ${dvEsc(skipNote)}.</div>` : ''}
+            <div class="dv-note">Urządzenie bez licznika kWh (tylko moc w W) dodasz przyciskiem „Dodaj urządzenie”.</div>
+            <div class="dv-bar" style="margin-top:10px;"><button class="dv-btn sec" data-dv="disc-cancel">Wróć</button></div>`);
+        }
+        const catSel = (k, val) => `<select data-dvd="category" data-k="${dvEsc(k)}">${groups.map((g) => `<optgroup label="${dvEsc(g)}">${cats.filter((c) => c.group === g).map((c) => `<option value="${dvEsc(c.key)}" ${val === c.key ? 'selected' : ''}>${dvEsc(c.icon)} ${dvEsc(c.name)}</option>`).join('')}</optgroup>`).join('')}</select>`;
+        const optVal = (o) => { const v = dvNum(o.value); return v === null ? '' : ` — ${dvFmt(v, (o.unit === 'wh' || o.unit === 'w') ? 0 : 1, ' ' + (o.unit === 'kw' ? 'kW' : o.unit === 'w' ? 'W' : o.unit === 'wh' ? 'Wh' : o.unit === 'mwh' ? 'MWh' : 'kWh'))}`; };
+        const rows = list.map((c) => {
+          const p = ds.picks[c.key] || {}; const k = dvEsc(c.key);
+          const en = (c.energy_options || []).length > 1
+            ? `<select data-dvd="energy_eid" data-k="${k}">${c.energy_options.map((o) => `<option value="${dvEsc(o.eid)}" ${p.energy_eid === o.eid ? 'selected' : ''}>${dvEsc(o.eid)}${dvEsc(optVal(o))}${o.stats ? '' : ' (bez statystyk)'}</option>`).join('')}</select>`
+            : `<div style="font-size:12px;color:var(--text2);word-break:break-all;">${dvEsc(c.energy_eid)}${dvEsc(optVal((c.energy_options || [])[0] || {}))}</div>`;
+          const pw = `<select data-dvd="power_eid" data-k="${k}"><option value="" ${p.power_eid ? '' : 'selected'}>— bez encji mocy (moc z przyrostów kWh) —</option>${(c.power_options || []).map((o) => `<option value="${dvEsc(o.eid)}" ${p.power_eid === o.eid ? 'selected' : ''}>${dvEsc(o.eid)}${dvEsc(optVal(o))}</option>`).join('')}</select>`;
+          const badges = [c.energy_dashboard ? '<span class="dv-run" style="background:rgba(10,132,255,.18);color:var(--accent,#0a84ff);">panel Energia</span>' : '',
+            c.unavailable ? '<span class="dv-run" style="background:rgba(255,69,58,.18);color:var(--red);">niedostępne</span>' : '',
+            c.stats ? '' : '<span class="dv-run" style="background:rgba(255,159,10,.18);color:var(--orange,#ff9f0a);" title="Encja bez state_class — historia sprzed dodania nie zostanie uzupełniona">bez historii</span>',
+            c.integration ? `<span class="dv-note" style="margin:0;">${dvEsc(c.integration)}</span>` : ''].filter(Boolean).join(' ');
+          return `<div style="border-bottom:1px solid var(--line);padding:10px 0;${p.on ? '' : 'opacity:.75;'}">
+            <label class="chk" style="display:flex;gap:8px;align-items:center;font-size:13px;font-weight:600;color:var(--text);"><input type="checkbox" data-dvd="on" data-k="${k}" ${p.on ? 'checked' : ''}/> ${dvEsc(c.name)}
+              <span style="font-weight:400;color:var(--muted);font-size:12px;">${c.power_w == null ? '' : '· teraz ' + dvFmt(c.power_w, 0, ' W')}</span></label>
+            <div style="margin:4px 0 0 26px;display:flex;gap:6px;flex-wrap:wrap;align-items:center;">${badges}</div>
+            ${p.on ? `<div class="dv-form" style="margin:8px 0 0 26px;">
+              <label>Nazwa<input type="text" maxlength="40" data-dvd="name" data-k="${k}" value="${dvEsc(p.name)}"/></label>
+              <label>Kategoria${catSel(c.key, p.category)}</label>
+              <label>Pomieszczenie<input type="text" maxlength="30" data-dvd="room" data-k="${k}" value="${dvEsc(p.room)}"/></label>
+              <label>Encja mocy (W)${pw}</label>
+              <label class="full">Licznik energii (kWh)${en}</label></div>` : ''}</div>`;
+        }).join('');
+        const over = picked > free;
+        return wrap(`<div class="dv-note" style="margin:0 0 6px;">Znaleziono ${list.length}${d.total > list.length ? ` (pokazuję ${list.length} z ${d.total})` : ''}. Zaznacz urządzenia, sprawdź kategorię i kliknij „Dodaj zaznaczone”. Ustawienia (próg pracy, cykle, powiadomienia) przyjmą domyślne dla kategorii — zmienisz je później w „Edytuj”.</div>
+          <div class="dv-bar"><button class="dv-pill" data-dv="disc-all">zaznacz wszystkie</button><button class="dv-pill" data-dv="disc-none">odznacz wszystkie</button></div>
+          ${rows}
+          ${skipNote ? `<div class="dv-note">Pominięto: ${dvEsc(skipNote)}.</div>` : ''}
+          <div class="dv-bar" style="margin-top:12px;"><button class="dv-btn" data-dv="disc-add" ${picked && !over ? '' : 'disabled'}>➕ Dodaj zaznaczone (${picked})</button><button class="dv-btn sec" data-dv="disc-cancel">Anuluj</button>
+            <span class="dv-note" id="dvMsg" style="margin:0;color:${over ? 'var(--red)' : 'var(--muted)'};">${over ? `Za dużo — wolnych miejsc: ${free}.` : `Wolnych miejsc: ${free}.`}</span></div>`);
+      },
+      async _dvDiscAdd() {
+        const s = this._dvS(); if (!s.disc) return; this._dvDiscCollect();
+        const msg = this._el('dvMsg'); const list = (s.disc.data && s.disc.data.candidates) || [];
+        const add = [];
+        for (const c of list) {
+          const p = s.disc.picks[c.key]; if (!p || !p.on) continue;
+          if (!String(p.name || '').trim()) { if (msg) msg.textContent = 'Każde zaznaczone urządzenie musi mieć nazwę.'; return; }
+          const dev = this._dvDefaultsFor(p.category || 'other', { name: p.name, _autoName: false });
+          add.push(Object.assign(dev, { name: String(p.name).trim().slice(0, 40), room: String(p.room || '').trim().slice(0, 30), energy_eid: p.energy_eid || c.energy_eid, power_eid: p.power_eid || '' }));
+        }
+        if (!add.length) return;
+        const free = (s.disc.data && s.disc.data.free_slots != null) ? s.disc.data.free_slots : 40;
+        if (add.length > free) { if (msg) msg.textContent = `Za dużo — wolnych miejsc: ${free}.`; return; }
+        try { s.disc = null; await this._dvPersist(this._dvDevs().concat(add), `✅ Dodano ${add.length} ${add.length === 1 ? 'urządzenie' : (add.length < 5 ? 'urządzenia' : 'urządzeń')}`); }
+        catch (err) { s.msg = '❌ ' + dvErr(err); this._dvRender(); }
+      },
       _dvCsv() {
         const s = this._dvS(); const devs = this._dvSelected();
         const days = { '1d': 1, '7d': 7, '30d': 30, '3m': 91, '6m': 182, '12m': 365 }[s.range] || 30;
@@ -440,6 +536,6 @@
     });
   };
   install.contract = 1;
-  install.version = '0.8.3';
+  install.version = '0.8.4';
   window.__bmsDevicesInstall = install;
 })();

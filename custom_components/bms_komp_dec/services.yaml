@@ -182,6 +182,10 @@ devices_get:
       selector:
         boolean: {}
 
+devices_discover:
+  name: Urządzenia — wyszukiwanie
+  description: Szuka w Home Assistant urządzeń z licznikiem energii (kWh) i proponuje je do dodania (administrator, nic nie zapisuje).
+
 devices_set:
   name: Urządzenia — zapis
   description: Zapisuje listę dodatkowych urządzeń (administrator).
