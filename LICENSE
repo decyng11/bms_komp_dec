@@ -20,7 +20,9 @@ Copyright (c) 2026 decyng11. Wszelkie prawa zastrzeżone.
 4. Komponenty osób trzecich znajdujące się w folderze custom_components/bms_komp_dec/direct/
    (pochodzące z ha-solarman i pysolarman — licencja MIT, oraz z umodbus — Mozilla Public
    License 2.0) NIE są objęte niniejszą licencją. Obowiązują dla nich ich własne licencje,
-   zawarte w plikach LICENSE-*.txt w tym folderze.
+   zawarte w plikach LICENSE-*.txt w tym folderze. To samo dotyczy bibliotek Chart.js
+   i chartjs-adapter-date-fns w folderze custom_components/bms_komp_dec/frontend/vendor/
+   (licencja MIT, informacja w nagłówkach plików).
 
 5. Oprogramowanie jest udostępniane „tak jak jest” (AS IS), bez jakiejkolwiek gwarancji.
    Oprogramowanie może sterować falownikiem i magazynem energii; autor nie ponosi
@@ -38,5 +40,6 @@ You may download this software and install it in your own Home Assistant instanc
 personal, non-commercial use, and you may view the source code. Any other copying, distribution,
 modification for redistribution, derivative works, or commercial use requires the author's prior
 written permission. Third-party components in custom_components/bms_komp_dec/direct/ remain under
-their own licenses (MIT, MPL-2.0; see LICENSE-*.txt there). THE SOFTWARE IS PROVIDED "AS IS",
+their own licenses (MIT, MPL-2.0; see LICENSE-*.txt there), as do Chart.js and
+chartjs-adapter-date-fns in custom_components/bms_komp_dec/frontend/vendor/ (MIT). THE SOFTWARE IS PROVIDED "AS IS",
 WITHOUT WARRANTY OF ANY KIND; THE AUTHOR IS NOT LIABLE FOR ANY DAMAGES ARISING FROM ITS USE.

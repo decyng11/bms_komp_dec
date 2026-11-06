@@ -57,3 +57,5 @@ Lista zmian: [CHANGELOG.md](CHANGELOG.md).
 Wszelkie prawa zastrzeżone — szczegóły w pliku [LICENSE](LICENSE). Integrację można bezpłatnie zainstalować we własnym Home Assistant do użytku osobistego; kopiowanie, rozpowszechnianie, przerabianie do dalszego udostępniania i użycie komercyjne wymagają zgody autora.
 
 W folderze `custom_components/bms_komp_dec/direct/` jest kod z projektów ha-solarman i pysolarman (licencja MIT) oraz umodbus (Mozilla Public License 2.0) — obowiązują dla niego jego własne licencje, zawarte w plikach `LICENSE-*.txt` w tym folderze.
+
+W folderze `custom_components/bms_komp_dec/frontend/vendor/` są biblioteki Chart.js 4.4.1 i chartjs-adapter-date-fns 3.0.0 (licencja MIT) — dzięki nim wykresy działają bez dostępu przeglądarki do internetu.
