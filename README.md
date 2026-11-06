@@ -66,4 +66,4 @@ W folderze `tests/` są testy logiki (Python, z atrapami Home Assistanta) i test
 
 ## Wydanie nowej wersji
 
-Numer wersji musi być taki sam w `manifest.json`, `const.py`, w `CARD_VERSION` w `frontend/bms-panel.js` i w `install.version` w plikach `frontend/bms-*.js`. Potem wystarczy utworzyć na GitHubie wydanie z tagiem `vX.Y.Z`, a akcja sprawdzi zgodność numerów i doda do niego `bms_komp_dec.zip`.
+Numer wersji musi być taki sam w `manifest.json`, `const.py`, w `CARD_VERSION` w `frontend/bms-panel.js` i w `install.version` w plikach `frontend/bms-*.js`. Potem wystarczy utworzyć na GitHubie wydanie z tagiem `vX.Y.Z` (albo `X.Y.Z`), a akcja sprawdzi zgodność numerów i doda do niego `bms_komp_dec.zip`.

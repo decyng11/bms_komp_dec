@@ -1,29 +1,40 @@
 name: Wydanie
 
-# Wypchnij tag z numerem wersji, np.:  git tag v0.8.2 && git push origin v0.8.2
-# Akcja sprawdzi, czy tag zgadza się z wersją w manifest.json, i doda do wydania bms_komp_dec.zip
-# (w środku sam folder z plikami integracji — do rozpakowania w /config/custom_components/bms_komp_dec/).
+# Utwórz wydanie z tagiem równym wersji (v0.8.6 albo 0.8.6). Akcja sprawdzi, czy tag zgadza się z wersją
+# w manifest.json, i doda do wydania bms_komp_dec.zip (w środku sam folder z plikami integracji).
+# Gdy paczki zabrakło (np. tag bez „v” przed tą poprawką): Actions → Wydanie → Run workflow → podaj tag.
 
 on:
   push:
     tags:
       - "v*"
+      - "[0-9]*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Tag istniejącego wydania (np. 0.8.5 albo v0.8.5)"
+        required: true
 
 permissions:
   contents: write
+
+env:
+  RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
 
 jobs:
   release:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
+        with:
+          ref: ${{ inputs.tag || github.ref }}
 
       - name: Zgodność tagu z manifest.json
         run: |
-          TAG="${GITHUB_REF_NAME#v}"
+          TAG="${RELEASE_TAG#v}"
           VER=$(python3 -c "import json;print(json.load(open('custom_components/bms_komp_dec/manifest.json'))['version'])")
           if [ "$TAG" != "$VER" ]; then
-            echo "Tag v$TAG nie zgadza się z wersją w manifest.json ($VER)"; exit 1
+            echo "Tag $RELEASE_TAG nie zgadza się z wersją w manifest.json ($VER)"; exit 1
           fi
 
       - name: Paczka
@@ -37,10 +48,10 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           # wydanie utworzone ręcznie na stronie GitHuba → tylko dołącz paczkę
-          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
-            gh release upload "$GITHUB_REF_NAME" bms_komp_dec.zip --clobber
+          if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            gh release upload "$RELEASE_TAG" bms_komp_dec.zip --clobber
             exit 0
           fi
-          gh release create "$GITHUB_REF_NAME" bms_komp_dec.zip \
-            --title "BMS komp-dec $GITHUB_REF_NAME" \
+          gh release create "$RELEASE_TAG" bms_komp_dec.zip \
+            --title "BMS komp-dec $RELEASE_TAG" \
             --notes "Zmiany: CHANGELOG.md w repozytorium. Instalacja ręczna: rozpakuj bms_komp_dec.zip do /config/custom_components/bms_komp_dec/ i zrestartuj Home Assistant."
