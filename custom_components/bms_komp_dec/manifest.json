@@ -2,6 +2,7 @@
   "domain": "bms_komp_dec",
   "name": "BMS komp-dec",
   "after_dependencies": [
+    "energy",
     "forecast_solar"
   ],
   "codeowners": [
