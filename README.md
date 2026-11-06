@@ -1,61 +1,61 @@
-# BMS komp-dec — Centrum Energii dla Home Assistant
+# BMS komp-dec
 
-Integracja Home Assistant do zarządzania domowym magazynem energii z falownikiem hybrydowym Deye (przez ha-solarman albo bezpośrednie połączenie z loggerem), z własną kartą Lovelace „Centrum Energii”.
+Integracja Home Assistanta, która pilnuje, kiedy falownik Deye ma ładować baterię z sieci, a kiedy ją oddawać. Plan na najbliższą dobę powstaje z cen prądu, prognozy produkcji z paneli i tego, ile dom zwykle zużywa. Do tego jest karta na pulpit z przepływem energii, planem i rozliczeniem w złotówkach.
 
-## Co potrafi
+## Co robi
 
-- **Planer 24 h:** ładowanie z sieci w najtańszych godzinach, sprzedaż z baterii w drogich, blokada ładowania z PV przy wysokich cenach; taryfy strefowe (G12w i inne) oraz dynamiczne (Pstryk).
-- **Prognozy:** zużycie domu (z podziałem na duże urządzenia), produkcja PV (Solcast albo Forecast.Solar), ceny RCE.
-- **Karta „Centrum Energii”:** przepływ energii na żywo, plan, bilans w zł, raport miesięczny, zdrowie baterii, urządzenia (wyszukiwanie liczników kWh w HA, wykresy 1 dzień – 12 miesięcy, koszty, cykle).
-- **Powiadomienia z konfiguratorem:** ponad 35 rodzajów, cisza nocna, podsumowania dzienne, tygodniowe i miesięczne.
-- **Diagnostyka (za hasłem):** kreator instalacji, parametry falownika, strefy czasowe, alarmy, wykresy serwisowe, kopie ustawień.
+Plan na dobę ładuje baterię z sieci w najtańszych godzinach, oddaje ją, gdy prąd jest drogi, i blokuje ładowanie z paneli przy wysokich cenach. Zna taryfy strefowe (np. G12w) oraz ceny dynamiczne z RCE i Pstryka.
 
-## Wymagania
+Zużycie domu jest liczone z historii, osobno dla dni powszednich i weekendów, z poprawką na temperaturę. Produkcję paneli bierze z Solcast albo z Forecast.Solar.
 
-- Home Assistant 2024.11 lub nowszy.
-- Falownik Deye (hybrydowy 1- lub 3-fazowy) z loggerem Solarman — przez integrację ha-solarman albo bezpośrednio.
-- Opcjonalnie: ceny RCE PSE / Pstryk, prognoza PV (Solcast lub Forecast.Solar), encja pogody.
+Na karcie widać przepływ energii na żywo, plan, bilans w złotych, raport miesięczny i stan baterii. Jest tam też zakładka z dodatkowymi urządzeniami, których liczniki kWh integracja potrafi sama znaleźć w Home Assistancie.
+
+Powiadomień jest ponad trzydzieści rodzajów. Każdy włączasz osobno, można ustawić ciszę nocną i podsumowania dzienne, tygodniowe i miesięczne.
+
+Parametry falownika, strefy czasowe, alarmy i kopie ustawień są w Diagnostyce, za hasłem.
+
+## Czego potrzebujesz
+
+Home Assistanta w wersji 2024.11 lub nowszej (tyle wpisałem w `hacs.json`, na starszych nie sprawdzałem) i hybrydowego falownika Deye z loggerem Solarman. Falownik możesz podłączyć przez integrację ha-solarman albo bezpośrednio do loggera, ale to drugie jest na razie eksperymentalne. Reszta jest opcjonalna: ceny z RCE lub Pstryka, prognoza PV i encja pogody.
 
 ## Instalacja
 
-### A. Przez HACS (tylko gdy repozytorium jest publiczne)
+Przez HACS, jeśli repozytorium jest publiczne (HACS nie pobiera z prywatnych):
 
-HACS nie obsługuje prywatnych repozytoriów.
+1. W HACS otwórz menu ⋮ i wybierz „Niestandardowe repozytoria”.
+2. Wklej adres tego repozytorium i jako typ wybierz „Integracja”.
+3. Znajdź „BMS komp-dec” i kliknij „Pobierz”.
+4. Zrestartuj Home Assistanta.
 
-1. HACS → menu ⋮ → **Niestandardowe repozytoria** → wklej adres tego repozytorium, typ **Integracja**.
-2. Wyszukaj „BMS komp-dec” → **Pobierz**.
-3. Zrestartuj Home Assistant.
+Ręcznie, co działa także z prywatnego repozytorium:
 
-### B. Ręcznie (działa też przy repozytorium prywatnym)
+1. W zakładce Releases pobierz `bms_komp_dec.zip` z najnowszego wydania.
+2. Rozpakuj go do `/config/custom_components/bms_komp_dec/`. W archiwum od razu są pliki integracji, bez dodatkowego folderu.
+3. Zrestartuj Home Assistanta.
 
-1. Na stronie repozytorium wejdź w **Releases** i pobierz `bms_komp_dec.zip` z najnowszego wydania.
-2. Rozpakuj zawartość do `/config/custom_components/bms_komp_dec/` (w paczce jest sam folder z plikami integracji).
-3. Zrestartuj Home Assistant (pełny restart).
+## Pierwsze uruchomienie
 
-### Pierwsza konfiguracja
-
-1. **Ustawienia → Urządzenia i usługi → Dodaj integrację → BMS komp-dec**.
-2. Wybierz **Kreator** — doda falownik (albo użyje encji ha-solarman), poczeka na pierwsze odczyty i dopasuje encje.
-3. Zapis do falownika i automatyczne stosowanie są na starcie **wyłączone** — włączasz je sam w konfiguracji.
-4. Dodaj kartę: edytuj pulpit → **Dodaj kartę** → „BMS Centrum Energii” (`custom:bms-panel-card`). Zasób karty integracja rejestruje sama.
+1. Wejdź w Ustawienia, Urządzenia i usługi, Dodaj integrację i wybierz „BMS komp-dec”.
+2. Wybierz „Kreator: falownik + planer w jednym”. Doda falownik (albo użyje tego z ha-solarman), poczeka na pierwsze odczyty i dopasuje encje. Przez pierwsze kilkadziesiąt sekund falownik może jeszcze nie odpowiadać, to normalne.
+3. Po instalacji zapis do falownika i automatyczne stosowanie planu są wyłączone. Włączasz je sam, kiedy będziesz gotowy. Przełącznik „Auto-stosowanie: tylko podgląd” pokazuje, co plan by zrobił, bez zapisu do falownika.
+4. Dodaj kartę na pulpit: tryb edycji, „Dodaj kartę”, „Centrum Energii” (typ `custom:bms-panel-card`). Zasób z kodem karty integracja dodaje sama.
 
 ## Aktualizacja
 
-- HACS: pojawi się powiadomienie o nowej wersji.
-- Ręcznie: przed aktualizacją zrób kopię zapasową HA, usuń stary folder `bms_komp_dec`, rozpakuj nowy, pełny restart, w przeglądarce Ctrl+F5 (w aplikacji: wyczyść pamięć podręczną frontendu).
+W HACS pojawi się powiadomienie o nowej wersji. Ręcznie zrób kopię zapasową, usuń stary folder `bms_komp_dec`, rozpakuj nową wersję i zrestartuj Home Assistanta. Potem odśwież przeglądarkę (Ctrl+F5, w aplikacji na telefonie wyczyść pamięć podręczną), żeby nie została stara karta.
 
-Lista zmian: [CHANGELOG.md](CHANGELOG.md).
+Co się zmieniło w kolejnych wersjach, jest w [CHANGELOG.md](CHANGELOG.md).
 
-## Dla autora: jak wydać nową wersję
+## Uwaga
 
-1. Zmień wersję w `custom_components/bms_komp_dec/manifest.json` (oraz `VERSION` w `const.py` i `CARD_VERSION` w `frontend/bms-panel.js`, `install.version` w modułach `frontend/bms-*.js` — wszystkie muszą być równe).
-2. Uzupełnij `CHANGELOG.md`.
-3. `git tag v0.8.3 && git push origin v0.8.3` — akcja **Wydanie** sprawdzi zgodność wersji i doda `bms_komp_dec.zip` do wydania.
+Integracja steruje falownikiem i magazynem energii. Używasz jej na własną odpowiedzialność, więcej w pliku [LICENSE](LICENSE). Na początek zostaw zapis do falownika wyłączony i zobacz, co proponuje plan.
 
 ## Licencja
 
-Wszelkie prawa zastrzeżone — szczegóły w pliku [LICENSE](LICENSE). Integrację można bezpłatnie zainstalować we własnym Home Assistant do użytku osobistego; kopiowanie, rozpowszechnianie, przerabianie do dalszego udostępniania i użycie komercyjne wymagają zgody autora.
+Wszelkie prawa zastrzeżone. Możesz zainstalować integrację u siebie do użytku osobistego, ale bez zgody autora nie wolno jej kopiować, przerabiać na dalsze udostępnianie ani używać komercyjnie.
 
-W folderze `custom_components/bms_komp_dec/direct/` jest kod z projektów ha-solarman i pysolarman (licencja MIT) oraz umodbus (Mozilla Public License 2.0) — obowiązują dla niego jego własne licencje, zawarte w plikach `LICENSE-*.txt` w tym folderze.
+Kod w `custom_components/bms_komp_dec/direct/` pochodzi z projektów ha-solarman i pysolarman (MIT) oraz umodbus (MPL-2.0) i ma własne licencje, które leżą obok w plikach `LICENSE-*.txt`. Biblioteki Chart.js 4.4.1 i chartjs-adapter-date-fns 3.0.0 (MIT) są dołączone w `frontend/vendor/`, dzięki czemu wykresy działają bez dostępu przeglądarki do internetu.
 
-W folderze `custom_components/bms_komp_dec/frontend/vendor/` są biblioteki Chart.js 4.4.1 i chartjs-adapter-date-fns 3.0.0 (licencja MIT) — dzięki nim wykresy działają bez dostępu przeglądarki do internetu.
+## Wydanie nowej wersji
+
+Numer wersji musi być taki sam w `manifest.json`, `const.py`, w `CARD_VERSION` w `frontend/bms-panel.js` i w `install.version` w plikach `frontend/bms-*.js`. Potem wystarczy utworzyć na GitHubie wydanie z tagiem `vX.Y.Z`, a akcja sprawdzi zgodność numerów i doda do niego `bms_komp_dec.zip`.
