@@ -5,3 +5,7 @@ __pycache__/
 *.tmp
 .DS_Store
 *.zip
+tests/ui/node_modules/
+tests/ui/shots/
+tests/ui/*.png
+tests/ui/package-lock.json

@@ -465,7 +465,7 @@
           <button class="dg-btn" data-act="unlock" style="width:100%;">Odblokuj</button><div id="dgGateMsg" class="dg-muted" style="margin-top:10px;min-height:16px;"></div><div class="dg-muted" id="dgVer" style="margin-top:14px;font-size:11px;">${this._dgVerLine()}</div></div>`;
         return;
       }
-      const secs = [['overview', '📡 Przegląd'], ['wizard', '🧭 Kreator instalacji'], ['config', '⚙️ Konfiguracja'], ['tou', '🕒 Strefy czasowe'], ['charts', '📈 Wykresy'], ['alarms', '🚨 Alarmy'], ['modes', '🛡️ Tryby'], ['notify', '🔔 Powiadomienia'], ['backup', '💾 Kopie i profile'], ['log', '📜 Dziennik zmian'], ['adv', '🧪 Zaawansowane']];
+      const secs = [['overview', '📡 Przegląd'], ['selftest', '🩺 Autotest'], ['wizard', '🧭 Kreator instalacji'], ['config', '⚙️ Konfiguracja'], ['tou', '🕒 Strefy czasowe'], ['charts', '📈 Wykresy'], ['alarms', '🚨 Alarmy'], ['modes', '🛡️ Tryby'], ['notify', '🔔 Powiadomienia'], ['backup', '💾 Kopie i profile'], ['log', '📜 Dziennik zmian'], ['adv', '🧪 Zaawansowane']];
       host.innerHTML = `<div class="dg-bar"><span>🔓 Tryb instalatora aktywny · wygasa za <b id="dgLeft">–</b></span><span class="sp"></span><button class="dg-btn sec sm" data-act="extend">Przedłuż</button><button class="dg-btn sec sm" data-act="lock">Zablokuj</button></div>
         <div class="dg-nav">${secs.map(([k, l]) => `<button class="dg-pill ${s.sec === k ? 'on' : ''}" data-act="sec" data-sec="${k}">${l}</button>`).join('')}</div>
         <div id="dgStoreNote">${dgStoreNote()}</div><div id="dgAlarmBox">${this._dgAlarmHtml()}</div><div id="dgBody"></div><div class="dg-muted" id="dgVer" style="margin:14px 0 4px;font-size:11px;">${this._dgVerLine()}</div><div id="dgToast" class="dg-toast"></div>`;
@@ -513,6 +513,8 @@
         case 'nt-test': this._dgNtTest(); break;
         case 'nt-defaults': this._dgNtDefaults(); break;
         case 'nt-reload': this._dgNtLoad(true); break;
+        case 'st-run': this._dgStRun(); break;
+        case 'st-copy': this._dgStCopy(); break;
         case 'nt-all': this._dgNtAll(t.dataset.g, t.dataset.v === '1'); break;
         case 'mode-save': this._dgModesSave(t.dataset.k); break;
         case 'press': this._dgPress(t.dataset.eid); break;
@@ -1289,6 +1291,64 @@
     },
     _dgAfter_wizard() { if (typeof this._exEnsure === 'function') this._exEnsure(); },
 
+    // ======================= AUTOTEST (tylko odczyt) =======================
+    _dgSec_selftest() { return `<div id="dgSt">${this._dgStHtml()}</div>`; },
+    _dgAfter_selftest() { const st = this._dgStState(); if (!st.data && !st.loading && !st.err) this._dgStRun(); },
+    _dgStState() { const s = this._dgS(); if (!s.st) s.st = { data: null, loading: false, err: '', copied: '' }; return s.st; },
+    _dgStPaint() { const box = this._el('dgSt'); if (box && this._dgS().sec === 'selftest') box.innerHTML = this._dgStHtml(); },
+    async _dgStRun() {
+      const st = this._dgStState(); if (st.loading) return;
+      st.loading = true; st.err = ''; st.copied = ''; this._dgStPaint();
+      try { const r = await dgCall(this, 'self_test', {}, true); st.data = (r && (r.response || r)) || null; }
+      catch (e) { st.err = (e && e.message) ? e.message : String(e); }
+      st.loading = false; this._dgStPaint();
+    },
+    _dgStText() {
+      const d = this._dgStState().data; if (!d) return '';
+      const ic = { ok: 'OK', warn: 'UWAGA', error: 'BŁĄD' };
+      const sm = d.summary || {};
+      const lines = [`BMS komp-dec ${d.version || '?'} — autotest ${d.time || ''}`, `Wynik: ${sm.errors || 0} błędów, ${sm.warnings || 0} ostrzeżeń, ${sm.ok || 0} OK`];
+      (d.groups || []).forEach((g) => {
+        lines.push('', `== ${g.name}`);
+        (g.checks || []).forEach((c) => { lines.push(`[${ic[c.status] || c.status}] ${c.title}: ${c.detail}${c.fix && c.status !== 'ok' ? ` → ${c.fix}` : ''}`); });
+      });
+      const bad = (d.commands || []).filter((c) => !c.ok);
+      if (bad.length) { lines.push('', '== Komendy (podgląd)'); bad.forEach((c) => lines.push(`[BŁĄD] ${c.label}: ${c.error || ''}`)); }
+      lines.push('', this._dgVerLine().replace(/<[^>]+>/g, '').replace(/&[a-z]+;/g, ' ').trim());
+      return lines.join('\n');
+    },
+    async _dgStCopy() {
+      const st = this._dgStState(); const txt = this._dgStText(); if (!txt) return;
+      let ok = false;
+      try { if (navigator.clipboard && window.isSecureContext) { await navigator.clipboard.writeText(txt); ok = true; } } catch (e) { ok = false; }
+      if (!ok) {
+        const ta = this._el('dgStTxt');
+        if (ta) { ta.style.display = 'block'; ta.focus(); ta.select(); try { ok = document.execCommand('copy'); } catch (e) { ok = false; } }
+      }
+      st.copied = ok ? '✅ Skopiowano raport — wklej go w wiadomości.' : 'Zaznacz tekst poniżej i skopiuj go ręcznie.';
+      const m = this._el('dgStMsg'); if (m) m.textContent = st.copied;
+      if (!ok) { const ta = this._el('dgStTxt'); if (ta) ta.style.display = 'block'; }
+    },
+    _dgStHtml() {
+      const st = this._dgStState();
+      const head = `<div class="dg-card"><h4>🩺 Autotest</h4><div class="sub">Sprawdza na żywo falownik, prognozę PV, ceny, wykrywanie zaniku sieci, urządzenia i plan. Tylko odczyt — niczego nie zmienia w falowniku ani w ustawieniach.</div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;"><button class="dg-btn" data-act="st-run" ${st.loading ? 'disabled' : ''}>${st.loading ? 'Sprawdzam…' : '▶ Uruchom ponownie'}</button>
+        <button class="dg-btn sec" data-act="st-copy" ${st.data ? '' : 'disabled'}>📋 Kopiuj raport</button><span class="dg-muted" id="dgStMsg">${dgEsc(st.copied || '')}</span></div></div>`;
+      if (st.err) return head + `<div class="dg-card"><div class="dg-bad">Nie udało się uruchomić autotestu: ${dgEsc(st.err)}</div><div class="dg-muted" style="margin-top:6px;">Wymaga integracji 0.8.5 lub nowszej i konta administratora.</div></div>`;
+      if (!st.data) return head + '<div class="dg-card"><div class="dg-muted">Sprawdzam…</div></div>';
+      const d = st.data; const sm = d.summary || {};
+      const ic = { ok: '✅', warn: '⚠️', error: '❌' };
+      const sum = `<div class="dg-card"><b class="${sm.errors ? 'dg-bad' : (sm.warnings ? 'dg-warn' : 'dg-ok')}">${sm.errors ? `❌ ${sm.errors} ${sm.errors === 1 ? 'błąd' : 'błędy/błędów'}` : (sm.warnings ? '⚠️ działa, ale są uwagi' : '✅ wszystko w porządku')}</b>
+        <span class="dg-muted"> · ostrzeżeń ${sm.warnings || 0} · OK ${sm.ok || 0} · ${dgEsc(String(d.time || '').replace('T', ' '))}</span></div>`;
+      const groups = (d.groups || []).map((g) => {
+        const nb = (g.checks || []).filter((c) => c.status !== 'ok').length;
+        return `<details class="dg-card" ${nb ? 'open' : ''}><summary style="cursor:pointer;font-weight:600;">${dgEsc(g.name)} <span class="dg-muted" style="font-weight:400;">· ${nb ? `${nb} do sprawdzenia` : 'OK'}</span></summary>
+          ${(g.checks || []).map((c) => `<div style="display:flex;gap:8px;padding:7px 0;border-bottom:1px solid var(--line);font-size:12px;line-height:1.45;">
+            <span style="flex:none;">${ic[c.status] || '•'}</span><div><b>${dgEsc(c.title)}</b><div>${dgEsc(c.detail)}</div>${c.fix && c.status !== 'ok' ? `<div class="dg-muted">${dgEsc(c.fix)}</div>` : ''}</div></div>`).join('')}</details>`;
+      }).join('');
+      return head + sum + groups + `<textarea id="dgStTxt" readonly style="display:none;width:100%;height:220px;font-size:11px;margin-top:8px;">${dgEsc(this._dgStText())}</textarea>`;
+    },
+
     // ======================= POWIADOMIENIA (konfigurator) =======================
     _dgSec_notify() {
       return `<div id="dgNt">${this._dgNtHtml()}</div>`;
@@ -1530,6 +1590,6 @@
 
   };
   install.contract = 1;
-  install.version = '0.8.4';
+  install.version = '0.8.5';
   window.__bmsDiagInstall = install;
 })();

@@ -1,3 +1,36 @@
+# BMS komp-dec — zmiany w 0.8.5 (z 0.8.4)
+
+## Oszczędności (zakładka „Zysk i log”)
+- Nowa sekcja **„💡 Oszczędności”**: koszt energii w trzech wariantach — **rzeczywistość** (zakup − sprzedaż z cenami z każdej godziny), **bez baterii** (dom bierze z sieci to, czego nie pokryje PV) i **bateria bez planera** (ładuje się tylko z nadwyżki PV i oddaje do domu, z tą samą pojemnością, sprawnością, progiem i mocami). Do wyboru: dziś, 30 dni, ten miesiąc, ten rok, od początku; wykres oszczędności dzień po dniu.
+- Dane zbiera nowy dziennik godzinowy (co 10 s: zużycie, PV, import, eksport, ładowanie i rozładowanie baterii, średnie ceny). Liczy się **od dnia instalacji tej wersji** — wstecz nie ma danych godzinowych.
+- Nowy sensor `sensor.bms_savings` (oszczędność w tym miesiącu wobec braku baterii, w atrybutach dzień / rok i „w tym planer”).
+
+## Trafność prognoz i korekta PV
+- Nowa sekcja **„🎯 Trafność prognoz”**: średni błąd prognozy PV (zapisywanej rano, od 6:00) i zużycia (wydanej dzień wcześniej), czy prognoza jest zawyżona czy zaniżona, błąd planu SOC godzina po godzinie i wykresy prognoza / wykonanie z 30 dni.
+- **Korekta prognozy PV w planerze:** prognoza jest mnożona przez stosunek wykonania do prognozy z ostatnich 14 dni (co najmniej 5 dni z prognozą ≥ 1 kWh, przy małej liczbie dni ściągana do 1, granice 0,7–1,2). Domyślnie **włączona** — przełącznik `switch.bms_pv_forecast_correction`. Widać ją w „Plan zakłada” na karcie; wykresy prognozy PV pokazują nadal surową prognozę.
+- Nowy sensor `sensor.bms_forecast_accuracy` (błąd prognozy PV z 30 dni).
+
+## Koszt zużycia baterii w planerze
+- Nowe ustawienia `number.bms_battery_price_pln` (cena baterii) i `number.bms_battery_cycles` (liczba cykli, domyślnie 6000). Koszt = cena / (cykle × pojemność) zł na każdą kWh przechodzącą przez baterię.
+- Planer dolicza go przy ładowaniu z sieci (noc i południe, taryfy strefowe i dynamiczne), przy sprzedaży z baterii i w ocenie opłacalności sprzedaży; pomija to, co się nie opłaca, i pisze dlaczego. **Domyślnie cena = 0, czyli bez zmian w działaniu**, dopóki jej nie ustawisz.
+
+## Sterowanie urządzeniami
+- W edytorze urządzenia nowa część **„🎛 Sterowanie (opcjonalne)”**: przełącznik urządzenia (`switch` / `input_boolean`) i tryb — **przy nadwyżce PV** (moc urządzenia, od jakiego SOC) albo **w najtańszych godzinach planu** (ile godzin) — oraz dzienny limit pracy.
+- Zabezpieczenia: stan zmieniany najwyżej co 10 minut, warunek musi trwać 5 minut; BMS wyłącza tylko to, co sam włączył; po ręcznym przełączeniu nie steruje urządzeniem do końca dnia; przy zaniku sieci nic nie włącza, a włączone przez siebie wyłącza; dzienny limit; po wyłączeniu sterowania wyłącza swoje urządzenia; każda akcja w dzienniku.
+- Całość działa tylko przy włączonym **„Sterowaniu urządzeniami”** (`switch.bms_device_control`, przełącznik nad listą urządzeń) — **domyślnie wyłączone**. Na kafelku widać tryb, stan i powód.
+
+## Diagnostyka i naprawy
+- **🩺 Autotest** (Diagnostyka, za hasłem): sprawdza na żywo dane z falownika, wpisy kreatora i źródło encji sterujących, prognozę PV (Solcast / Forecast.Solar, suma godzinowa vs dzienna), ceny, wykrywanie zaniku sieci po napięciu L1, urządzenia (encje, przełączniki, czy wyszukiwanie nie podsuwa liczników falownika), plan, zapisane ustawienia i zgłoszenia. Tylko odczyt. Przycisk **„Kopiuj raport”** daje tekst do wysłania. Usługa `self_test` (administrator).
+- **Naprawy w HA** (Ustawienia → Naprawy): brak danych z falownika > 10 min, brak ceny sprzedaży > 30 min, brak godzinowej prognozy PV > 2 h, auto-stosowanie przy wyłączonym zapisie do falownika. Zgłoszenia znikają same.
+- **Pobierz diagnostykę** (Ustawienia → Urządzenia i usługi → BMS komp-dec → ⋮): konfiguracja, stan, plan, wynik sprawdzenia, dziennik, urządzenia, oszczędności. Adres i numer seryjny falownika, usługa powiadomień i hasła są ukryte.
+
+## Naprawione
+- **Ustawienia powiadomień znikały po restarcie HA** (także znaczniki wysłanych podsumowań, przez co po restarcie mogło przyjść drugie podsumowanie dnia). Stan integracji zapisywał się, ale przy wczytaniu brane były tylko klucze znane od wersji 0.6 — teraz wszystkie.
+- Podpowiedzi przełączników w edytorze urządzenia nie pokazują przełączników falownika.
+
+## Testy w repozytorium
+- Testy logiki (29 plików, atrapy HA) i karty w przeglądarce (40 plików, Playwright) są w `tests/` i uruchamiają się na GitHubie przy każdej zmianie (akcja „Testy”). Lokalnie: `python tests/run_python.py`, `node tests/run_ui.js`.
+
 # BMS komp-dec — zmiany w 0.8.4 (z 0.8.3)
 
 ## Urządzenia: wyszukiwanie liczników kWh w Home Assistant

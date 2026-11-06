@@ -25,7 +25,7 @@ from .const import (
     DEFAULT_PV_FORECAST_TODAY, DEFAULT_PV_FORECAST_TOMORROW, DEFAULT_MIN_SELL_MARGIN,
 )
 from .reserve import compute_reserve
-from .helpers import find_eid, normalize_price, number_value, state_str, switch_on
+from .helpers import find_eid, normalize_price, number_value, state_str, switch_on, wear_cost_per_kwh
 from .tariff import G12wTariff, get_profile, is_g12w_peak
 from .inverter_floor import floor_profile
 from .pv_forecast import PvForecast
@@ -396,10 +396,34 @@ class ScheduleOptimizer:
         if not pv:
             return None, sun
         rise, sset = sun
+        k = self.pv_factor()
         out: list[float | None] = []
         for h in range(24):
-            out.append(0.0 if (h + 1 <= rise or h >= sset) else pv[h])
+            v = pv[h]
+            if isinstance(v, (int, float)) and k != 1.0:
+                v = v * k
+            out.append(0.0 if (h + 1 <= rise or h >= sset) else v)
         return out, sun
+
+    def pv_factor(self) -> float:
+        """Korekta prognozy PV z historii (prognoza vs wykonanie z 14 dni), gdy włączona; inaczej 1,0."""
+        if not switch_on(self.hass, "pv_forecast_correction", True):
+            return 1.0
+        ins = getattr(getattr(self.coordinator, "runtime", None), "insights", None)
+        if ins is None:
+            return 1.0
+        try:
+            return float(ins.pv_correction()["factor"])
+        except Exception:  # noqa: BLE001
+            return 1.0
+
+    def wear_cost(self) -> float:
+        """Koszt zużycia baterii w zł na kWh przechodzącą przez baterię (0 = nie liczymy)."""
+        return wear_cost_per_kwh(self.hass, self._cfg_num(CONF_BATTERY_CAPACITY_KWH, DEFAULT_BATTERY_CAPACITY_KWH, lo=0.1))
+
+    def pv_raw_today(self) -> tuple[float | None, list[float | None] | None]:
+        """Prognoza PV na dziś bez korekty (do zapisu „prognoza vs wykonanie”)."""
+        return self._read_pv_forecast_kwh(CONF_PV_FORECAST_TODAY, DEFAULT_PV_FORECAST_TODAY), self._read_pv_hourly(0)
 
     @staticmethod
     def _pv_active(pv: list | None, sun: tuple[float, float]) -> list[int]:
@@ -529,6 +553,7 @@ class ScheduleOptimizer:
     def _build_context(self, now: datetime, soc: float) -> dict[str, Any]:
         today = now.date()
         tomorrow = today + timedelta(days=1)
+        pv_k = self.pv_factor()
         rce = self._read_rce_arrays()
         rce_days = [rce.get(today.isoformat(), []), rce.get(tomorrow.isoformat(), [])]
         (pv0, sun0), (pv1, sun1) = self._pv_day(0), self._pv_day(1)
@@ -567,8 +592,11 @@ class ScheduleOptimizer:
             "pv": pv_days,
             "sun": sun_days,
             "pv_act": pv_act,
-            "pv_kwh": [self._read_pv_forecast_kwh(CONF_PV_FORECAST_TODAY, DEFAULT_PV_FORECAST_TODAY),
-                       self._read_pv_forecast_kwh(CONF_PV_FORECAST_TOMORROW, DEFAULT_PV_FORECAST_TOMORROW)],
+            "pv_kwh": [None if v is None else v * pv_k for v in (
+                self._read_pv_forecast_kwh(CONF_PV_FORECAST_TODAY, DEFAULT_PV_FORECAST_TODAY),
+                self._read_pv_forecast_kwh(CONF_PV_FORECAST_TOMORROW, DEFAULT_PV_FORECAST_TOMORROW))],
+            "pv_factor": pv_k,
+            "wear": self.wear_cost(),
             "load_tomorrow": load_tomorrow,
             "load_h": ([number_value(self.hass, "vacation_load_w", 250.0) / 1000.0] * 24
                        if mode == "vacation" else self._load_hourly(load_tomorrow)),
@@ -739,6 +767,8 @@ class ScheduleOptimizer:
             "pv_hourly_today": pv0 is not None,
             "pv_hourly_tomorrow": ctx["pv"][1] is not None,
             "pv_source": self.pv_source(),
+            "pv_factor": round(float(ctx.get("pv_factor", 1.0)), 3),
+            "wear_cost": round(float(ctx.get("wear", 0.0)), 3),
             "mode": ctx["mode"],
         }
 
@@ -923,6 +953,14 @@ class ScheduleOptimizer:
             return out
 
         avail = end - earliest
+        wear = ctx.get("wear", 0.0)
+        if (wear > 0 and isinstance(pk, (int, float)) and isinstance(off, (int, float))
+                and not (prof.dynamic_for(ctx["now"].date()) or prof.dynamic_for(d_end))
+                and pk <= off / ctx["eff"] + wear and ctx["mode"] != "storm"):
+            self._skip_pair(out, set1 + set2,
+                            f"Pomiń — ładowanie z sieci się nie opłaca: szczyt {pk:.2f} zł/kWh wobec {off:.2f} / {ctx['eff']:.0%} "
+                            f"sprawności + {wear:.2f} zł/kWh kosztu zużycia baterii.")
+            return out
         if prof.dynamic_for(ctx["now"].date()) or prof.dynamic_for(d_end):
             return self._grid_charge_dynamic(ctx, out, set1, set2, earliest, end, soc_start, target, res,
                                              floor_note, peak_note, pk)
@@ -980,10 +1018,12 @@ class ScheduleOptimizer:
                 break
             s_abs, n = s_new, n_new
         grid_kwh = min(grid_kwh, n * chg)
-        if pk is not None and avg is not None and not pk > avg / eff + 0.05:
+        wear = ctx.get("wear", 0.0)
+        if pk is not None and avg is not None and not pk > avg / eff + 0.05 + wear and ctx["mode"] != "storm":
+            wear_txt = f" i kosztu zużycia baterii ({wear:.2f} zł/kWh)" if wear > 0 else ""
             self._skip_pair(out, set1 + set2,
                             f"Pomiń — najtańsze godziny przed szczytem kosztują śr. {avg:.2f} zł/kWh, a szczyt śr. {pk:.2f}: "
-                            f"różnica nie pokrywa strat cyklu baterii ({eff:.0%}).")
+                            f"różnica nie pokrywa strat cyklu baterii ({eff:.0%}){wear_txt}.")
             return out
         e_abs = s_abs + n
         ctx["grid_hours"] = set(range(s_abs, e_abs))
@@ -1033,8 +1073,10 @@ class ScheduleOptimizer:
         if not (isinstance(pk, (int, float)) and isinstance(off, (int, float))):
             return skip("Pomiń — brak nauczonych cen taryfy (szczyt/pozaszczyt).", "low")
         eff = ctx["eff"]
-        if not pk > off / eff + 0.05:
-            return skip("Pomiń — różnica cen szczyt/pozaszczyt nie pokrywa strat cyklu baterii.")
+        wear = ctx.get("wear", 0.0)
+        if not pk > off / eff + 0.05 + wear:
+            return skip("Pomiń — różnica cen szczyt/pozaszczyt nie pokrywa strat cyklu baterii"
+                        + (f" i kosztu jej zużycia ({wear:.2f} zł/kWh)." if wear > 0 else "."))
 
         floor_eve = max(ctx["reserve_floor"], float(HARD_FLOOR_SOC))
         need = self._need_start_soc(ctx, ev_a, ev_b, floor_eve)
@@ -1062,10 +1104,11 @@ class ScheduleOptimizer:
             ev_prices = [p for p in (self._buy_at(ctx, h) for h in range(ev_a, ev_b)) if p is not None]
             if ev_prices:
                 pk = sum(ev_prices) / len(ev_prices)
-            if not pk > off / eff + 0.05:
+            if not pk > off / eff + 0.05 + wear:
                 return skip(f"Pomiń — najtańsze godziny {ms}–{me} (śr. {off:.2f} zł/kWh) nie są na tyle tańsze od szczytu "
-                            f"wieczornego (śr. {pk:.2f}), by pokryć straty cyklu baterii.")
-        saving = stored * (pk - off / eff)
+                            f"wieczornego (śr. {pk:.2f}), by pokryć straty cyklu baterii"
+                            + (f" i koszt jej zużycia ({wear:.2f} zł/kWh)." if wear > 0 else "."))
+        saving = stored * (pk - off / eff - wear)
         if saving < 0.1:
             return skip(f"Pomiń — zysk z doładowania w oknie {ms}–{me} byłby znikomy (~{saving:.2f} zł).")
         stop_h = s + n
@@ -1203,10 +1246,12 @@ class ScheduleOptimizer:
                 if day_avg is not None and avg < day_avg:
                     why_not = why_not or (f"najlepsze okno {dname} ({avg:.3f} zł/kWh) jest poniżej średniej dnia ({day_avg:.3f})", "high")
                     continue
-                net = avg * eff - (ref if ref is not None else 0.0)
+                wear = ctx.get("wear", 0.0)
+                net = avg * eff - (ref if ref is not None else 0.0) - wear
                 if net < margin:
-                    why_not = why_not or (f"sprzedaż nieopłacalna {dname}: {avg:.3f} × {eff:.0%} − {(ref or 0):.3f} (koszt alternatywny) "
-                                          f"= {net:.3f} < min. marża {margin:.2f} zł/kWh", "high")
+                    wear_txt = f" − {wear:.3f} (zużycie baterii)" if wear > 0 else ""
+                    why_not = why_not or (f"sprzedaż nieopłacalna {dname}: {avg:.3f} × {eff:.0%} − {(ref or 0):.3f} (koszt alternatywny)"
+                                          f"{wear_txt} = {net:.3f} < min. marża {margin:.2f} zł/kWh", "high")
                     continue
                 s_abs = day * 24 + s
                 soc_s = soc_lo if s_abs <= lo_abs else self._simulate(ctx, soc_lo, lo_abs, s_abs, ctx["grid_hours"], sold)

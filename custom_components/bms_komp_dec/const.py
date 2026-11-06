@@ -1,6 +1,6 @@
 """Constants for BMS komp-dec integration."""
 DOMAIN = "bms_komp_dec"
-VERSION = "0.8.4"
+VERSION = "0.8.5"
 
 # Mapowanie encji źródłowych
 CONF_PV_POWER = "pv_power"
@@ -187,6 +187,8 @@ SWITCHES = [
     ("storm_mode", "Tryb burzowy (rezerwa 100%, bez sprzedaży)", "mdi:weather-lightning", False),
     ("vacation_mode", "Tryb urlopowy (minimalne zużycie)", "mdi:palm-tree", False),
     ("auto_apply_dry_run", "Auto-stosowanie: tylko podgląd (bez zapisu)", "mdi:eye-check", False),
+    ("pv_forecast_correction", "Korekta prognozy PV z historii (planer)", "mdi:solar-power-variant", True),
+    ("device_control", "Sterowanie urządzeniami (włączanie przełączników)", "mdi:power-socket-eu", False),
 ]
 
 WEEKDAY_SWITCH_KEYS = ["dzien_pn", "dzien_wt", "dzien_sr", "dzien_cz", "dzien_pt", "dzien_so", "dzien_nd"]
@@ -237,6 +239,8 @@ NUMBERS = [
     ("battery_charge_sign", "Znak mocy baterii przy ładowaniu (−1 / +1; 0 = auto)", -1, 1, 1, ""),
     ("storm_mode_hours", "Tryb burzowy — czas trwania", 1, 96, 1, "h"),
     ("vacation_load_w", "Tryb urlopowy — stałe zużycie domu", 0, 5000, 10, "W"),
+    ("battery_price_pln", "Koszt zużycia baterii — cena baterii (0 = nie licz)", 0, 500000, 100, "PLN"),
+    ("battery_cycles", "Koszt zużycia baterii — liczba cykli życia", 500, 20000, 100, ""),
 ]
 
 NUMBER_DEFAULTS = {
@@ -261,6 +265,8 @@ NUMBER_DEFAULTS = {
     "battery_charge_sign": 0,
     "storm_mode_hours": 24,
     "vacation_load_w": 250,
+    "battery_price_pln": 0,
+    "battery_cycles": 6000,
 }
 
 # Encje falownika sterowane przyciskami (Deye / Solarman)
@@ -284,6 +290,8 @@ RUNTIME_SENSORS = [
     ("monthly_report", "BMS Raport miesięczny", "PLN", "mdi:file-chart"),
     ("monitor_status", "BMS Stan monitoringu", None, "mdi:shield-check"),
     ("devices", "BMS Urządzenia", None, "mdi:power-plug"),
+    ("savings", "BMS Oszczędność (miesiąc, wobec braku baterii)", "PLN", "mdi:piggy-bank"),
+    ("forecast_accuracy", "BMS Trafność prognozy PV (błąd 30 dni)", "%", "mdi:bullseye-arrow"),
 ]
 
 PLATFORMS = ["sensor", "binary_sensor", "switch", "button", "number", "time"]

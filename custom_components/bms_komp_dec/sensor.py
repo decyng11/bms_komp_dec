@@ -184,6 +184,10 @@ class BmsRuntimeSensor(BmsBaseEntity, SensorEntity):
             return len(st.get("alarms_active") or {}) + (1 if st.get("low_soc_active") else 0)
         if self._key == "devices":
             return len(rt.devices.devices)
+        if self._key == "savings":
+            return rt.insights.savings()["month"]["vs_nobat"]
+        if self._key == "forecast_accuracy":
+            return rt.insights.accuracy(getattr(rt.coordinator, "load_forecast", None))["pv"]["mape"]
         return None
 
     @staticmethod
@@ -333,4 +337,15 @@ class BmsRuntimeSensor(BmsBaseEntity, SensorEntity):
         if self._key == "devices":
             live = rt.devices.live()
             return {"devices": live, "power_total": round(sum(x["power"] or 0.0 for x in live), 1)}
+        if self._key == "savings":
+            sv = rt.insights.savings()
+            return {"today_vs_nobat": sv["today"]["vs_nobat"], "today_vs_simple": sv["today"]["vs_simple"],
+                    "month_vs_simple": sv["month"]["vs_simple"], "year_vs_nobat": sv["year"]["vs_nobat"],
+                    "year_vs_simple": sv["year"]["vs_simple"], "month_cost": sv["month"]["actual"],
+                    "days_counted": sv["total"]["days"], "since": sv["since"]}
+        if self._key == "forecast_accuracy":
+            ac = rt.insights.accuracy(getattr(rt.coordinator, "load_forecast", None))
+            return {"pv_bias": ac["pv"]["bias"], "pv_days": ac["pv"]["n"], "load_mape": ac["load"]["mape"],
+                    "load_bias": ac["load"]["bias"], "soc_plan_error": ac["soc"]["mae"],
+                    "pv_correction": ac["pv_correction"]["factor"]}
         return None

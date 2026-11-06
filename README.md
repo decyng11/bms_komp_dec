@@ -6,13 +6,13 @@ Integracja Home Assistanta, która pilnuje, kiedy falownik Deye ma ładować bat
 
 Plan na dobę ładuje baterię z sieci w najtańszych godzinach, oddaje ją, gdy prąd jest drogi, i blokuje ładowanie z paneli przy wysokich cenach. Zna taryfy strefowe (np. G12w) oraz ceny dynamiczne z RCE i Pstryka.
 
-Zużycie domu jest liczone z historii, osobno dla dni powszednich i weekendów, z poprawką na temperaturę. Produkcję paneli bierze z Solcast albo z Forecast.Solar.
+Zużycie domu jest liczone z historii, osobno dla dni powszednich i weekendów, z poprawką na temperaturę. Produkcję paneli bierze z Solcast albo z Forecast.Solar i poprawia ją o to, jak prognoza sprawdzała się w ostatnich dwóch tygodniach. Jeśli podasz cenę baterii i liczbę cykli, planer dolicza też koszt jej zużycia i nie ładuje ani nie sprzedaje, gdy to się nie opłaca.
 
-Na karcie widać przepływ energii na żywo, plan, bilans w złotych, raport miesięczny i stan baterii. Jest tam też zakładka z dodatkowymi urządzeniami, których liczniki kWh integracja potrafi sama znaleźć w Home Assistancie.
+Na karcie widać przepływ energii na żywo, plan, bilans w złotych, raport miesięczny i stan baterii. W zakładce „Zysk i log” jest porównanie kosztów: tak jak jest, bez baterii i z baterią bez planera, oraz to, jak trafne były prognozy. Jest też zakładka z dodatkowymi urządzeniami, których liczniki kWh integracja potrafi sama znaleźć w Home Assistancie. Wybrane urządzenia (np. bojler) BMS może sam włączać przy nadwyżce z paneli albo w najtańszych godzinach, jeśli na to pozwolisz.
 
 Powiadomień jest ponad trzydzieści rodzajów. Każdy włączasz osobno, można ustawić ciszę nocną i podsumowania dzienne, tygodniowe i miesięczne.
 
-Parametry falownika, strefy czasowe, alarmy i kopie ustawień są w Diagnostyce, za hasłem.
+Parametry falownika, strefy czasowe, alarmy, kopie ustawień i autotest są w Diagnostyce, za hasłem. Autotest sprawdza na żywo dane z falownika, prognozę, ceny i urządzenia i daje raport do skopiowania. Problemy, które trwają dłużej (brak danych z falownika, brak ceny, brak prognozy), pojawiają się też w Ustawienia, Naprawy.
 
 ## Czego potrzebujesz
 
@@ -46,6 +46,10 @@ W HACS pojawi się powiadomienie o nowej wersji. Ręcznie zrób kopię zapasową
 
 Co się zmieniło w kolejnych wersjach, jest w [CHANGELOG.md](CHANGELOG.md).
 
+## Gdy coś nie działa
+
+Uruchom autotest w Diagnostyce i skopiuj raport. Możesz też pobrać plik diagnostyczny: Ustawienia, Urządzenia i usługi, BMS komp-dec, menu ⋮, „Pobierz diagnostykę”. Adres i numer seryjny falownika oraz usługa powiadomień są w nim ukryte.
+
 ## Uwaga
 
 Integracja steruje falownikiem i magazynem energii. Używasz jej na własną odpowiedzialność, więcej w pliku [LICENSE](LICENSE). Na początek zostaw zapis do falownika wyłączony i zobacz, co proponuje plan.
@@ -55,6 +59,10 @@ Integracja steruje falownikiem i magazynem energii. Używasz jej na własną odp
 Wszelkie prawa zastrzeżone. Możesz zainstalować integrację u siebie do użytku osobistego, ale bez zgody autora nie wolno jej kopiować, przerabiać na dalsze udostępnianie ani używać komercyjnie.
 
 Kod w `custom_components/bms_komp_dec/direct/` pochodzi z projektów ha-solarman i pysolarman (MIT) oraz umodbus (MPL-2.0) i ma własne licencje, które leżą obok w plikach `LICENSE-*.txt`. Biblioteki Chart.js 4.4.1 i chartjs-adapter-date-fns 3.0.0 (MIT) są dołączone w `frontend/vendor/`, dzięki czemu wykresy działają bez dostępu przeglądarki do internetu.
+
+## Testy
+
+W folderze `tests/` są testy logiki (Python, z atrapami Home Assistanta) i testy karty w przeglądarce (Playwright). Na GitHubie uruchamiają się same przy każdej zmianie. Lokalnie: `python tests/run_python.py` oraz `node tests/run_ui.js` (wymaga pakietu `playwright` i przeglądarki Chromium).
 
 ## Wydanie nowej wersji
 

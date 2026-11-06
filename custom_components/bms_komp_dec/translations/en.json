@@ -424,5 +424,23 @@
         "solarman": "I already have the inverter in ha-solarman (use its entities)"
       }
     }
+  },
+  "issues": {
+    "inverter_no_data": {
+      "title": "BMS: no data from the inverter",
+      "description": "For more than 10 minutes BMS has not received SOC or grid power readings. The plan and schedule cannot work properly without them.\n\nCheck the Solarman logger (power, Wi-Fi) and the inverter integration (ha-solarman or the inverter entry in BMS). This issue clears itself when data comes back."
+    },
+    "price_missing": {
+      "title": "BMS: no energy sell price",
+      "description": "For more than 30 minutes the sell price entity ({entity}) has had no value. The planner cannot judge whether selling or blocking PV charging pays off.\n\nCheck the price integration (RCE PSE, Pstryk or other) or select the right entity in the BMS configuration."
+    },
+    "pv_forecast_missing": {
+      "title": "BMS: no hourly PV forecast",
+      "description": "For more than 2 hours there has been no hourly PV production forecast for today or tomorrow. The planner then assumes no sun and may charge the battery from the grid unnecessarily.\n\nCheck the Solcast or Forecast.Solar integration and the forecast entities in the BMS configuration."
+    },
+    "auto_apply_no_write": {
+      "title": "BMS: auto-apply without inverter writes",
+      "description": "Auto-apply of proposals is on, but the directly connected inverter ({inverter}) has writes disabled. The schedule changes, the inverter settings do not.\n\nEnable writes in the inverter entry options (Configure → Allow writing to the inverter) or turn auto-apply off."
+    }
   }
 }

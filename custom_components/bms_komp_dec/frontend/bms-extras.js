@@ -61,7 +61,7 @@
 
     Object.assign(BmsPanel.prototype, {
       _exS() {
-        if (!this._ex) this._ex = { planOverride: null, rep: { year: null, month: null, data: null, loading: false, err: '' }, wiz: { state: 'idle', data: null, err: '' }, keys: {} };
+        if (!this._ex) this._ex = { ins: { data: null, at: 0, loading: false, err: '', period: 'last30' }, planOverride: null, rep: { year: null, month: null, data: null, loading: false, err: '' }, wiz: { state: 'idle', data: null, err: '' }, keys: {} };
         return this._ex;
       },
       _exCss() {
@@ -79,6 +79,7 @@
       },
       _exLog() {
         if (this._activeTab !== 'log') return;
+        this._exInsights();
         this._exReport();
         this._exHealth();
       },
@@ -179,6 +180,9 @@
           const parts = [`zużycie do północy ~<b>${kwh(as.load_rest_today_kwh)}</b> (${as.load_today_source === 'tempo dnia' ? 'z dzisiejszego zużycia' : 'z profilu'})`];
           if (exNum(as.load_tomorrow_kwh) !== null) parts.push(`jutro <b>${kwh(as.load_tomorrow_kwh)}</b>`);
           if (exNum(as.pv_tomorrow_kwh) !== null) parts.push(`PV jutro <b>${kwh(as.pv_tomorrow_kwh)}</b>${pvSrc}`);
+          const pf = exNum(as.pv_factor);
+          if (pf !== null && Math.abs(pf - 1) > 0.004) parts.push(`prognoza PV × <b>${exFmt(pf, 2)}</b> (korekta z historii)`);
+          if (exNum(as.wear_cost) > 0) parts.push(`zużycie baterii <b>${exFmt(as.wear_cost, 2)} zł/kWh</b>`);
           lines.push(`<div>📋 Plan zakłada: ${parts.join(' · ')}.</div>`);
           if (!as.pv_hourly_tomorrow) lines.push(`<div style="color:var(--red);">⚠ Brak godzinowej prognozy PV na jutro — plan liczy tak, jakby jutro nie było słońca. Wskaż encję prognozy Solcast albo Forecast.Solar w konfiguracji.</div>`);
         }
@@ -455,6 +459,125 @@
     });
 
     // =====================================================================
+    //  OSZCZĘDNOŚCI (3 warianty) i TRAFNOŚĆ PROGNOZ — dane z usługi insights_get (co 5 min)
+    // =====================================================================
+    const EX_PERIODS = [['today', 'dziś'], ['last30', '30 dni'], ['month', 'ten miesiąc'], ['year', 'ten rok'], ['total', 'od początku']];
+    const exDay = (iso) => { const m = /^(\d{4})-(\d\d)-(\d\d)/.exec(String(iso || '')); return m ? `${m[3]}.${m[2]}` : String(iso || ''); };
+    const exPairBars = (rows, fk, ak, unit, colAct) => {
+      const vals = []; rows.forEach((r) => { [r[fk], r[ak]].forEach((v) => { if (exNum(v) !== null) vals.push(Number(v)); }); });
+      if (!vals.length) return '<div class="chart-empty">Brak danych.</div>';
+      const mx = Math.max(...vals, 0.01);
+      const cols = rows.map((r) => {
+        const f = exNum(r[fk]), a = exNum(r[ak]);
+        const h = (v) => (v === null ? 0 : Math.max(1, Math.round(v / mx * 100)));
+        const tip = `${exDay(r.date)}: prognoza ${exFmt(f, 1)} ${unit}, wykonanie ${exFmt(a, 1)} ${unit}`;
+        return `<div title="${exEsc(tip)}" style="flex:1;display:flex;align-items:flex-end;gap:1px;height:100%;min-width:0;">
+          <div style="flex:1;height:${h(f)}%;background:var(--muted);opacity:.45;border-radius:2px 2px 0 0;"></div>
+          <div style="flex:1;height:${h(a)}%;background:${a === null ? 'transparent' : colAct};border-radius:2px 2px 0 0;"></div></div>`;
+      }).join('');
+      return `<div style="display:flex;align-items:flex-end;gap:2px;height:90px;">${cols}</div>
+        <div style="display:flex;justify-content:space-between;font-size:10px;color:var(--muted);margin-top:3px;"><span>${exEsc(exDay(rows[0].date))}</span><span>${exEsc(exDay(rows[rows.length - 1].date))}</span></div>`;
+    };
+
+    Object.assign(BmsPanel.prototype, {
+      async _exInsLoad() {
+        const s = this._exS().ins;
+        if (s.loading) return;
+        s.loading = true;
+        try { s.data = exResp(await exCall(this, 'insights_get', {})) || {}; s.err = ''; s.at = Date.now(); }
+        catch (e) { s.err = exErr(e); s.at = Date.now(); }
+        finally { s.loading = false; }
+        this._exInsights();
+      },
+      _exInsights() {
+        const sb = this._el('exSavBox'), ab = this._el('exAccBox');
+        if (!sb && !ab) return;
+        const s = this._exS().ins;
+        if (!s.loading && Date.now() - s.at > 300000) this._exInsLoad();
+        [sb, ab].forEach((box) => {
+          if (!box || box.dataset.exBound) return;
+          box.dataset.exBound = '1';
+          box.addEventListener('click', (ev) => {
+            const b = ev.target && ev.target.closest ? ev.target.closest('[data-exi]') : null;
+            if (!b) return;
+            if (b.dataset.exi === 'period') { s.period = b.dataset.p; this._exInsights(); }
+            else if (b.dataset.exi === 'reload') { s.at = 0; this._exInsights(); }
+          });
+        });
+        const key = JSON.stringify([s.at, s.err, s.period, !!s.data, TC('text')]);
+        if (sb && sb.dataset.exKey !== key) { sb.dataset.exKey = key; sb.innerHTML = this._exSavHtml(); }
+        if (ab && ab.dataset.exKey !== key) { ab.dataset.exKey = key; ab.innerHTML = this._exAccHtml(); }
+      },
+      _exSavHtml() {
+        const s = this._exS().ins;
+        if (!s.data) {
+          if (s.err) return `<div class="chart-empty" style="color:var(--red);">Nie udało się wczytać: ${exEsc(s.err)}</div><div class="ex-note">Wymaga integracji 0.8.5 lub nowszej.</div><button class="btn" data-exi="reload" style="margin-top:8px;">Spróbuj ponownie</button>`;
+          return '<div class="chart-empty">Ładowanie…</div>';
+        }
+        const sv = s.data.savings || {};
+        const p = sv[s.period] || {};
+        const pills = EX_PERIODS.map(([k, l]) => `<button class="btn" data-exi="period" data-p="${k}" style="padding:5px 12px;font-size:12px;${s.period === k ? 'background:var(--accent,#0a84ff);color:#fff;' : ''}">${l}</button>`).join('');
+        const col = (v) => (exNum(v) === null ? 'inherit' : (Number(v) >= 0 ? 'var(--green)' : 'var(--red)'));
+        const cost = (v) => { const n = exNum(v); return n === null ? '—' : (n < 0 ? '−' : '') + Math.abs(n).toFixed(2).replace('.', ',') + ' zł'; };
+        if (!p.days) {
+          return `<div class="ex-nav" style="justify-content:flex-start;flex-wrap:wrap;gap:6px;">${pills}</div>
+            <div class="chart-empty">Brak danych za ten okres. Oszczędności liczą się od dnia instalacji wersji 0.8.5 — pierwszy pełny dzień pojawi się jutro.</div>`;
+        }
+        const tiles = [
+          exTile('Koszt energii', cost(p.actual), 'faktycznie: zakup − sprzedaż'),
+          exTile('Bez baterii', cost(p.nobat), 'ten sam dom i PV, bez magazynu'),
+          exTile('Bateria bez planera', cost(p.simple), 'tylko autokonsumpcja PV'),
+          exTile('Oszczędność', `<span style="color:${col(p.vs_nobat)}">${exMoney(p.vs_nobat)}</span>`, 'bateria i planer względem braku baterii'),
+          exTile('W tym planer', `<span style="color:${col(p.vs_simple)}">${exMoney(p.vs_simple)}</span>`, 'względem baterii bez planera'),
+        ];
+        const daily = (sv.daily || []).filter((d) => d.complete || d.partial).slice(-30);
+        let bars = '';
+        if (daily.length > 1) {
+          const vals = daily.map((d) => Number(d.nobat) - Number(d.actual));
+          const mx = Math.max(...vals.map((v) => Math.abs(v)), 0.01);
+          bars = `<div style="font-size:11px;color:var(--muted);margin-top:12px;">Oszczędność dzień po dniu (względem braku baterii)</div>
+            <div style="display:flex;align-items:center;gap:2px;height:80px;margin-top:4px;">${daily.map((d, i) => {
+              const v = vals[i]; const h = Math.max(2, Math.round(Math.abs(v) / mx * 48));
+              const tip = `${exDay(d.date)}${d.partial ? ' (dziś, do teraz)' : ''}: ${exMoney(v)} · koszt ${cost(d.actual)}, bez baterii ${cost(d.nobat)}, bateria bez planera ${cost(d.simple)}`;
+              return `<div title="${exEsc(tip)}" style="flex:1;min-width:0;height:100%;display:flex;flex-direction:column;justify-content:center;">
+                <div style="height:${v >= 0 ? h : 0}px;background:var(--green);opacity:${d.partial ? 0.5 : 1};border-radius:2px 2px 0 0;align-self:stretch;margin-top:auto;"></div>
+                <div style="height:${v < 0 ? h : 0}px;background:var(--red);opacity:${d.partial ? 0.5 : 1};border-radius:0 0 2px 2px;margin-bottom:auto;"></div></div>`;
+            }).join('')}</div>`;
+        }
+        const pr = sv.params || {};
+        return `<div class="ex-nav" style="justify-content:flex-start;flex-wrap:wrap;gap:6px;">${pills}</div>
+          <div class="ex-tiles">${tiles.join('')}</div>${bars}
+          <div class="ex-note">Z ${p.days} ${p.days === 1 ? 'dnia' : 'dni'}${sv.since ? `, dane od ${exEsc(exDay(sv.since))}` : ''}. Koszt to zakup z sieci minus sprzedaż, z cenami z każdej godziny, bez opłat stałych.
+            „Bez baterii”: dom bierze z sieci to, czego nie pokryje PV, a nadwyżkę oddaje. „Bateria bez planera”: bateria ładuje się tylko z nadwyżki PV i oddaje ją do domu
+            (pojemność ${exFmt(pr.cap, 1)} kWh, sprawność ${exPct((exNum(pr.eff) || 0) * 100)}, próg ${exPct(pr.floor)}). Dzisiejszy dzień jest liczony do bieżącej godziny.</div>`;
+      },
+      _exAccHtml() {
+        const s = this._exS().ins;
+        if (!s.data) return s.err ? `<div class="chart-empty" style="color:var(--red);">Nie udało się wczytać: ${exEsc(s.err)}</div>` : '<div class="chart-empty">Ładowanie…</div>';
+        const ac = s.data.accuracy || {};
+        const pv = ac.pv || {}, ld = ac.load || {}, so = ac.soc || {}, pc = ac.pv_correction || {};
+        const bias = (b) => { const n = exNum(b); return n === null ? '' : (n > 0 ? `prognoza zawyżona o ${exPct(n)}` : (n < 0 ? `prognoza zaniżona o ${exPct(-n)}` : 'bez stałego odchylenia')); };
+        const errCol = (m) => { const n = exNum(m); return n === null ? 'inherit' : (n <= 15 ? 'var(--green)' : (n <= 30 ? 'var(--orange)' : 'var(--red)')); };
+        const fac = exNum(pc.factor);
+        const corrTxt = !s.data.pv_correction_on ? 'wyłączona przełącznikiem' : (pc.days >= 5 ? `z ${pc.days} dni${exNum(pc.ratio) !== null ? `, wykonanie / prognoza ${exFmt(pc.ratio, 2)}` : ''}` : `czeka na ≥ 5 dni z prognozą ≥ 1 kWh (jest ${pc.days || 0})`);
+        const tiles = [
+          exTile('Prognoza PV — błąd', `<span style="color:${errCol(pv.mape)}">${exPct(pv.mape, 1)}</span>`, pv.n ? `${bias(pv.bias)} · ${pv.n} dni` : 'zbiera dane (prognoza z rana vs wykonanie)'),
+          exTile('Prognoza zużycia — błąd', `<span style="color:${errCol(ld.mape)}">${exPct(ld.mape, 1)}</span>`, ld.n ? `${bias(ld.bias)} · ${ld.n} dni` : 'brak historii'),
+          exTile('Plan SOC — błąd', exNum(so.mae) === null ? '—' : exFmt(so.mae, 1, ' pp'), so.n ? `średnio na godzinę · ${so.n} dni` : 'zbiera dane (plan z rana vs SOC)'),
+          exTile('Korekta PV w planerze', s.data.pv_correction_on && fac !== null ? '× ' + exFmt(fac, 2) : '—', corrTxt),
+        ];
+        const rows = (ac.days || []).slice(-30);
+        const pvRows = rows.filter((r) => r.pv_fc !== null || r.pv_act !== null);
+        const ldRows = rows.filter((r) => r.load_fc !== null || r.load_act !== null);
+        const charts = (pvRows.length > 1 ? `<div style="font-size:11px;color:var(--muted);margin-top:12px;">Produkcja PV: prognoza (szary) i wykonanie, kWh/dzień</div>${exPairBars(pvRows, 'pv_fc', 'pv_act', 'kWh', 'var(--orange,#ff9f0a)')}` : '')
+          + (ldRows.length > 1 ? `<div style="font-size:11px;color:var(--muted);margin-top:12px;">Zużycie domu: prognoza (szary) i wykonanie, kWh/dzień</div>${exPairBars(ldRows, 'load_fc', 'load_act', 'kWh', 'var(--accent,#0a84ff)')}` : '');
+        return `<div class="ex-tiles">${tiles.join('')}</div>${charts}
+          <div class="ex-note">Błąd to średnia różnica prognozy i wykonania w procentach (dni z co najmniej 0,5 kWh), z ostatnich 30 dni. Prognoza PV jest zapisywana rano (od 6:00), prognoza zużycia — dzień wcześniej.
+            Korekta PV mnoży prognozę w planerze przez stosunek wykonania do prognozy z 14 dni (w granicach 0,7–1,2); karta nadal pokazuje surową prognozę.</div>`;
+      },
+    });
+
+    // =====================================================================
     //  KREATOR INSTALACJI: sprawdzenie konfiguracji i podgląd komend BEZ wysyłania czegokolwiek do falownika
     // =====================================================================
     const EX_ST_ICON = { ok: '✅', warn: '⚠️', error: '❌' };
@@ -542,6 +665,6 @@
 
   };
   install.contract = 1;
-  install.version = '0.8.4';
+  install.version = '0.8.5';
   window.__bmsExtrasInstall = install;
 })();

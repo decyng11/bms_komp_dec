@@ -196,3 +196,11 @@ devices_set:
       required: true
       selector:
         object: {}
+
+insights_get:
+  name: Oszczędności i trafność prognoz
+  description: Koszt energii w trzech wariantach (rzeczywistość, bez baterii, bateria bez planera) oraz prognozy PV, zużycia i planu SOC wobec wykonania.
+
+self_test:
+  name: Autotest
+  description: Sprawdza na żywo falownik, prognozę PV, ceny, wykrywanie zaniku sieci, urządzenia i plan (administrator, tylko odczyt).

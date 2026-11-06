@@ -1,0 +1,36 @@
+const { openCard, chromium } = require('./ui_env');
+const { seed, curve, REPORT, HEALTH, tab, sr } = require('./extras_helpers');
+let fails = 0; const ok = (c, m) => { if (!c) { fails++; console.log('FAIL', m); } else console.log('ok  ', m); };
+const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+const HIST = [{ date: '2026-11-01', net: -0.31 }, { date: '2026-11-02', net: -0.22 }, { date: '2026-11-03', net: -5.87 }, { date: '2026-11-04', net: -0.25 }, { date: '2026-11-05', net: 4.22 }];
+(async () => {
+  const b = await chromium.launch();
+  const e = await openCard(b, {});
+  await e.q((h) => { const s = window.__states['sensor.bms_profit_today'] || { state: '4.22', attributes: {} }; s.state = '4.22'; s.attributes = Object.assign({}, s.attributes, { history: h, export_kwh: 6.2, import_kwh: 5.73 }); window.__states['sensor.bms_profit_today'] = s; window.__states['sensor.bms_profit_month'] = { state: '-2.43', attributes: {} }; }, HIST);
+  await seed(e, { curve: curve(), report: REPORT({ days: HIST.concat(Array.from({ length: 20 }, (_, i) => ({ date: `2026-11-${String(6 + i).padStart(2, '0')}`, net: Math.round(Math.sin(i) * 300) / 100 }))), days_with_data: 25, best_day: { date: '2026-11-05', net: 4.22 }, worst_day: { date: '2026-11-03', net: -5.87 } }), health: HEALTH });
+  await tab(e, 'log'); await sleep(900);
+  const svg = await e.q(() => { const r = __el.shadowRoot.querySelector('#logTabBody .bms-bal'); return r ? r.outerHTML : null; });
+  ok(!!svg, 'Bilans w PLN: wykres SVG jest');
+  ok(svg && /−5,87/.test(svg) && /\+4,22/.test(svg), 'kwoty nad słupkami (najgorszy i najlepszy dzień)');
+  ok(svg && /03\.11/.test(svg) && /05\.11/.test(svg), 'daty pod słupkami');
+  ok(svg && /polyline/.test(svg), 'linia narastająco');
+  const t = await sr(e, '#logTabBody');
+  ok(/narastająco: −?-?2,43|narastająco: -2,43/.test(t), 'legenda: suma narastająco = −2,43 zł: ' + (t.match(/narastająco: [^ ]+ zł/) || [''])[0]);
+  { const nb = await e.q(() => __el.shadowRoot.querySelector('#logTabBody .bms-bal').querySelectorAll('[title]').length); ok(nb === 5, 'słupek na każdy dzień (' + nb + ')'); }
+  const rep = await e.q(() => { const r = __el.shadowRoot.querySelector('#exReportBox .bms-bal'); return r ? r.querySelectorAll('[title]').length : 0; });
+  ok(rep === 25, 'raport miesięczny: ten sam wykres, 25 dni (' + rep + ')');
+  ok(await e.q(() => { const s = __el.shadowRoot.querySelector('#exReportBox .bms-bal'); return s && s.querySelectorAll('[title] + div:not([title])').length < 25 && s.querySelectorAll('[title] + div:not([title])').length >= 2; }), 'raport: przy wielu dniach kwoty tylko przy wybranych słupkach');
+  const fs = await e.q(() => getComputedStyle(__el.shadowRoot.querySelector('#logTabBody .bms-bal [title] + div')).fontSize);
+  ok(fs === '11px', 'tekst ma stały rozmiar 11px (' + fs + ')');
+  const el = await e.page.evaluateHandle(() => __el.shadowRoot.querySelector('#logTabBody'));
+  await e.page.setViewportSize({ width: 1240, height: 1400 });
+  await sleep(300);
+  await el.screenshot({ path: 'balance_A.png' });
+  await e.page.setViewportSize({ width: 400, height: 1400 }); await sleep(300);
+  const el2 = await e.page.evaluateHandle(() => __el.shadowRoot.querySelector('#logTabBody .section'));
+  await el2.screenshot({ path: 'balance_A_phone.png' });
+  ok(e.errs.length === 0, 'brak błędów JS ' + JSON.stringify(e.errs));
+  await b.close();
+  console.log(fails ? `FAILS ${fails}` : 'ALL OK');
+  process.exit(fails ? 1 : 0);
+})();

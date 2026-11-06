@@ -285,10 +285,32 @@
             <div class="n">${dvEsc(d.icon)} ${dvEsc(d.name)} ${l.running ? '<span class="dv-run">pracuje</span>' : ''}</div>
             <div class="p">${l.power != null ? dvFmt(l.power, 0, ' W') : '—'}</div>
             <div class="s">dziś ${dvFmt(l.today_kwh, 2, ' kWh')} · ${dvZl(l.today_cost)}${d.room ? ' · ' + dvEsc(d.room) : ''}</div>
+            ${this._dvCtlChip(d)}
             ${this._dvAdmin() ? `<div style="margin-top:6px;"><button class="dv-pill" data-dv="edit" data-id="${dvEsc(d.id)}">✏️ Edytuj</button></div>` : ''}</div>`;
         }).join('');
       },
       _dvLive() { const g = this._el('dvLive'); if (g) g.innerHTML = this._dvLiveTiles(); },
+      _dvCtlChip(d) {
+        if (!d.switch_eid || !d.ctl_mode || d.ctl_mode === 'off') return '';
+        const s = this._dvS(); const c = (s.data && s.data.control) || {}; const st = (c.devices || {})[d.id] || {};
+        const sw = this._hass.states[d.switch_eid]; const on = sw && sw.state === 'on';
+        const mode = d.ctl_mode === 'pv' ? 'nadwyżka PV' : 'najtańsze godziny';
+        let txt, cls = '';
+        if (!c.enabled) { txt = `🎛 ${mode} · sterowanie wyłączone`; cls = 'opacity:.7;'; }
+        else if (st.manual) txt = '✋ przełączone ręcznie — BMS nie steruje do jutra';
+        else txt = `🎛 ${mode} · ${on ? 'wł.' : 'wył.'}${st.reason ? ' · ' + st.reason : ''}`;
+        return `<div class="s" style="margin-top:4px;${cls}">${dvEsc(txt)}</div>`;
+      },
+      _dvCtlBar() {
+        if (!this._dvAdmin()) return '';
+        const eid = this._eid('switch', 'device_control'); const st = this._hass.states[eid];
+        if (!st) return '';
+        const n = this._dvDevs().filter((d) => d.switch_eid && d.ctl_mode && d.ctl_mode !== 'off').length;
+        const on = st.state === 'on';
+        return `<div class="dv-bar" style="margin-top:-2px;"><label class="dv-note" style="margin:0;display:flex;gap:8px;align-items:center;cursor:pointer;">
+          <input type="checkbox" data-dv="ctl-master" ${on ? 'checked' : ''}/> Sterowanie urządzeniami ${on ? 'włączone' : 'wyłączone'}
+          ${n ? `(${n} ${n === 1 ? 'urządzenie' : 'urządzeń'} z przełącznikiem)` : '— wskaż przełącznik w „Edytuj”, żeby BMS mógł włączać urządzenie'}</label></div>`;
+      },
       _dvRender() {
         const root = this._el('devRoot'); if (!root) return;
         const s = this._dvS();
@@ -314,7 +336,7 @@
           <optgroup label="Urządzenie">${devs.map((d) => opt(d.id, `${d.icon} ${d.name}`)).join('')}</optgroup></select>`;
         const ranges = RANGES.map(([k, l]) => `<button class="dv-pill ${s.range === k ? 'on' : ''}" data-dv="range" data-r="${k}">${l}</button>`).join('');
         root.innerHTML = `
-          <div class="section"><div class="section-title">🔌 Urządzenia — teraz</div><div class="chart-card full" style="padding:14px 16px;">${head}<div class="dv-grid" id="dvLive">${this._dvLiveTiles()}</div></div></div>
+          <div class="section"><div class="section-title">🔌 Urządzenia — teraz</div><div class="chart-card full" style="padding:14px 16px;">${head}${this._dvCtlBar()}<div class="dv-grid" id="dvLive">${this._dvLiveTiles()}</div></div></div>
           <div class="section"><div class="section-title">📊 Zużycie</div><div class="chart-card full" style="padding:14px 16px;">
             <div class="dv-bar">${ranges}<span style="flex:1;"></span>${filter}</div>${this._dvChart()}</div></div>
           <div class="section"><div class="section-title">💰 Ranking i koszty</div><div class="chart-card full" style="padding:14px 16px;">${this._dvTable()}</div></div>
@@ -330,6 +352,7 @@
         const unitOf = (x) => String(((this._hass.states[x] || {}).attributes || {}).unit_of_measurement || '').toLowerCase();
         const pw = ents.filter((x) => ['w', 'kw'].includes(unitOf(x))).sort();
         const en = ents.filter((x) => ['wh', 'kwh', 'mwh'].includes(unitOf(x))).sort();
+        const sws = Object.keys(this._hass.states).filter((x) => /^(switch|input_boolean)\./.test(x) && !/^switch\.(bms_|inverter)/.test(x) && !/inverter|falownik/.test(x)).sort();
         const rooms = Array.from(new Set(this._dvDevs().map((d) => d.room).filter(Boolean)));
         const catSel = `<select data-dvf="category">${groups.map((g) => `<optgroup label="${dvEsc(g)}">${cats.filter((c) => c.group === g).map((c) => `<option value="${dvEsc(c.key)}" ${e.category === c.key ? 'selected' : ''}>${dvEsc(c.icon)} ${dvEsc(c.name)}</option>`).join('')}</optgroup>`).join('')}</select>`;
         const chk = (k, l) => `<label class="chk"><input type="checkbox" data-dvf="${k}" ${e[k] ? 'checked' : ''}/> ${l}</label>`;
@@ -357,6 +380,18 @@
             ${chk('notify_cycle', 'Powiadom o końcu cyklu')}${chk('notify_anomaly', 'Powiadom o nietypowej pracy')}${chk('notify_hint', 'Podpowiadaj „uruchom teraz”')}
           </div>
           <div class="dv-note">Powiadomienia działają, gdy dany rodzaj jest włączony też w Diagnostyce → Powiadomienia (grupa „Urządzenia”).</div>
+          <div class="section-title" style="margin:16px 0 8px;">🎛 Sterowanie (opcjonalne)</div>
+          <div class="dv-form">
+            <label>Przełącznik urządzenia<input type="text" list="dvSw" data-dvf="switch_eid" placeholder="switch.bojler" value="${dvEsc(e.switch_eid || '')}"/><datalist id="dvSw">${sws.map((x) => `<option value="${dvEsc(x)}">`).join('')}</datalist></label>
+            <label>Kiedy włączać<select data-dvf="ctl_mode">
+              <option value="off" ${!e.ctl_mode || e.ctl_mode === 'off' ? 'selected' : ''}>nie steruj</option>
+              <option value="pv" ${e.ctl_mode === 'pv' ? 'selected' : ''}>przy nadwyżce PV</option>
+              <option value="cheap" ${e.ctl_mode === 'cheap' ? 'selected' : ''}>w najtańszych godzinach planu</option></select></label>
+            ${num('ctl_power_w', 'Moc urządzenia (W) — tyle nadwyżki potrzeba', 10)}${num('ctl_soc', 'Nadwyżka PV: włączaj od SOC (%)', 1)}
+            ${num('ctl_hours', 'Najtańsze godziny: ile godzin pracy', 0.5)}${num('ctl_max_h', 'Limit pracy na dobę (h, 0 = bez limitu)', 0.5)}
+          </div>
+          <div class="dv-note">BMS włącza i wyłącza przełącznik tylko przy włączonym „Sterowaniu urządzeniami” (przełącznik nad listą urządzeń). Zmienia stan najwyżej co 10 minut, a warunek musi trwać 5 minut.
+            Wyłącza tylko to, co sam włączył; gdy przełączysz urządzenie ręcznie, BMS nie steruje nim do końca dnia. Przy zaniku sieci niczego nie włącza.</div>
           <div class="dv-bar" style="margin-top:12px;"><button class="dv-btn" data-dv="save">💾 Zapisz</button><button class="dv-btn sec" data-dv="cancel">Anuluj</button>
             ${e._new ? '' : '<span style="flex:1;"></span><button class="dv-btn bad" data-dv="del">🗑 Usuń</button>'}<span class="dv-note" id="dvMsg" style="margin:0;color:var(--red);"></span></div></div></div>`;
       },
@@ -371,7 +406,7 @@
         if (a === 'range') { s.range = t.dataset.r; this._dvRender(); }
         else if (a === 'sel') { if (ev.target.closest('[data-dv="edit"]')) return; s.sel = s.sel === t.dataset.id ? 'all' : t.dataset.id; this._dvRender(); }
         else if (a === 'reload') { s.fetchedAt = 0; s.statsKey = ''; this._dvLoad(); }
-        else if (a === 'add') { s.edit = Object.assign(this._dvDefaultsFor('other', {}), { _new: true, room: '', power_eid: '', energy_eid: '' }); this._dvRender(); }
+        else if (a === 'add') { s.edit = Object.assign(this._dvDefaultsFor('other', {}), { _new: true, room: '', power_eid: '', energy_eid: '', switch_eid: '', ctl_mode: 'off', ctl_power_w: 1000, ctl_soc: 90, ctl_hours: 2, ctl_max_h: 0 }); this._dvRender(); }
         else if (a === 'edit') { const d = this._dvDevs().find((x) => x.id === t.dataset.id); if (d) { s.edit = Object.assign({}, d); this._dvRender(); } }
         else if (a === 'cancel') { s.edit = null; this._dvRender(); }
         else if (a === 'save') this._dvSave();
@@ -385,6 +420,13 @@
       _dvChange(ev) {
         const t = ev.target; const s = this._dvS();
         if (t.dataset && t.dataset.dv === 'filter') { s.sel = t.value; this._dvRender(); return; }
+        if (t.dataset && t.dataset.dv === 'ctl-master') {
+          const eid = this._eid('switch', 'device_control');
+          this._hass.callService('switch', t.checked ? 'turn_on' : 'turn_off', { entity_id: eid })
+            .then(() => { s.fetchedAt = 0; setTimeout(() => this._dvLoad(), 800); })
+            .catch((e) => { s.msg = '❌ ' + dvErr(e); this._dvRender(); });
+          return;
+        }
         if (t.dataset && t.dataset.dvd && s.disc) {
           const p = (s.disc.picks || {})[t.dataset.k]; if (!p) return;
           if (t.type === 'checkbox') p.on = !!t.checked; else p[t.dataset.dvd] = String(t.value).trim();
@@ -420,6 +462,8 @@
         const bad = (x) => x && !/^sensor\.[a-z0-9_]+$/.test(x);
         if (!e.power_eid && !e.energy_eid) { if (msg) msg.textContent = 'Wskaż encję mocy (W) albo energii (kWh).'; return; }
         if (bad(e.power_eid) || bad(e.energy_eid)) { if (msg) msg.textContent = 'Encja musi mieć postać sensor.nazwa_encji.'; return; }
+        if (e.switch_eid && !/^(switch|input_boolean)\.[a-z0-9_]+$/.test(e.switch_eid)) { if (msg) msg.textContent = 'Przełącznik musi mieć postać switch.nazwa albo input_boolean.nazwa.'; return; }
+        if (e.ctl_mode && e.ctl_mode !== 'off' && !e.switch_eid) { if (msg) msg.textContent = 'Żeby BMS sterował urządzeniem, wskaż jego przełącznik.'; return; }
         if (!String(e.name || '').trim()) { if (msg) msg.textContent = 'Podaj nazwę.'; return; }
         const list = this._dvDevs().filter((d) => d.id !== e.id);
         if (e._new) list.push(e); else { const i = this._dvDevs().findIndex((d) => d.id === e.id); list.splice(i < 0 ? list.length : i, 0, e); }
@@ -536,6 +580,6 @@
     });
   };
   install.contract = 1;
-  install.version = '0.8.4';
+  install.version = '0.8.5';
   window.__bmsDevicesInstall = install;
 })();

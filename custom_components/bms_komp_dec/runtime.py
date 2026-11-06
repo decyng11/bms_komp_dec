@@ -29,6 +29,9 @@ from .helpers import (
     ThrottledStore, find_eid, normalize_price, number_value, state_float, state_str, switch_on,
 )
 from .holidays_pl import holiday_name, is_holiday
+from .device_ctl import DeviceController
+from .insights import Insights
+from .repairs_bms import Repairs
 from .ledger import Ledger
 from .monitor import Monitor
 from . import report as report_mod
@@ -109,6 +112,9 @@ class BmsRuntime:
         self.stats = BatteryStats(hass)
         self.diag_store = DiagStore(hass)
         self.devices = devmod.DeviceManager(hass)
+        self.insights = Insights(hass)
+        self.dev_ctl = DeviceController(self)
+        self.repairs = Repairs(self)
         self.monitor = Monitor(self)
         self.watch = WriteWatch(self)
         self.fired: dict[str, datetime] = {}
@@ -151,6 +157,10 @@ class BmsRuntime:
             await self.devices.async_load()
         except Exception as err:  # noqa: BLE001
             _LOGGER.warning("BMS: nie udało się wczytać urządzeń: %s", err)
+        try:
+            await self.insights.async_load()
+        except Exception as err:  # noqa: BLE001
+            _LOGGER.warning("BMS: nie udało się wczytać historii godzinowej: %s", err)
         lf = getattr(self.coordinator, "load_forecast", None)
         if lf is not None:
             lf.split_hook = lambda f, target, today: devmod.forecast_split(self.devices, f, target, today)
@@ -160,9 +170,11 @@ class BmsRuntime:
             _LOGGER.warning("BMS runtime: błąd wczytywania stanu: %s", err)
             data = None
         if isinstance(data, dict):
-            for k in self.state:
-                if k in data:
-                    self.state[k] = data[k]
+            # wszystkie zapisane klucze, nie tylko te z wartościami domyślnymi powyżej — inaczej po restarcie
+            # znikały m.in. ustawienia powiadomień (notify_cfg) i znaczniki wysłanych podsumowań
+            for k, v in data.items():
+                if isinstance(k, str):
+                    self.state[k] = v
             pr = self.state.get("price_reaction")
             if not isinstance(pr, dict):
                 self.state["price_reaction"] = {"active": False, "prev_mode": None}
@@ -374,17 +386,21 @@ class BmsRuntime:
         ref = self._profit_ref[1]
         eff = min(1.0, max(0.5, number_value(self.hass, "cycle_efficiency", 90.0) / 100.0))
         margin = number_value(self.hass, "min_sell_margin", 0.15)
-        out: dict[str, Any] = {"ok": None, "price": price, "ref": ref, "margin": margin, "eff": eff, "net": None}
+        try:
+            wear = float(self.optimizer.wear_cost()) if hasattr(self.optimizer, "wear_cost") else 0.0
+        except Exception:  # noqa: BLE001
+            wear = 0.0
+        out: dict[str, Any] = {"ok": None, "price": price, "ref": ref, "margin": margin, "eff": eff, "net": None, "wear": wear}
         if price is None:
             return out
         if price <= 0:
-            out.update(ok=False, net=price * eff - (ref or 0.0))
+            out.update(ok=False, net=price * eff - (ref or 0.0) - wear)
             return out
         if ref is None:
-            out["ok"] = price * eff >= margin
-            out["net"] = price * eff
+            out["net"] = price * eff - wear
+            out["ok"] = out["net"] >= margin
             return out
-        net = price * eff - ref
+        net = price * eff - ref - wear
         out.update(net=net, ok=net >= margin)
         return out
 
@@ -1153,6 +1169,9 @@ class BmsRuntime:
             ("raport", self.report_tick),
             ("plan", self._plan_tick),
             ("urządzenia", self._devices_tick),
+            ("prognozy", self._insights_tick),
+            ("sterowanie urządzeń", self.dev_ctl.tick),
+            ("naprawy", self.repairs.tick),
         ):
             try:
                 if name == "plan":
@@ -1176,6 +1195,42 @@ class BmsRuntime:
     async def _plan_tick(self, now: datetime) -> None:
         await self.refresh_plan()
 
+    def battery_params(self) -> dict[str, float]:
+        """Pojemność, sprawność, próg rozładowania i moce — do symulacji „bateria bez planera”."""
+        cfg = self.optimizer.config if isinstance(getattr(self.optimizer, "config", None), dict) else {}
+
+        def num(key: str, default: float) -> float:
+            try:
+                v = float(cfg.get(key, default))
+            except (TypeError, ValueError):
+                return default
+            return v if v > 0 else default
+
+        floor = 10.0
+        try:
+            floor = max(float(number_value(self.hass, "reserve_floor_soc", 15.0)), max(self.inverter_floor().get("hourly") or [0.0]))
+        except Exception:  # noqa: BLE001
+            pass
+        return {"cap": num(CONF_BATTERY_CAPACITY_KWH, float(DEFAULT_BATTERY_CAPACITY_KWH)),
+                "eff": min(1.0, max(0.5, number_value(self.hass, "cycle_efficiency", 90.0) / 100.0)),
+                "floor": floor,
+                "max_chg_kw": num("max_charge_power_w", 5000.0) / 1000.0,
+                "max_dis_kw": num("max_discharge_power_w", 5000.0) / 1000.0}
+
+    async def _insights_tick(self, now: datetime) -> None:
+        """Co minutę: parametry baterii do symulacji i (raz dziennie od 6:00) zapis porannej prognozy PV i planu SOC."""
+        self.insights.set_params(**self.battery_params())
+        loc = dt_util.as_local(now)
+        if loc.hour < 6 or "pv_fc" in (self.insights.fc.get(loc.date().isoformat()) or {}):
+            return
+        plan = self.plan()
+        if plan is None or plan.get("error"):
+            return                      # poczekaj na plan (po restarcie powstaje w ciągu minuty)
+        kwh, hourly = (None, None)
+        if hasattr(self.optimizer, "pv_raw_today"):
+            kwh, hourly = self.optimizer.pv_raw_today()
+        self.insights.snapshot(now, kwh, hourly, plan)
+
     def on_coordinator_update(self) -> None:
         """Wywoływane co 10 s: całkowanie bilansu PLN i statystyk baterii."""
         now = dt_util.now()
@@ -1188,6 +1243,11 @@ class BmsRuntime:
                 self._spawn(self._device_event(ev))
         except Exception as err:  # noqa: BLE001
             _LOGGER.debug("BMS urządzenia: %s", err)
+        try:
+            self.insights.update(now, self.coordinator.data or {}, self.buy_price(), self.sell_price(),
+                                 int(self.battery_sign()["sign"]), self.soc())
+        except Exception as err:  # noqa: BLE001
+            _LOGGER.debug("BMS insights: %s", err)
         try:
             data = self.coordinator.data or {}
             soc = self.soc()

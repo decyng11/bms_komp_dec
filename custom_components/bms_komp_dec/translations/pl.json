@@ -424,5 +424,23 @@
         "solarman": "Mam już falownik w integracji ha-solarman (użyj jej encji)"
       }
     }
+  },
+  "issues": {
+    "inverter_no_data": {
+      "title": "BMS: brak danych z falownika",
+      "description": "Od ponad 10 minut BMS nie dostaje odczytu SOC ani mocy sieci. Plan i harmonogram nie działają poprawnie bez tych danych.\n\nSprawdź logger Solarman (zasilanie, Wi-Fi) oraz integrację falownika (ha-solarman albo wpis falownika w BMS). Zgłoszenie zniknie samo, gdy dane wrócą."
+    },
+    "price_missing": {
+      "title": "BMS: brak ceny sprzedaży energii",
+      "description": "Od ponad 30 minut encja z ceną sprzedaży ({entity}) nie podaje wartości. Planer nie oceni opłacalności sprzedaży i blokady ładowania z PV.\n\nSprawdź integrację z cenami (RCE PSE, Pstryk albo inną) albo wskaż właściwą encję w konfiguracji BMS."
+    },
+    "pv_forecast_missing": {
+      "title": "BMS: brak godzinowej prognozy PV",
+      "description": "Od ponad 2 godzin nie ma godzinowej prognozy produkcji PV ani na dziś, ani na jutro. Planer liczy wtedy tak, jakby nie było słońca, i może niepotrzebnie ładować baterię z sieci.\n\nSprawdź integrację Solcast albo Forecast.Solar i encje prognozy w konfiguracji BMS."
+    },
+    "auto_apply_no_write": {
+      "title": "BMS: auto-stosowanie bez zapisu do falownika",
+      "description": "Auto-stosowanie propozycji jest włączone, ale falownik połączony bezpośrednio ({inverter}) ma wyłączony zapis. Harmonogram się zmienia, a ustawienia falownika nie.\n\nWłącz zapis w opcjach wpisu falownika (Konfiguruj → Zezwól na zapis do falownika) albo wyłącz auto-stosowanie."
+    }
   }
 }

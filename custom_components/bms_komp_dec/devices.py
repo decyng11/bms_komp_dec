@@ -88,6 +88,8 @@ GROUPS = ("Ogrzewanie i chłodzenie", "Transport", "Kuchnia", "Pranie", "Woda i 
 DRIVERS = ("temp", "weekday", "flat")
 _ID_RE = re.compile(r"^[a-z0-9_]{1,40}$")
 _EID_RE = re.compile(r"^sensor\.[a-z0-9_]+$")
+_SWITCH_RE = re.compile(r"^(switch|input_boolean)\.[a-z0-9_]+$")
+CTL_MODES = ("off", "pv", "cheap")
 _POWER_UNITS = {"w": 1.0, "kw": 1000.0, "mw": 1_000_000.0}
 _ENERGY_UNITS = {"wh": 0.001, "kwh": 1.0, "mwh": 1000.0}
 
@@ -141,6 +143,9 @@ def sanitize_device(raw: Any) -> dict[str, Any] | None:
         v = raw.get(key)
         return v if isinstance(v, bool) else default
 
+    sw = str(raw.get("switch_eid") or "").strip()
+    ctl = str(raw.get("ctl_mode") or "off")
+
     return {
         "id": did, "name": name, "icon": icon, "category": cat,
         "power_eid": pe, "energy_eid": ee,
@@ -150,6 +155,13 @@ def sanitize_device(raw: Any) -> dict[str, Any] | None:
         "cycle_end_min": _clamp(raw.get("cycle_end_min"), 1.0, 120.0, float(endm)),
         "max_run_h": _clamp(raw.get("max_run_h"), 0.0, 48.0, float(maxh)),
         "notify_cycle": b("notify_cycle", cyc), "notify_anomaly": b("notify_anomaly", True), "notify_hint": b("notify_hint", flex),
+        # sterowanie (opcjonalne): przełącznik urządzenia i tryb — działa tylko przy włączonym switch.bms_device_control
+        "switch_eid": sw if _SWITCH_RE.match(sw) else "",
+        "ctl_mode": ctl if (ctl in CTL_MODES and _SWITCH_RE.match(sw)) else "off",
+        "ctl_power_w": _clamp(raw.get("ctl_power_w"), 10.0, 30000.0, 1000.0),
+        "ctl_soc": _clamp(raw.get("ctl_soc"), 0.0, 100.0, 90.0),
+        "ctl_hours": _clamp(raw.get("ctl_hours"), 0.5, 12.0, 2.0),
+        "ctl_max_h": _clamp(raw.get("ctl_max_h"), 0.0, 24.0, 0.0),
     }
 
 

@@ -39,7 +39,7 @@ _SERVICES = (
     "test_schedule", "suggest_schedule", "apply_schedule_times", "undo_auto_apply", "auto_apply_now",
     "watch_write", "watch_status", "watch_clear", "health_check", "monthly_report", "get_plan",
     "diag_store_get_all", "diag_store_set", "diag_store_delete",
-    "notify_settings_get", "notify_settings_set", "notify_test", "devices_get", "devices_set", "devices_discover",
+    "notify_settings_get", "notify_settings_set", "notify_test", "devices_get", "devices_set", "devices_discover", "insights_get", "self_test",
 )
 _SUGGEST_HOUR = 16   # RCE na jutro jest publikowane po południu — wcześniej propozycja bazowała na starych danych
 
@@ -371,7 +371,7 @@ def _register_services(hass: HomeAssistant) -> None:
                "unknown": dm.unknown_load(getattr(lf, "profiles", {}) or {}, house) if lf else None,
                "forecast_split": ((rt.coordinator.data or {}).get("load_forecast") or {}).get("forecast_split"),
                "house_daily": {k: round(v, 2) for k, v in house.items()},
-               "max_devices": devmod.MAX_DEVICES}
+               "max_devices": devmod.MAX_DEVICES, "control": rt.dev_ctl.status()}
         if _as_bool(call.data.get("history")):
             out["history"] = dm.history()
         return out
@@ -388,6 +388,20 @@ def _register_services(hass: HomeAssistant) -> None:
         dropped = len([x for x in items if isinstance(x, dict)]) - len(saved)
         return {"devices": saved, "dropped": max(0, dropped)}
 
+    # --- oszczędności i trafność prognoz (zakładka „Zysk i log”): odczyt dla każdego
+    async def handle_insights_get(call):
+        rt = _need_runtime(hass)
+        lf = getattr(rt.coordinator, "load_forecast", None)
+        return {"savings": rt.insights.savings(), "accuracy": rt.insights.accuracy(lf),
+                "pv_correction_on": switch_on(hass, "pv_forecast_correction", True),
+                "wear_cost": round(float(rt.optimizer.wear_cost()), 4) if hasattr(rt.optimizer, "wear_cost") else 0.0}
+
+    async def handle_self_test(call):
+        await _require_admin(hass, call)
+        rt = _need_runtime(hass)
+        from .selftest import run as selftest_run
+        return await selftest_run(rt)
+
     async def handle_devices_discover(call):
         await _require_admin(hass, call)
         rt = _need_runtime(hass)
@@ -397,6 +411,8 @@ def _register_services(hass: HomeAssistant) -> None:
     for name, handler, resp in (
         ("devices_get", handle_devices_get, SupportsResponse.ONLY),
         ("devices_discover", handle_devices_discover, SupportsResponse.ONLY),
+        ("insights_get", handle_insights_get, SupportsResponse.ONLY),
+        ("self_test", handle_self_test, SupportsResponse.ONLY),
         ("devices_set", handle_devices_set, SupportsResponse.OPTIONAL),
         ("notify_settings_get", handle_notify_get, SupportsResponse.ONLY),
         ("notify_settings_set", handle_notify_set, SupportsResponse.OPTIONAL),

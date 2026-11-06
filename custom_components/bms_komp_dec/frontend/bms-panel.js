@@ -2348,6 +2348,14 @@
           <div class="chart-card full" style="padding:14px 16px;">${tiles}${bars}</div>
         </div>
         <div class="section">
+          <div class="section-title">💡 Oszczędności</div>
+          <div class="chart-card full" style="padding:14px 16px;"><div id="exSavBox"><div class="chart-empty">Ładowanie…</div></div></div>
+        </div>
+        <div class="section">
+          <div class="section-title">🎯 Trafność prognoz</div>
+          <div class="chart-card full" style="padding:14px 16px;"><div id="exAccBox"><div class="chart-empty">Ładowanie…</div></div></div>
+        </div>
+        <div class="section">
           <div class="section-title">📅 Raport miesięczny</div>
           <div class="chart-card full" style="padding:14px 16px;"><div id="exReportBox"><div class="chart-empty">Ładowanie…</div></div></div>
         </div>
@@ -3886,7 +3894,7 @@
   // =====================================================================
   // Wersja tego pliku (ustawiana skryptem pakującym z manifest.json). Każdy moduł niesie tę samą w install.version:
   // gdy się różnią, przeglądarka podała starą kopię modułu z pamięci podręcznej.
-  const CARD_VERSION = '0.8.4';
+  const CARD_VERSION = '0.8.5';
   const MOD_TIMEOUT_MS = 20000;
   const MODULES = {
     diag:   { file: 'bms-diag.js',   global: '__bmsDiagInstall',   contract: 1, label: 'Diagnostyki', p: null, ready: false, err: '', got: '' },
@@ -4006,7 +4014,7 @@
 
   // Dodatki (bms-extras.js): plan 24 h, raport miesięczny, zdrowie baterii, kreator instalacji.
   // Placeholdery w karcie: #exPlanBox, #exWizBox (zakładka EMS) oraz #exReportBox, #exHealthBox (Zysk i log).
-  const EX_BOXES = ['exPlanBox', 'exWizBox', 'exReportBox', 'exHealthBox'];
+  const EX_BOXES = ['exPlanBox', 'exWizBox', 'exReportBox', 'exHealthBox', 'exSavBox', 'exAccBox'];
   const EX_STUBS = {
     _exRender() { /* bez modułu nic do rysowania */ },
     _exFail() {

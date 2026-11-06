@@ -55,6 +55,21 @@ def switch_on(hass: HomeAssistant, key: str, default: bool = False) -> bool:
     return raw == "on"
 
 
+def wear_cost_per_kwh(hass: HomeAssistant, capacity_kwh: float) -> float:
+    """Koszt zużycia baterii (zł) na każdą kWh, która przez nią przechodzi: cena baterii / (cykle × pojemność).
+
+    0, gdy cena baterii nie jest ustawiona (number.bms_battery_price_pln = 0) — wtedy planer działa jak dotąd."""
+    price = number_value(hass, "battery_price_pln", 0.0)
+    cycles = number_value(hass, "battery_cycles", 6000.0)
+    try:
+        cap = float(capacity_kwh)
+    except (TypeError, ValueError):
+        return 0.0
+    if not (math.isfinite(price) and math.isfinite(cycles) and math.isfinite(cap)) or price <= 0 or cycles <= 0 or cap <= 0:
+        return 0.0
+    return price / (cycles * cap)
+
+
 def normalize_price(value: float | None) -> float | None:
     """Ceny > 20 traktujemy jako PLN/MWh (RCE z PSE) i przeliczamy na PLN/kWh."""
     if value is None or not math.isfinite(value):

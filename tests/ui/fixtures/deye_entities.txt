@@ -1,0 +1,203 @@
+number.inverter_self_check_time | 0 | 0–1000 | Inverter Self-check time
+
+number.inverter_battery_equalization | 57.6 | 38–61 | Inverter Battery Equalization
+
+number.inverter_battery_absorption | 57.6 | 38–61 | Inverter Battery Absorption
+
+number.inverter_battery_float | 55.2 | 38–61 | Inverter Battery Float
+
+number.inverter_battery_capacity | 300 | 0–2000 | Inverter Battery Capacity
+
+number.inverter_battery_empty | 45 | 38–61 | Inverter Battery Empty
+
+number.inverter_zero_export_power | 20 | -20–500 | Inverter Zero Export power
+
+number.inverter_battery_equalization_cycle | 90 | 0–90 | Inverter Battery Equalization Cycle
+
+number.inverter_battery_equalization_time | 0 | 0–10 | Inverter Battery Equalization Time
+
+number.inverter_battery_temperature_compensation | 5 | 0–50 | Inverter Battery Temperature Compensation
+
+number.inverter_battery_max_charging_current | 170 | 0–350 | Inverter Battery Max Charging Current
+
+number.inverter_battery_max_discharging_current | 170 | 0–350 | Inverter Battery Max Discharging Current
+
+number.inverter_battery_resistance | 12 | 0–6000 | Inverter Battery Resistance
+
+number.inverter_battery_charging_efficiency | 99 | 0.0–100.0 | Inverter Battery Charging efficiency
+
+number.inverter_battery_shutdown_soc | 20 | 0–100 | Inverter Battery Shutdown SOC
+
+number.inverter_battery_restart_soc | 30 | 0–100 | Inverter Battery Restart SOC
+
+number.inverter_battery_low_soc | 25 | 0–100 | Inverter Battery Low SOC
+
+number.inverter_battery_shutdown_voltage | 46 | 38–61 | Inverter Battery Shutdown Voltage
+
+number.inverter_battery_restart_voltage | 52 | 38–61 | Inverter Battery Restart Voltage
+
+number.inverter_battery_low_voltage | 47.5 | 38–61 | Inverter Battery Low Voltage
+
+number.inverter_generator_operating_time | 24 | 0–24 | Inverter Generator Operating Time
+
+number.inverter_generator_cooling_time | 0 | 0–24 | Inverter Generator Cooling Time
+
+number.inverter_battery_generator_charging_start_voltage | 49 | 0–63 | Inverter Battery Generator Charging Start Voltage
+
+number.inverter_battery_generator_charging_start | 30 | 0–100 | Inverter Battery Generator Charging Start
+
+number.inverter_battery_generator_charging_current | 40 | 0–240 | Inverter Battery Generator Charging Current
+
+number.inverter_battery_grid_charging_start_voltage | 49 | 0–63 | Inverter Battery Grid Charging Start Voltage
+
+number.inverter_battery_grid_charging_start | 20 | 0–100 | Inverter Battery Grid Charging Start
+
+number.inverter_battery_grid_charging_current | 70 | 0–350 | Inverter Battery Grid Charging Current
+
+number.inverter_smartload_off_voltage | 51 | 38–63 | Inverter SmartLoad Off Voltage
+
+number.inverter_smartload_off | 95 | 0–100 | Inverter SmartLoad Off
+
+number.inverter_smartload_on_voltage | 54 | 38–63 | Inverter SmartLoad On Voltage
+
+number.inverter_smartload_on | 100 | 0–100 | Inverter SmartLoad On
+
+number.inverter_generator_min_pv_power | 500 | 0–8000 | Inverter Generator Min PV Power
+
+number.inverter_export_surplus_power | 9700 | 0–24000 | Inverter Export Surplus Power
+
+number.inverter_program_1_power | 10000 | 0–32000 | Inverter Program 1 Power
+
+number.inverter_program_2_power | 10000 | 0–32000 | Inverter Program 2 Power
+
+number.inverter_program_3_power | 10000 | 0–32000 | Inverter Program 3 Power
+
+number.inverter_program_4_power | 10000 | 0–32000 | Inverter Program 4 Power
+
+number.inverter_program_5_power | 10000 | 0–32000 | Inverter Program 5 Power
+
+number.inverter_program_6_power | 10000 | 0–32000 | Inverter Program 6 Power
+
+number.inverter_program_1_voltage | 49 | 0–61 | Inverter Program 1 Voltage
+
+number.inverter_program_2_voltage | 49 | 0–61 | Inverter Program 2 Voltage
+
+number.inverter_program_3_voltage | 49 | 0–61 | Inverter Program 3 Voltage
+
+number.inverter_program_4_voltage | 49 | 0–61 | Inverter Program 4 Voltage
+
+number.inverter_program_5_voltage | 49 | 0–61 | Inverter Program 5 Voltage
+
+number.inverter_program_6_voltage | 49 | 0–61 | Inverter Program 6 Voltage
+
+number.inverter_program_1_soc | 20 | 0–100 | Inverter Program 1 SOC
+
+number.inverter_program_2_soc | 20 | 0–100 | Inverter Program 2 SOC
+
+number.inverter_program_3_soc | 20 | 0–100 | Inverter Program 3 SOC
+
+number.inverter_program_4_soc | 20 | 0–100 | Inverter Program 4 SOC
+
+number.inverter_program_5_soc | 20 | 0–100 | Inverter Program 5 SOC
+
+number.inverter_program_6_soc | 20 | 0–100 | Inverter Program 6 SOC
+
+number.inverter_grid_voltage_protection_high | 264.5 | 100.0–290.0 | Inverter Grid voltage protection - high
+
+number.inverter_grid_voltage_protection_low | 195.5 | 100.0–290.0 | Inverter Grid voltage protection - low
+
+number.inverter_grid_frequency_protection_high | 52 | 45.0–65.0 | Inverter Grid frequency protection - high
+
+number.inverter_grid_frequency_protection_low | 47.5 | 45.0–65.0 | Inverter Grid frequency protection - low
+
+number.inverter_generator_peak_shaving | 8000 | 0–22000 | Inverter Generator Peak shaving
+
+number.inverter_grid_peak_shaving | 8000 | 0–80000 | Inverter Grid Peak shaving
+
+number.inverter_grid_max_export_power | 10000 | 0–80000 | Inverter Grid Max Export power
+
+number.inverter_grid_max_import_power | 31000 | 0–80000 | Inverter Grid Max Import power
+
+number.inverter_pv_power | 9500 | 0–32000 | Inverter PV Power
+
+number.inverter_grid_power_factor | unknown | 0.0–100.0 | Inverter Grid Power Factor
+
+switch.inverter_access_point | unavailable | – | Inverter Access Point
+
+switch.inverter | on | – | Inverter
+
+switch.inverter_battery_wake_up | off | – | Inverter Battery Wake Up
+
+switch.inverter_battery_generator_charging | off | – | Inverter Battery Generator Charging
+
+switch.inverter_battery_grid_charging | on | – | Inverter Battery Grid Charging
+
+switch.inverter_generator | off | – | Inverter Generator
+
+switch.inverter_export_surplus | on | – | Inverter Export Surplus
+
+switch.inverter_microinverter_export_cut_off | off | – | Inverter Microinverter Export cut-off
+
+switch.inverter_generator_peak_shaving | off | – | Inverter Generator Peak shaving
+
+switch.inverter_grid_peak_shaving | off | – | Inverter Grid Peak shaving
+
+switch.inverter_generator_on_grid | off | – | Inverter Generator On-Grid
+
+switch.inverter_off_grid | off | – | Inverter Off Grid
+
+switch.inverter_generator_grid_side | off | – | Inverter Generator Grid side
+
+switch.inverter_export_asymmetry | on | – | Inverter Export Asymmetry
+
+switch.inverter_mppt_multi_point_scanning | off | – | Inverter MPPT multi-point scanning
+
+button.inverter_restart | unavailable | – | Inverter Restart
+
+select.inverter_cloud | unavailable | – | Inverter Cloud
+
+select.inverter_battery_control_mode | Lithium | – | Inverter Battery Control Mode
+
+select.inverter_battery_operation_mode | Capacity | – | Inverter Battery Operation Mode
+
+select.inverter_io_mode | Generator | – | Inverter IO Mode
+
+select.inverter_grid_voltage | LN:230VAC LL:398VAC | – | Inverter Grid Voltage
+
+select.inverter_charging_signal | Normal | – | Inverter Charging Signal
+
+select.inverter_energy_pattern | Battery First | – | Inverter Energy Pattern
+
+select.inverter_work_mode | Zero Export To Load | – | Inverter Work Mode
+
+select.inverter_time_of_use | Week | – | Inverter Time of Use
+
+select.inverter_program_1_charging | Disabled | – | Inverter Program 1 Charging
+
+select.inverter_program_2_charging | Disabled | – | Inverter Program 2 Charging
+
+select.inverter_program_3_charging | Disabled | – | Inverter Program 3 Charging
+
+select.inverter_program_4_charging | Disabled | – | Inverter Program 4 Charging
+
+select.inverter_program_5_charging | Disabled | – | Inverter Program 5 Charging
+
+select.inverter_program_6_charging | Disabled | – | Inverter Program 6 Charging
+
+select.inverter_grid_frequency | 50 Hz | – | Inverter Grid Frequency
+
+select.inverter_battery_bms_type | PYLON | – | Inverter Battery BMS Type
+
+select.inverter_ac_coupling | Disabled | – | Inverter AC Coupling
+
+time.inverter_program_1_time | 00:30:00 | – | Inverter Program 1 Time
+
+time.inverter_program_2_time | 01:30:00 | – | Inverter Program 2 Time
+
+time.inverter_program_3_time | 08:00:00 | – | Inverter Program 3 Time
+
+time.inverter_program_4_time | 11:00:00 | – | Inverter Program 4 Time
+
+time.inverter_program_5_time | 14:00:00 | – | Inverter Program 5 Time
+
+time.inverter_program_6_time | 19:00:00 | – | Inverter Program 6 Time
