@@ -1,3 +1,14 @@
+# BMS komp-dec — zmiany w 0.8.6 (z 0.8.5)
+
+## Falowniki Sofar (eksperymentalne, na start w trybie próbnym)
+- **Rozpoznawanie marki** po opcjach trybu pracy: Deye (bez zmian), **Sofar G3** (HYD 5–20KTL-3PH, HYD 3–6K-EP — profile `sofar_g3`, `sofar_g3hyd`) i **Sofar hybrydowy** (HYD 3–6K ES, ME3000SP — profil `sofar_hybrid`). Kreator dobiera encje Sofara z profili ha-solarman jak dotąd.
+- **Sofar G3 — tryb pasywny** (Storage Control Mode + moce: sieci, minimalna i maksymalna baterii): praca normalna → Self Use; ładowanie z sieci → Passive, bateria min = max = +moc ładowania; sprzedaż → Passive, bateria min = max = −moc sprzedaży; blokada ładowania z PV → Passive, bateria min = −moc rozładowania, max = 0. Moce najpierw, tryb na końcu.
+- **Sofar hybrydowy** — Work Mode Auto / Timed z oknem ładowania lub rozładowania (00:00–23:59) i mocą; blokada ładowania z PV przez maksymalny prąd ładowania 0 (jak w Deye), „odblokuj” przywraca zapamiętany prąd.
+- Stan falownika (czy sprzedaje, ładuje z sieci, ma zablokowane ładowanie z PV) jest odczytywany według marki — zabezpieczenia, reakcja na niskie ceny i auto-stosowanie działają tak samo jak przy Deye.
+- **Tryb próbny** (`switch.bms_brand_test_mode`, domyślnie włączony): dla Sofara komendy trafiają tylko do dziennika jako „TRYB PRÓBNY … ustawiłbym …”, bez zapisu. Wyłącz go, gdy kroki w dzienniku są właściwe. Sterowanie Sofarem nie było sprawdzone na prawdziwym falowniku; znak mocy w trybie pasywnym (plus = ładowanie) pochodzi z przykładów ha-solarman i evcc, nie z dokumentacji producenta.
+- Sprawdzenie (kreator, autotest) pokazuje markę, encje sterujące Sofara, ich opcje i stan trybu próbnego. Sofar stringowy (bez baterii) — tylko odczyty.
+- Nie przeniesione na Sofara: odczyt progu odcięcia baterii z falownika (ustaw ręcznie `number.bms_inverter_floor_soc`), opisy kodów alarmów i strony parametrów w Diagnostyce (są pod Deye).
+
 # BMS komp-dec — zmiany w 0.8.5 (z 0.8.4)
 
 ## Oszczędności (zakładka „Zysk i log”)

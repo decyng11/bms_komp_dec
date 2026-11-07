@@ -1,6 +1,6 @@
 """Constants for BMS komp-dec integration."""
 DOMAIN = "bms_komp_dec"
-VERSION = "0.8.5"
+VERSION = "0.8.6"
 
 # Mapowanie encji źródłowych
 CONF_PV_POWER = "pv_power"
@@ -189,6 +189,7 @@ SWITCHES = [
     ("auto_apply_dry_run", "Auto-stosowanie: tylko podgląd (bez zapisu)", "mdi:eye-check", False),
     ("pv_forecast_correction", "Korekta prognozy PV z historii (planer)", "mdi:solar-power-variant", True),
     ("device_control", "Sterowanie urządzeniami (włączanie przełączników)", "mdi:power-socket-eu", False),
+    ("brand_test_mode", "Sofar: tryb próbny (komendy tylko w dzienniku)", "mdi:flask-outline", True),
 ]
 
 WEEKDAY_SWITCH_KEYS = ["dzien_pn", "dzien_wt", "dzien_sr", "dzien_cz", "dzien_pt", "dzien_so", "dzien_nd"]

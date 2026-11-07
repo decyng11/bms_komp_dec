@@ -80,8 +80,7 @@ async def async_auto_apply(runtime, hass: HomeAssistant, result: dict[str, Any],
     busy = []
     if runtime.is_selling():
         busy.append("trwa sprzedaż")
-    cc = runtime.charge_current()
-    if cc is not None and cc <= 0.1:
+    if runtime.pv_charge_blocked():
         busy.append("ładowanie PV zablokowane")
     if runtime.grid_charging_on():
         busy.append("trwa ładowanie z sieci")

@@ -18,7 +18,7 @@ from .const import (
     CONF_SOC, DEFAULT_BATTERY_CAPACITY_KWH, DEFAULT_PRICE_BUY_ENTITY, DEFAULT_PRICE_SELL_ENTITY,
     DEFAULT_PV_FORECAST_TODAY, DEFAULT_PV_FORECAST_TOMORROW, BUTTONS, TIMES, VERSION,
 )
-from .helpers import find_eid
+from .helpers import find_eid, switch_on
 from .runtime import COMMAND_LABELS
 from .tariff import get_profile
 
@@ -120,28 +120,55 @@ def health_check(rt) -> dict[str, Any]:
     hass, cfg = rt.hass, rt.cfg
     checks: list[dict[str, str]] = []
 
-    # --- encje sterujące falownikiem
-    for role in ("work_mode", "charge_current", "export_surplus", "tou_select"):
-        eid = rt.eid(role)
-        st = hass.states.get(eid)
-        if st is None:
-            checks.append(_chk(f"ctl_{role}", ROLE_LABEL[role], "error", f"Nie znaleziono encji {eid}.",
-                               "Zmień konfigurację integracji i wskaż właściwą encję (albo zaznacz „Wykryj encje ponownie”)."))
-        elif str(st.state).lower() in _BAD:
-            checks.append(_chk(f"ctl_{role}", ROLE_LABEL[role], "warn", f"{eid} jest teraz „{st.state}”.",
-                               "Sprawdź połączenie z loggerem Solarman; komendy nie zadziałają, dopóki encja jest niedostępna."))
-        else:
-            checks.append(_chk(f"ctl_{role}", ROLE_LABEL[role], "ok", f"{eid} = {st.state}"))
+    # --- encje sterujące falownikiem (zależnie od marki)
+    from . import brands
+    brand = brands.detect(hass, cfg)
+    ctl = brands.control_entities(hass, cfg)
+    checks.append(_chk("brand", "Marka falownika (sterowanie)", "ok", brands.LABELS.get(brand, brand)))
+    if brand != brands.DEYE:
+        for role, eid in ctl.items():
+            label = f"Sterowanie: {brands.ROLES[brand][role][1][0]}"
+            st = hass.states.get(eid) if eid else None
+            if st is None:
+                checks.append(_chk(f"ctl_{role}", label, "error", "nie znaleziono encji",
+                                   "Sprawdź, czy falownik jest połączony i czy jego profil ma tę encję."))
+            elif str(st.state).lower() in _BAD:
+                checks.append(_chk(f"ctl_{role}", label, "warn", f"{eid} jest teraz „{st.state}”."))
+            else:
+                checks.append(_chk(f"ctl_{role}", label, "ok", f"{eid} = {st.state}"))
+        mode = ctl.get("mode")
+        if mode and hass.states.get(mode) is not None:
+            kinds = ("self_use", "passive") if brand == brands.SOFAR_G3 else ("auto", "timed")
+            bad = [k for k in kinds if brands.pick(hass, mode, k) is None]
+            checks.append(_chk("opt_mode", f"Opcje {mode}", "error" if bad else "ok",
+                               f"brak: {', '.join(bad)}" if bad else ", ".join(f"{k}→{brands.pick(hass, mode, k)}" for k in kinds)))
+        test = switch_on(hass, "brand_test_mode", True)
+        checks.append(_chk("brand_test", "Tryb próbny (Sofar)", "warn" if test else "ok",
+                           "włączony — komendy trafiają tylko do dziennika jako „ustawiłbym …”" if test
+                           else "wyłączony — BMS zapisuje ustawienia do falownika",
+                           "Sprawdź w dzienniku, czy kroki komend są właściwe, i dopiero wtedy wyłącz switch.bms_brand_test_mode." if test else ""))
+    else:
+        for role in ("work_mode", "charge_current", "export_surplus", "tou_select"):
+            eid = rt.eid(role)
+            st = hass.states.get(eid)
+            if st is None:
+                checks.append(_chk(f"ctl_{role}", ROLE_LABEL[role], "error", f"Nie znaleziono encji {eid}.",
+                                   "Zmień konfigurację integracji i wskaż właściwą encję (albo zaznacz „Wykryj encje ponownie”)."))
+            elif str(st.state).lower() in _BAD:
+                checks.append(_chk(f"ctl_{role}", ROLE_LABEL[role], "warn", f"{eid} jest teraz „{st.state}”.",
+                                   "Sprawdź połączenie z loggerem Solarman; komendy nie zadziałają, dopóki encja jest niedostępna."))
+            else:
+                checks.append(_chk(f"ctl_{role}", ROLE_LABEL[role], "ok", f"{eid} = {st.state}"))
     # falownik dodany bezpośrednio: bez „Zezwól na zapis” żadna komenda BMS nie dojdzie do falownika
-    blocked = _direct_write_blocked(hass, [rt.eid(r) for r in ("work_mode", "charge_current", "export_surplus", "tou_select")])
+    blocked = _direct_write_blocked(hass, [e for e in ctl.values() if e])
     if blocked:
         names = ", ".join(dict.fromkeys(n for _e, n in blocked))
         checks.append(_chk("direct_write", "Zapis do falownika", "error",
                            f"Falownik „{names}” (połączony bezpośrednio) ma wyłączony zapis — komendy i harmonogram BMS "
                            f"nie zmienią jego ustawień ({', '.join(e for e, _n in blocked)}).",
                            "Ustawienia → Urządzenia i usługi → BMS komp-dec → wpis falownika → Konfiguruj → zaznacz „Zezwól na zapis do falownika”."))
-    # nazwy opcji select
-    for role, kinds in (("work_mode", ("export", "zero")), ("tou_select", ("tou_off", "tou_on"))):
+    # nazwy opcji select (Deye)
+    for role, kinds in ((("work_mode", ("export", "zero")), ("tou_select", ("tou_off", "tou_on"))) if brand == brands.DEYE else ()):
         eid = rt.eid(role)
         if hass.states.get(eid) is None:
             continue

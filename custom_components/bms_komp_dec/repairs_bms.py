@@ -56,7 +56,8 @@ class Repairs:
         if switch_on(self.hass, "auto_apply", False) and not switch_on(self.hass, "auto_apply_dry_run", False):
             try:
                 from .health import _direct_write_blocked  # noqa: PLC0415 — health importuje runtime
-                blocked = _direct_write_blocked(self.hass, [rt.eid(r) for r in ("work_mode", "charge_current", "export_surplus", "tou_select")])
+                from . import brands
+                blocked = _direct_write_blocked(self.hass, [e for e in brands.control_entities(self.hass, rt.cfg).values() if e])
             except Exception:  # noqa: BLE001
                 blocked = []
         out["auto_apply_no_write"] = (bool(blocked), {"inverter": ", ".join(dict.fromkeys(n for _e, n in blocked)) or "—"})

@@ -16,7 +16,7 @@ Parametry falownika, strefy czasowe, alarmy, kopie ustawień i autotest są w Di
 
 ## Czego potrzebujesz
 
-Home Assistanta w wersji 2024.11 lub nowszej (tyle wpisałem w `hacs.json`, na starszych nie sprawdzałem) i hybrydowego falownika Deye z loggerem Solarman. Falownik możesz podłączyć przez integrację ha-solarman albo bezpośrednio do loggera, ale to drugie jest na razie eksperymentalne. Reszta jest opcjonalna: ceny z RCE lub Pstryka, prognoza PV i encja pogody.
+Home Assistanta w wersji 2024.11 lub nowszej (tyle wpisałem w `hacs.json`, na starszych nie sprawdzałem) i hybrydowego falownika Deye z loggerem Solarman. Falowniki Sofar z magazynem (G3 i hybrydowe) są obsługiwane eksperymentalnie: na start BMS tylko zapisuje w dzienniku, co by ustawił, a zapis włączasz sam, gdy to sprawdzisz. Falownik możesz podłączyć przez integrację ha-solarman albo bezpośrednio do loggera, ale to drugie jest na razie eksperymentalne. Reszta jest opcjonalna: ceny z RCE lub Pstryka, prognoza PV i encja pogody.
 
 ## Instalacja
 

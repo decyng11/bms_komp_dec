@@ -19,6 +19,7 @@ from .const import (
     CONF_BATTERY_CAPACITY_KWH, CONF_GRID_POWER, CONF_PRICE_BUY_ENTITY, CONF_PRICE_SELL_ENTITY, CONF_SOC,
     DEFAULT_BATTERY_CAPACITY_KWH, DEFAULT_PRICE_BUY_ENTITY, DEFAULT_PRICE_SELL_ENTITY, WEEKDAY_SWITCH_KEYS,
 )
+from . import brands
 from . import inverter_ctl as ictl
 from .battery_sign import SignLearner
 from .battery_stats import BatteryStats
@@ -76,6 +77,7 @@ SOC_DEFAULTS = {
 }
 
 DEFAULT_SELL_BLOCK_W = 2000.0
+SELLING_TOKEN = "__sprzedaz__"     # zapamiętany „tryb” przy falownikach bez trybu Export First (Sofar)
 PRICE_HYSTERESIS = 0.02          # PLN/kWh powyżej progu, by uznać cenę za "wróconą do normy"
 GUARD_COOLDOWN_S = 120
 VERIFY_FIRST_WAIT_S = 20
@@ -235,24 +237,52 @@ class BmsRuntime:
         """entity_id sterującej encji falownika (config → wykrycie po prefiksie → nazwa domyślna)."""
         return ictl.resolve(self.hass, self.cfg, role)
 
+    def brand(self) -> str:
+        """Marka falownika (Deye / Sofar G3 / Sofar hybrydowy) — wykrywana po opcjach trybu pracy."""
+        return brands.detect(self.hass, self.cfg)
+
+    def _brand_state(self) -> dict[str, Any]:
+        return brands.state(self.hass, self.cfg, self.brand())
+
     def work_mode(self) -> str | None:
         return state_str(self.hass, self.eid("work_mode"))
 
     def charge_current(self) -> float | None:
+        if self.brand() != brands.DEYE:
+            return self._brand_state()["charge_current"]
         return state_float(self.hass, self.eid("charge_current"))
 
     def tou_state(self) -> str | None:
         return state_str(self.hass, self.eid("tou_select"))
 
     def is_selling(self) -> bool:
+        if self.brand() != brands.DEYE:
+            return bool(self._brand_state()["selling"])
         return ictl.matches_option(self.hass, self.eid("work_mode"), self.work_mode(), "export")
 
     def is_mode_export(self, mode: str | None) -> bool:
+        if mode == SELLING_TOKEN:
+            return True
+        if self.brand() != brands.DEYE:
+            return False
         return ictl.matches_option(self.hass, self.eid("work_mode"), mode, "export")
 
     def grid_charging_on(self) -> bool:
-        """TOU „Disabled” = falownik ładuje z sieci wg ustawień (tak działa „Włącz ładowanie z sieci”)."""
+        """Deye: TOU „Disabled” = falownik ładuje z sieci wg ustawień (tak działa „Włącz ładowanie z sieci”)."""
+        if self.brand() != brands.DEYE:
+            return bool(self._brand_state()["grid_charging"])
         return ictl.matches_option(self.hass, self.eid("tou_select"), self.tou_state(), "tou_off")
+
+    def pv_charge_blocked(self) -> bool:
+        """Czy ładowanie baterii z PV jest zablokowane (Deye: prąd ładowania 0 A)."""
+        if self.brand() != brands.DEYE:
+            return bool(self._brand_state()["pv_blocked"])
+        cur = self.charge_current()
+        return cur is not None and cur <= 0.1
+
+    def brand_test_mode(self) -> bool:
+        """Sofar (sterowanie niesprawdzone na prawdziwym falowniku): komendy tylko do dziennika, dopóki włączone."""
+        return self.brand() != brands.DEYE and switch_on(self.hass, "brand_test_mode", True)
 
     def battery_sign(self) -> dict[str, Any]:
         """Znak mocy baterii przy ładowaniu (ręczny → wykryty z danych → domyślny Deye)."""
@@ -472,6 +502,16 @@ class BmsRuntime:
     def _steps(self, key: str) -> list[tuple[str, str, Any]]:
         """Kroki komendy z już rozwiązanymi encjami, nazwami opcji i wartościami (przyciętymi do zakresu encji)."""
         h = self.hass
+        brand = self.brand()
+        if brand != brands.DEYE:
+            sell_w, chg_w, dis_w = brands.powers(h, self.optimizer.config if isinstance(getattr(self.optimizer, "config", None), dict) else {})
+            cc_eid = brands.role_eid(h, self.cfg, brand, "charge_current") if brand == brands.SOFAR_HYBRID else None
+            normal_cur = ictl.normal_charge_current(h, cc_eid, self.state.get("normal_charge_current")) if cc_eid else None
+            try:
+                return brands.steps(h, self.cfg, brand, key, sell_w=sell_w, charge_w=chg_w, discharge_w=dis_w,
+                                    normal_current=normal_cur)
+            except brands.StepError as err:
+                raise HomeAssistantError(str(err)) from err
         wm, cc = self.eid("work_mode"), self.eid("charge_current")
         ex, tou = self.eid("export_surplus"), self.eid("tou_select")
 
@@ -513,6 +553,9 @@ class BmsRuntime:
         return build() if build else []
 
     async def _call(self, domain: str, eid: str, value: Any) -> None:
+        if domain == "time":
+            await self.hass.services.async_call("time", "set_value", {"entity_id": eid, "time": value}, blocking=True)
+            return
         if domain == "select":
             await self.hass.services.async_call(
                 "select", "select_option", {"entity_id": eid, "option": value}, blocking=True)
@@ -543,6 +586,11 @@ class BmsRuntime:
             if reason:
                 self.log.add("guard", f"{label} ({source}) ZABLOKOWANA: {reason}", "warn")
                 raise HomeAssistantError(f"Sprzedaż zablokowana: {reason}.")
+        if self.brand_test_mode():
+            plan = "; ".join(f"{eid} = {value}" for _d, eid, value in steps)
+            self.log.add("command", f"TRYB PRÓBNY ({brands.LABELS.get(self.brand(), self.brand())}) — {label} ({source}): "
+                                    f"ustawiłbym {plan}. Nic nie zapisano; wyłącz switch.bms_brand_test_mode, gdy kroki są właściwe.", "info")
+            return
         async with self._lock:
             self._cmd_gen += 1
             gen = self._cmd_gen
@@ -565,6 +613,9 @@ class BmsRuntime:
                 continue
             if domain == "select":
                 if str(st.state).strip().lower() != str(value).strip().lower():
+                    bad.append((domain, eid, value))
+            elif domain == "time":
+                if str(st.state)[:5] != str(value)[:5]:
                     bad.append((domain, eid, value))
             else:
                 try:
@@ -908,8 +959,7 @@ class BmsRuntime:
                 except Exception as err:  # noqa: BLE001
                     _LOGGER.error("BMS GUARD: błąd zatrzymania sprzedaży: %s", err)
 
-        cur = self.charge_current()
-        if cur is not None and cur <= 0.1 and soc is not None:
+        if self.pv_charge_blocked() and soc is not None:
             floor = number_value(self.hass, "min_soc_for_pv_export_stop", SOC_DEFAULTS["min_soc_for_pv_export_stop"])
             if soc < floor and self._cooldown_ok("unblock_charge", now):
                 self.log.add("guard", f"SOC {soc:.0f}% < {floor:.0f}% — odblokowuję ładowanie z PV", "warn")
@@ -952,7 +1002,7 @@ class BmsRuntime:
             return
 
         if not pr.get("active") and price < thr:
-            wm = self.work_mode()
+            wm = SELLING_TOKEN if (self.brand() != brands.DEYE and self.is_selling()) else self.work_mode()
             pr["active"] = True
             pr["prev_mode"] = wm
             self._save_state()

@@ -74,8 +74,9 @@ def _inverter_group(rt) -> list[dict[str, str]]:
         from homeassistant.helpers import entity_registry as er
         reg = er.async_get(hass)
         plats = {}
-        for role in ("work_mode", "charge_current", "export_surplus", "tou_select"):
-            ent = reg.async_get(rt.eid(role))
+        from . import brands
+        for role, eid in brands.control_entities(hass, rt.cfg).items():
+            ent = reg.async_get(eid) if eid else None
             plats[role] = getattr(ent, "platform", None) or "?"
         uniq = sorted(set(plats.values()))
         out.append(_c("ctl_src", "Encje sterujące falownikiem", "ok" if len(uniq) == 1 and uniq[0] != "?" else "warn",
