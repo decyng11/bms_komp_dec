@@ -125,10 +125,13 @@
     .price-pill b { font-size: 15px; }
     .price-pill.buy b { color: #ff6b6b; } .price-pill.sell b { color: #30d158; } .price-pill.sell.neg b { color:#ff453a; }
     .weather-global { margin-top: 6px; margin-bottom: 12px; width: 100%; overflow: hidden; }
-    .weather-scroll { display: flex; gap: 8px; overflow-x: auto; padding: 4px 6px 10px 6px; scrollbar-width: none; width: 100%; box-sizing: border-box; }
+    .weather-scroll { display: flex; gap: 8px; overflow-x: auto; padding: 4px 6px 8px 6px; scrollbar-width: none; width: 100%; box-sizing: border-box; }
     .weather-scroll::-webkit-scrollbar { display: none; }
-    .weather-tile { flex: 1 1 0; min-width: 82px; display: flex; flex-direction: column; align-items: center; justify-content: center; background: var(--surface); border-radius: 16px; padding: 12px 6px; border: 1px solid var(--line); text-align: center; }
-    .weather-tile .day { font-size: 11px; font-weight: 700; text-transform: uppercase; color: var(--muted); margin-bottom: 6px; letter-spacing: 0.5px; }
+    .weather-tile { flex: 1 1 0; min-width: 76px; display: flex; flex-direction: column; align-items: center; justify-content: center; background: var(--surface); border-radius: 14px; padding: 7px 4px; border: 1px solid var(--line); text-align: center; }
+    .weather-tile .day { font-size: 10px; font-weight: 700; text-transform: uppercase; color: var(--muted); margin-bottom: 1px; letter-spacing: 0.5px; }
+    .weather-tile .wt-row { display: flex; align-items: center; justify-content: center; gap: 3px; }
+    .weather-tile .wt-row .icon { margin: 0; font-size: 20px; }
+    .weather-tile .wx { width: 30px; height: 30px; margin: 0; }
     .weather-tile .icon { font-size: 26px; margin-bottom: 6px; line-height: 1; }
     /* animowane ikony pogody (SVG, bez zewnętrznych bibliotek) */
     .wx { width: 42px; height: 42px; display: block; margin: 0 auto; overflow: visible; --wx-c1: #cbd5e1; --wx-c2: #94a3b8; --wx-sun: #fbbf24; --wx-sun2: #fde68a; --wx-drop: #60a5fa; }
@@ -165,9 +168,9 @@
     @keyframes wx-twinkle { 0%,100% { opacity: .25; } 50% { opacity: 1; } }
     @keyframes wx-dash { to { stroke-dashoffset: -48; } }
     @media (prefers-reduced-motion: reduce) { .wx * { animation: none !important; } }
-    .weather-tile .temp-max { font-size: 18px; font-weight: 800; }
-    .weather-tile .temp-min { font-size: 10px; color: var(--muted); margin-top: 2px; font-weight: 600; }
-    .weather-tile .pv { font-size: 11px; color: #fbbf24; font-weight: 800; margin-top: 6px; display: flex; align-items: center; gap: 3px; }
+    .weather-tile .temp-max { font-size: 16px; font-weight: 800; }
+    .weather-tile .temp-min { font-size: 10px; color: var(--muted); margin-top: 0; font-weight: 600; }
+    .weather-tile .pv { white-space: nowrap; font-size: 11px; color: #fbbf24; font-weight: 800; margin-top: 3px; display: flex; align-items: center; gap: 3px; }
 
     .chart-card { background: var(--surface); border-radius: 20px; padding: 16px; min-width: 0; overflow: hidden; border: 1px solid var(--surface); backdrop-filter: blur(10px); }
     .chart-card.full { grid-column: 1 / -1; }
@@ -210,8 +213,19 @@
     .price-min { color: #f43f5e; font-weight: 700; }
     .price-now-hour { background: var(--surface); }
 
-    .active-badges { display: flex; flex-wrap: wrap; gap: 6px; padding: 0 4px; margin-bottom: 14px; }
-    .badge { padding: 6px 12px; border-radius: 16px; background: var(--surface); color: var(--muted); font-size: 12px; font-weight: 600; transition: all 0.3s; border: 1px solid var(--line); }
+    .active-badges { display: flex; flex-wrap: nowrap; gap: 6px; padding: 0 4px 2px; margin-bottom: 10px; overflow-x: auto; scrollbar-width: none; }
+    .active-badges::-webkit-scrollbar { display: none; }
+    .active-badges .badge { flex: 0 0 auto; white-space: nowrap; }
+    .active-badges .badge:not(.on) { display: none; }
+    .active-badges .badge.on:not(.soon) { order: -1; }
+    .active-badges .badge.soon { background: transparent; border-style: dashed; box-shadow: none; }
+    .badge-none { font-size: 12px; color: var(--muted); padding: 5px 4px; white-space: nowrap; }
+    .active-badges .badge.on:not(.soon)::before { content: ''; display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: currentColor; margin-right: 6px; vertical-align: 1px; animation: bms-dot 2s ease-in-out infinite; }
+    @keyframes bms-dot { 0%,100% { opacity: 1; transform: scale(1); } 50% { opacity: .35; transform: scale(.7); } }
+    @media (prefers-reduced-motion: reduce) { .active-badges .badge.on:not(.soon)::before { animation: none; } }
+    .badge-warn { display: none; padding: 0 4px; margin-bottom: 8px; }
+    .badge-warn.on { display: block; }
+    .badge { padding: 5px 10px; border-radius: 16px; background: var(--surface); color: var(--muted); font-size: 12px; font-weight: 600; transition: all 0.3s; border: 1px solid var(--line); }
     .badge.on { background: rgba(16,185,129,0.15); color: #10b981; border-color: #10b981; box-shadow: 0 0 8px rgba(16,185,129,0.3); }
     .badge.danger.on { background: rgba(244,63,94,0.15); color: #f43f5e; border-color: #f43f5e; box-shadow: 0 0 8px rgba(244,63,94,0.4); }
 
@@ -380,7 +394,7 @@
     .chart-card, .soc-card, .weather-tile, .ds-item, .btn, .pf-wrapper { background: var(--card); border: none; box-shadow: var(--shadow); backdrop-filter: none; }
     .chart-card, .soc-card { border-radius: 26px; }
     .pf-wrapper { border-radius: 26px; }
-    .weather-tile { border-radius: 20px; }
+    .weather-tile { border-radius: 16px; }
     .ds-item, .btn { border-radius: 20px; }
     .btn:hover { background: var(--card); filter: brightness(0.97); }
     .btn.active { background: rgba(255,149,0,0.12); border: 1px solid var(--orange); color: var(--orange); }
@@ -783,10 +797,9 @@
         html += `
           <div class="weather-tile">
             <div class="day">${label}</div>
-            <div class="icon">${icon}</div>
-            <div class="temp-max">${maxT}</div>
+            <div class="wt-row"><div class="icon">${icon}</div><div class="temp-max">${maxT}</div></div>
             <div class="temp-min">min ${minT}</div>
-            ${pvVal !== null ? `<div class="pv">☀️ ${pvVal.toFixed(1)} kWh</div>` : ''}
+            ${pvVal !== null ? `<div class="pv">${pvVal.toFixed(1)} kWh</div>` : ''}
           </div>
         `;
       }
@@ -2473,8 +2486,9 @@
               <div class="badge" id="badge-force-charge">Wymuś ładowanie</div>
               <div class="badge" id="badge-blokada-pv">Blokada PV</div>
               <div class="badge" id="badge-ladowanie-siec">Ładowanie z sieci</div>
-              <div class="badge danger" id="badge-sprzedaz-zablokowana">⛔ Sprzedaż zablokowana (import)</div>
+              <div class="badge-none" id="badge-none">Żadna funkcja nie jest teraz włączona</div>
             </div>
+            <div class="badge-warn" id="warn-sprzedaz-zablokowana"><div class="badge danger on" id="badge-sprzedaz-zablokowana">⛔ Sprzedaż zablokowana (import)</div></div>
           </div>
 
           <!-- Przepływ mocy (węzły) -->
@@ -3148,6 +3162,8 @@
       const sellBlocked = this._isSellBlockedByImport();
       const badgeSellBlock = this._el('badge-sprzedaz-zablokowana');
       if (badgeSellBlock) badgeSellBlock.classList.toggle('on', sellBlocked);
+      const warnSell = this._el('warn-sprzedaz-zablokowana');
+      if (warnSell) warnSell.classList.toggle('on', sellBlocked);
       const btn6k = this._el('btn-script-6000');
       if (btn6k) {
         // etykieta pokazuje faktyczną moc sprzedaży z ustawień integracji (domyślnie 6000 W)
@@ -3161,11 +3177,12 @@
           : '';
       }
 
-      this._updateBadge('switch', 'bateria_sprzedaz_1', 'badge-sprzedaz-1');
-      this._updateBadge('switch', 'bateria_sprzedaz_2', 'badge-sprzedaz-2');
-      this._updateBadge('switch', 'ladowanie_z_sieci_1', 'badge-laduj-1');
-      this._updateBadge('switch', 'ladowanie_z_sieci_2', 'badge-laduj-2');
+      this._updateBadge('switch', 'bateria_sprzedaz_1', 'badge-sprzedaz-1', ['bateria_sprzedaz_start', 'bateria_sprzedaz_stop']);
+      this._updateBadge('switch', 'bateria_sprzedaz_2', 'badge-sprzedaz-2', ['bateria_sprzedaz_start_2', 'bateria_sprzedaz_stop_2']);
+      this._updateBadge('switch', 'ladowanie_z_sieci_1', 'badge-laduj-1', ['start_grid_charge', 'stop_grid_charge']);
+      this._updateBadge('switch', 'ladowanie_z_sieci_2', 'badge-laduj-2', ['start_grid_charge_2', 'stop_grid_charge_2']);
       this._updateBadge('switch', 'force_charge_battery', 'badge-force-charge');
+      this._syncBadges();
 
       this._updateBtn('switch', 'bateria_sprzedaz_1', 'btn-sprzedaz-1', 'txt-sprzedaz-1');
       this._updateBtn('switch', 'bateria_sprzedaz_2', 'btn-sprzedaz-2', 'txt-sprzedaz-2');
@@ -3219,11 +3236,34 @@
       if (this._activeTab === 'main') this._drawPowerflow();
     }
 
-    _updateBadge(domain, key, badgeId) {
+    // Funkcja włączona: z oknem godzin (jeśli ma) — „teraz” trwa w oknie, „soon” dopiero będzie aktywna.
+    _updateBadge(domain, key, badgeId, timeKeys) {
       const eid = this._eid(domain, key);
       const isOn = this._st(eid) === 'on';
       const badge = this._el(badgeId);
-      if (badge) badge.classList.toggle('on', isOn);
+      if (!badge) return;
+      if (!badge.dataset.label) badge.dataset.label = badge.textContent.trim();
+      let txt = badge.dataset.label, soon = false;
+      if (isOn && timeKeys) {
+        const hm = (k) => { const m = /^(\d{1,2}):(\d{2})/.exec(String(this._st(this._eid('time', k)) || '')); return m ? [Number(m[1]), Number(m[2])] : null; };
+        const a = hm(timeKeys[0]), b = hm(timeKeys[1]);
+        if (a && b) {
+          const f = (x) => String(x[0]).padStart(2, '0') + ':' + String(x[1]).padStart(2, '0');
+          txt += ` ${f(a)}–${f(b)}`;
+          const d = new Date(), cur = d.getHours() * 60 + d.getMinutes(), s = a[0] * 60 + a[1], e = b[0] * 60 + b[1];
+          soon = s === e ? false : (s < e ? !(cur >= s && cur < e) : !(cur >= s || cur < e));
+        }
+      }
+      if (badge.textContent !== txt) badge.textContent = txt;
+      badge.classList.toggle('on', isOn);
+      badge.classList.toggle('soon', isOn && soon);
+    }
+
+    // Widoczne są tylko włączone funkcje (aktywne teraz i zaplanowane); bez żadnej — krótka informacja.
+    _syncBadges() {
+      const box = this._el('badge-none'); if (!box) return;
+      const any = !!this.shadowRoot.querySelector('.active-badges .badge.on');
+      box.style.display = any ? 'none' : '';
     }
 
     _updateBtn(domain, key, btnId, txtId) {

@@ -14,6 +14,8 @@
 - **Kafelek „Do rozładowania”:** zamiast niejasnego „wg prognozy z PV: nie w 2 dni” w nocy druga linia mówi, ile zostanie do słońca: „Do słońca (ok. 08:00) zostanie ok. 24%”, a gdy bateria dojdzie do progu wcześniej — „Przed słońcem (ok. 08:00) dojdzie do 20% ok. 05:30”. Słońce = pierwsza godzina, w której prognoza PV pokrywa prognozę zużycia. W dzień linii nie ma.
 - **Podsumowanie dnia mogło zniknąć bez śladu.** Znacznik „wysłano dziś” był ustawiany przed policzeniem treści, więc błąd w liczeniu (np. brak jednej wartości w danych) kasował całą wiadomość i nic nie wracało do końca doby. Teraz wiadomość zawsze wychodzi — w razie błędu z krótkim opisem i wpisem w dzienniku.
 - **Autotest sprawdza podsumowanie dnia:** czy jest włączone, na którą godzinę, kiedy ostatnio poszło oraz czy coś blokuje wysyłkę (wyłączony przełącznik „Powiadomienia BMS”, brak usługi notify, cisza nocna, wyłączony telefon dla tego rodzaju).
+- **Niższe kafelki pogody na telefonie** (ok. 86 px zamiast ok. 135): ikona (nadal animowana), temperatura i kWh w zwartym układzie, bez zawijania „kWh”.
+- **„Aktywne funkcje” tylko włączone i zaplanowane:** wyłączone chipy znikają; włączona funkcja z oknem godzin pokazuje je (np. „Ładowanie (1) 05:00–06:00”), trwająca teraz ma pulsującą kropkę i jest pierwsza, zaplanowana na później — obrys przerywany. Ostrzeżenie „Sprzedaż zablokowana (import)” jest osobnym paskiem i widać je tylko, gdy blokada działa.
 
 # BMS komp-dec — zmiany w 0.8.5 (z 0.8.4)
 
