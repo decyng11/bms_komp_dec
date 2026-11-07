@@ -39,6 +39,9 @@ KEEP_DAYS = 60            # profile godzinowe
 KEEP_DAYS_DAILY = 400     # sumy dzienne i temperatury (potrzebne do sezonowości)
 MODEL_WINDOW_DAYS = 60    # okno historii dla bazy prognozy / MAD / sigma
 BACKFILL_DAYS = 365
+# Domyślnie historia zużycia zbiera się od zera (bez importu z rekordera HA).
+# Ustaw True, by przy pustej historii dociągnąć dane z recordera.
+BACKFILL_FROM_RECORDER = False
 MIN_VALID_KWH = 0.2
 MAX_VALID_KWH = 500.0
 MIN_HISTORY_FOR_FORECAST = 5
@@ -218,10 +221,11 @@ class LoadForecaster:
             _LOGGER.warning("EMS forecast: błąd wczytywania: %s", err)
         self._loaded = True
 
-        if len(self._valid_history_before(dt_util.now().date())) < 7:
-            await self._async_backfill()
-        if len(self.profiles) < PROFILE_MAX_DAYS:
-            await self._async_backfill_profiles()
+        if BACKFILL_FROM_RECORDER:
+            if len(self._valid_history_before(dt_util.now().date())) < 7:
+                await self._async_backfill()
+            if len(self.profiles) < PROFILE_MAX_DAYS:
+                await self._async_backfill_profiles()
 
         self._fit_temperature_coefficients()
         self._compute_seasonal_factors()

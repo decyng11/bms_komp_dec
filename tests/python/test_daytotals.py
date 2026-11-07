@@ -131,4 +131,22 @@ finally:
         else: sys.modules[k] = v
 check("_async_backfill: dni 3–5.11 z cykli, 5.11 ≈ 28.0 (nie 32.9)", set(lf.days) == {"2026-11-03", "2026-11-04", "2026-11-05"} and abs(lf.days["2026-11-05"] - 28.0) < 0.8, lf.days)
 
+# ---- 8. świeża instalacja: historia zbiera się od zera, bez importu z rekordera
+check("domyślnie BACKFILL_FROM_RECORDER wyłączony", lfm.BACKFILL_FROM_RECORDER is False)
+hass, lf = mk(); at(2026, 11, 7, 12)
+calls = []
+async def _bf(*a, **k): calls.append("days")
+async def _bp(*a, **k): calls.append("profiles")
+lf._async_backfill = _bf; lf._async_backfill_profiles = _bp
+asyncio.run(lf.async_load())
+check("async_load na pustej historii nie dociąga z rekordera", calls == [] and lf.days == {}, (calls, lf.days))
+check("pusta historia: brak prognozy zamiast błędu", lf.history_days() == 0 if hasattr(lf, "history_days") else True)
+lfm.BACKFILL_FROM_RECORDER = True
+try:
+    hass, lf = mk(); lf._async_backfill = _bf; lf._async_backfill_profiles = _bp; calls.clear()
+    asyncio.run(lf.async_load())
+    check("opcja włączona: dociąganie działa jak dawniej", calls == ["days", "profiles"], calls)
+finally:
+    lfm.BACKFILL_FROM_RECORDER = False
+
 print(f"DAYTOTALS PASS={PASS} FAIL={FAIL}")

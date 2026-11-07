@@ -5,6 +5,9 @@
 - **Historia z rekordera liczona po cyklach licznika.** Dociąganie historii brało „największą wartość w dobie lokalnej”, co przy resecie po północy przypisywało początkowi doby wynik poprzedniego dnia. Teraz historia dzieli się na cykle licznika (spadek wartości = reset), a do historii trafiają tylko pełne cykle. Niepełne (początek i koniec danych, przerwy w pomiarze) są pomijane.
 - **Podejrzane sumy dnia są oznaczane i pomijane.** Dzień z tą samą sumą co dzień wcześniej (do 0,01 kWh, o ile nie jest to stała historia) albo poniżej 25% mediany sąsiednich dni (np. 2,5 kWh przy ok. 28) nie trafia do modelu prognozy, korekty obciążenia, sezonowości ani do średniego błędu. W tabeli „Ostatnie 14 dni” taki wiersz jest przekreślony, z ⚠ i napisem „pominięte”, zamiast absurdalnego „+830%”. Dane nie są kasowane, tylko wyłączone z obliczeń.
 
+## Historia zużycia od zera
+- **Świeża instalacja zbiera dane od zera.** Integracja nie importuje już historii zużycia z rekordera HA (wcześniej dociągała do 365 dni, co przy dziwnych licznikach dawało nierealne dni). Pierwsza prognoza zużycia pojawia się po 5 pełnych dniach, profil godzinowy po 3. Do tego czasu planer działa bez prognozy zużycia. Import można przywrócić stałą `BACKFILL_FROM_RECORDER` w `load_forecast.py`. Już zapisane dane zostają bez zmian.
+
 ## Karta
 - **Logo Komp-Dec** w nagłówku karty zamiast napisu „Centrum Energii” (pliki w `assets/`).
 - **Tabela cen zakupu:** kolory odwrócone względem sprzedaży (najtańsza godzina zielona, najdroższa czerwona).
