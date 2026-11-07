@@ -3727,6 +3727,36 @@
       return null;
     }
 
+    // SOC w chwili, gdy PV zacznie pokrywać zużycie domu (tylko w nocy / bez produkcji). null = nie dotyczy.
+    _socAtSun(soc0, cap, hourlyLoad, pvMap, floorFn) {
+      const pvNow = this._num('pv_power');
+      const sunSt = this._hass.states['sun.sun'];
+      const night = (sunSt && sunSt.state === 'below_horizon') || !(pvNow > 50);
+      if (!night || !(cap > 0)) return null;
+      const start = new Date();
+      let t = start.getTime(), soc = soc0, floorAt = null, at = null, flo = null;
+      const rising = sunSt && sunSt.attributes && sunSt.attributes.next_rising ? new Date(sunSt.attributes.next_rising) : null;
+      const havePv = Object.keys(pvMap || {}).length > 0;
+      for (let step = 0; step < 30; step++) {
+        const d = new Date(t);
+        const pv = pvMap[`${this._dateKey(d)}|${d.getHours()}`] || 0;
+        const load = hourlyLoad ? (hourlyLoad[d.getHours()] ?? 0.5) : 0.5;
+        const covered = havePv ? (pv >= load && pv > 0.05) : (rising && d >= rising);
+        if (covered) { at = d; break; }
+        const frac = step === 0 ? (60 - d.getMinutes()) / 60 : 1;
+        const thr = typeof floorFn === 'function' ? floorFn(d.getHours()) : floorFn;
+        const next = soc + (pv - load) * frac / cap * 100;
+        if (floorAt === null && next <= thr && soc > thr) {
+          const part = soc !== next ? (soc - thr) / (soc - next) : 0;
+          floorAt = new Date(t + part * frac * 3600000); flo = thr;
+        }
+        soc = Math.max(thr, Math.min(100, next));
+        t = (step === 0 ? new Date(d.getFullYear(), d.getMonth(), d.getDate(), d.getHours() + 1).getTime() : t + 3600000);
+      }
+      if (!at || (at.getTime() - start.getTime()) < 15 * 60000) return null;
+      return { at, soc, floorAt, floor: flo };
+    }
+
     _renderEta() {
       const box = this._el('etaBox');
       if (!box) return;
@@ -3775,20 +3805,19 @@
         if (soc <= FLOOR) low = { v: `≤ ${Math.round(FLOOR * 10) / 10}%`, s: 'poziom już osiągnięty' };
         else {
           const discharging = batt < -20;
-          let h = null, basis = '';
-          let simulated = false;
-          if (havePv || hl) {
-            h = this._simulateSoc(soc, cap, floorFn, false, hl, pvMap);
-            simulated = true;
-          }
+          let basis = '';
           // wynik główny: przy obecnym poborze (rozładowanie, a gdy bateria się ładuje — zużycie domu bez PV)
           const rate = discharging ? -batt : Math.max(load, 100);
           const hNow = (soc - FLOOR) / 100 * cap / (rate / 1000);
           basis = discharging ? `przy obecnym rozładowaniu ${this._fmtW(rate)}` : `przy obecnym zużyciu domu ${this._fmtW(rate)} (bez PV)`;
           low = { v: this._fmtDur(hNow), s: `ok. ${this._fmtAt(hNow)} · ${basis}` };
-          if (simulated) {
-            low.s2 = h == null ? `wg prognozy z PV: nie w 2 dni (bateria nie spadnie do ${Math.round(FLOOR)}%)`
-              : (Math.abs(h - hNow) < 0.25 ? '' : `wg prognozy z PV: ${this._fmtDur(h)}${h > hNow * 1.5 ? ' (PV doładuje baterię)' : ''}`);
+          // w nocy: ile zostanie, zanim słońce pokryje zużycie domu (prognoza zużycia i PV)
+          const sun = this._socAtSun(soc, cap, hl, pvMap, floorFn);
+          if (sun) {
+            const hhmm = (d) => d.toLocaleTimeString('pl-PL', { hour: '2-digit', minute: '2-digit' });
+            low.s2 = sun.floorAt
+              ? `Przed słońcem (ok. ${hhmm(sun.at)}) dojdzie do ${Math.round(sun.floor)}% ok. ${hhmm(sun.floorAt)}`
+              : `Do słońca (ok. ${hhmm(sun.at)}) zostanie ok. ${Math.round(sun.soc)}%`;
           }
         }
       }

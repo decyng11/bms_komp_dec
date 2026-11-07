@@ -15,7 +15,15 @@ const { chromium } = require('playwright'); const fs = require('fs');
     let el = window.__el; if (!el) { el = document.createElement('bms-panel-card'); el.setConfig({}); document.getElementById('h').appendChild(el); window.__el = el; }
     const dk = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
     const states = { 'sensor.bms_soc': S(o.soc ?? 64), 'sensor.bms_load_power': S(o.load ?? 631), 'sensor.bms_battery_power': S(o.batt ?? 708), 'sensor.bms_reserve_soc': S(25, o.attrs) };
-    if (o.pv) { const arr = [0, 1].flatMap(d => Array.from({ length: 24 }, (_, h) => ({ period_start: new Date(new Date(Date.now() + d * 864e5).setHours(h, 0, 0, 0)).toISOString(), pv_estimate: h >= 7 && h <= 16 ? 4 : 0 }))); states['sensor.solcast_pv_forecast_forecast_today'] = S(30, { detailedHourly: arr }); states['sensor.bms_load_forecast'] = S(10, { hourly_forecast: Array.from({ length: 24 }, () => 0.4) }); }
+    if (o.pv) {
+      // słońce względem „teraz”: od pełnej godziny +3 h przez 9 h (test nie zależy od pory uruchomienia)
+      const h0 = new Date(); h0.setMinutes(0, 0, 0);
+      const arr = Array.from({ length: 48 }, (_, i) => ({ period_start: new Date(h0.getTime() + i * 36e5).toISOString(), pv_estimate: i >= 3 && i < 12 ? 4 : 0 }));
+      states['sensor.solcast_pv_forecast_forecast_today'] = S(30, { detailedHourly: arr });
+      states['sensor.bms_load_forecast'] = S(10, { hourly_forecast: Array.from({ length: 24 }, () => o.hl ?? 0.4) });
+    }
+    if (o.pvNow !== undefined) states['sensor.bms_pv_power'] = S(o.pvNow);
+    if (o.sun) states['sun.sun'] = S(o.sun, {});
     el._lastEtaKey = null; el._hass = { states, entities: {}, language: 'pl', callService: async () => ({}), callWS: async () => ({}) };
     el._renderEta();
     const box = el.shadowRoot.getElementById('etaBox');
@@ -45,7 +53,14 @@ const { chromium } = require('playwright'); const fs = require('fs');
   ok('ładowanie: 39%·10/0,631 = 6 h 11 min', r.text.includes('6 h 11 min'), r.text);
   // 5. prognoza jako druga linia, gdy różni się od wyniku głównego
   r = await run({ pv: true, attrs: { capacity_kwh: 10, inverter_floor: 25 } });
-  ok('druga linia z prognozą PV', /wg prognozy z PV:/.test(r.text), r.text);
+  const m5 = r.text.match(/Do słońca \(ok\. (\d\d):00\) zostanie ok\. (\d+)%/);
+  const sunH = String((new Date().getHours() + 3) % 24).padStart(2, '0');
+  ok('noc: „Do słońca (ok. HH:00) zostanie ok. X%” — godzina z prognozy PV, SOC z prognozy zużycia', m5 && m5[1] === sunH && +m5[2] >= 51 && +m5[2] <= 57, r.text);
+  ok('stary tekst „wg prognozy z PV” zniknął', !/wg prognozy z PV|nie w 2 dni \(bateria/.test(r.text), r.text);
+  r = await run({ pv: true, hl: 2.5, soc: 40, attrs: { capacity_kwh: 10, inverter_floor: 25 } });
+  ok('noc: próg przed słońcem → „Przed słońcem (ok. …) dojdzie do 25% ok. …”', /Przed słońcem \(ok\. \d\d:00\) dojdzie do 25% ok\. \d\d:\d\d/.test(r.text), r.text);
+  r = await run({ pv: true, pvNow: 3200, sun: 'above_horizon', attrs: { capacity_kwh: 10, inverter_floor: 25 } });
+  ok('dzień (PV produkuje): bez linii o słońcu', !/słońc/.test(r.text), r.text);
   ok('główna wartość nadal z obecnego poboru', r.text.includes('5 h 31 min'), r.text);
   // 6. SOC ≤ próg
   r = await run({ soc: 24, attrs: { capacity_kwh: 10, inverter_floor: 25 } });
