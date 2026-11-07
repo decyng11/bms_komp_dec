@@ -987,7 +987,8 @@
       const f1 = (v) => (typeof v === 'number' ? v.toFixed(1).replace('.', ',') : '—');
       let n = 0, sumAbs = 0, sumBias = 0, hit = 0;
       const body = rows.map(r => {
-        const hasA = typeof r.actual === 'number';
+        const sus = r.suspect === 'duplicate' || r.suspect === 'partial' ? r.suspect : null;   // podejrzana suma dnia — pomijana w modelu i podsumowaniu
+        const hasA = typeof r.actual === 'number' && !sus;
         const fc = typeof r.issued === 'number' ? r.issued : (typeof r.model === 'number' ? r.model : null);
         const retro = typeof r.issued !== 'number' && fc != null;
         let diff = '—', cls = '';
@@ -999,10 +1000,14 @@
         }
         const dt = new Date(r.date + 'T12:00:00');
         const dayTxt = `${dt.getDate()}.${String(dt.getMonth() + 1).padStart(2, '0')} ${wd[r.weekday]}${r.holiday ? ' 🎌' : ''}`;
+        if (sus) {
+          const why = sus === 'duplicate' ? 'ta sama wartość co dzień wcześniej (licznik falownika nie zdążył się zresetować)' : 'dużo niższa niż w sąsiednich dniach (niepełne dane z tego dnia)';
+          return `<tr class="lh-sus" title="Pominięte w modelu i podsumowaniu: ${why}"><td title="${r.holiday || ''}">${dayTxt}</td><td class="num"><s>${f1(r.actual)}</s> ⚠</td><td class="num lh-dim">—</td><td class="num lh-dim">pominięte</td><td class="num lh-dim">${typeof r.temp === 'number' ? r.temp.toFixed(0) + '°' : ''}</td></tr>`;
+        }
         return `<tr><td title="${r.holiday || ''}">${dayTxt}</td><td class="num">${f1(r.actual)}</td><td class="num ${retro ? 'lh-retro' : ''}">${f1(fc)}${retro ? '*' : ''}</td><td class="num ${cls}">${diff}</td><td class="num lh-dim">${typeof r.temp === 'number' ? r.temp.toFixed(0) + '°' : ''}</td></tr>`;
       }).join('');
       const sum = n ? `<div class="lh-sum"><span>Średni błąd: <b>${f1(sumAbs / n)} kWh</b></span><span>Obciążenie: <b>${sumBias / n > 0 ? '+' : ''}${f1(sumBias / n)} kWh</b> ${sumBias / n > 0.5 ? '(model zawyża)' : sumBias / n < -0.5 ? '(model zaniża)' : ''}</span><span>Trafione ±20%: <b>${hit}/${n}</b></span></div>` : '';
-      box.innerHTML = `${sum}<table class="lh-tbl"><thead><tr><th>Dzień</th><th class="num">Rzeczywiste</th><th class="num">Prognoza</th><th class="num">Różnica</th><th class="num">Temp.</th></tr></thead><tbody>${body}</tbody></table><div class="lh-note">Prognoza = wydana dzień wcześniej. * = brak zapisanej prognozy z tamtego dnia, pokazano model liczony wstecz (nie wlicza się do podsumowania). 🎌 = święto.${typeof bias === 'number' && Math.abs(bias - 1) >= 0.02 ? ` Korekta obciążenia modelu: <b>×${bias.toFixed(2).replace('.', ',')}</b> (z ostatnich 14 dni).` : ''}</div>`;
+      box.innerHTML = `${sum}<table class="lh-tbl"><thead><tr><th>Dzień</th><th class="num">Rzeczywiste</th><th class="num">Prognoza</th><th class="num">Różnica</th><th class="num">Temp.</th></tr></thead><tbody>${body}</tbody></table><div class="lh-note">Prognoza = wydana dzień wcześniej. * = brak zapisanej prognozy z tamtego dnia, pokazano model liczony wstecz (nie wlicza się do podsumowania). 🎌 = święto.${rows.some(x => x.suspect) ? ' ⚠ = podejrzana suma dnia (przepisany wynik poprzedniego dnia albo niepełne dane) — pominięta w modelu i podsumowaniu.' : ''}${typeof bias === 'number' && Math.abs(bias - 1) >= 0.02 ? ` Korekta obciążenia modelu: <b>×${bias.toFixed(2).replace('.', ',')}</b> (z ostatnich 14 dni).` : ''}</div>`;
     }
 
     _roundRect(ctx, x, y, w, h, r) {

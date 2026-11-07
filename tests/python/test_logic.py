@@ -428,7 +428,7 @@ async def main():
         d = today4 - timedelta(days=i)
         off = d.weekday() >= 5 or d in _hp.polish_holidays(d.year)
         lf5.days[d.isoformat()] = (10.0 if off else 10.0)
-    lf5.days["2026-10-31"] = 5.0; lf5.days["2026-11-01"] = 5.0
+    lf5.days["2026-10-31"] = 5.0; lf5.days["2026-11-01"] = 5.2   # realne liczniki nie dają dwóch identycznych sum z rzędu (to wykrywane jako przepisany wynik)
     p_fast = lf5.predict(date(2026, 11, 7), today4)
     check("forecast: po dwóch niskich dniach wolnych prognoza spada wyraźnie", p_fast < 8.0, p_fast)
     # samokorekta obciążenia

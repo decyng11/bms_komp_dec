@@ -64,6 +64,12 @@ SEASONAL_STRENGTH = 0.5
 PROFILE_MIN_DAYS = 3
 PROFILE_MAX_DAYS = 14
 PROFILE_TYPED_MIN_DAYS = 4   # tyle dni danego typu (roboczy / wolny), by użyć osobnego profilu godzinowego
+STALE_UNTIL_HOUR = 6         # do tej godziny licznik dzienny może jeszcze pokazywać wynik wczorajszy (reset po północy)
+DUP_EPS = 0.011              # dwa kolejne dni z tą samą wartością (do 0,01 kWh) = przepisany wynik poprzedniego dnia
+PARTIAL_RATIO = 0.25         # dzień poniżej 25% mediany sąsiednich dni to najpewniej niepełne dane
+SUSPECT_NEIGHBOUR_DAYS = 7
+SUSPECT_MIN_NEIGHBOURS = 4
+CYCLE_MIN_ROWS = 20          # pełny cykl licznika (~24 h) ma co najmniej tyle godzinowych wpisów w rekorderze
 OVERRIDE_EID = "number.bms_load_forecast_override"
 
 
@@ -78,6 +84,87 @@ def _stdev(vals: list[float]) -> float:
         return statistics.stdev(vals)
     except statistics.StatisticsError:
         return 0.0
+
+
+def suspect_days(days: dict[str, float], today: date | None = None) -> dict[str, str]:
+    """Dni z sumą zużycia, której nie należy ufać: {data: "duplicate" | "partial"}.
+
+    duplicate — ta sama wartość (do 0,01 kWh) co dzień wcześniej: licznik falownika resetuje się po północy (zegar
+                falownika), a wczorajszy wynik został zapisany jako dzisiejszy. Zostaje pierwszy dzień z pary.
+    partial   — poniżej 25% mediany sąsiednich dni (±7 dni, min. 4): niepełne dane (przerwa w pomiarze, start w ciągu dnia).
+    Dzień bieżący (i późniejsze) nie jest oceniany — jeszcze trwa."""
+    items: dict[date, float] = {}
+    for k, v in (days or {}).items():
+        try:
+            d = date.fromisoformat(str(k))
+            f = float(v)
+        except (TypeError, ValueError):
+            continue
+        if f == f and abs(f) != float("inf") and (today is None or d < today):
+            items[d] = f
+    flags: dict[str, str] = {}
+    for d in sorted(items):
+        prev = items.get(d - timedelta(days=1))
+        if prev is None or items[d] <= 1.0 or abs(items[d] - prev) > DUP_EPS:
+            continue
+        # stała historia (np. te same wartości przez cały tydzień) to nie przepisany wynik: licznik rzeczywistego
+        # zużycia nie daje identycznych sum przez wiele dni — oznaczamy tylko powtórzenie odstające od sąsiednich dni
+        neigh = [items[o] for o in (d + timedelta(days=k) for k in range(-SUSPECT_NEIGHBOUR_DAYS, SUSPECT_NEIGHBOUR_DAYS + 1) if k)
+                 if o in items and abs(items[o] - items[d]) > DUP_EPS]
+        same = [o for o in (d + timedelta(days=k) for k in range(-SUSPECT_NEIGHBOUR_DAYS, SUSPECT_NEIGHBOUR_DAYS + 1) if k)
+                if o in items and abs(items[o] - items[d]) <= DUP_EPS]
+        if len(same) > 2 and len(same) >= len(neigh):      # większość okna to ta sama wartość → stała historia
+            continue
+        flags[d.isoformat()] = "duplicate"
+    for d in sorted(items):
+        if d.isoformat() in flags or items[d] < MIN_VALID_KWH:
+            continue
+        neigh = [items[o] for o in (d + timedelta(days=k) for k in range(-SUSPECT_NEIGHBOUR_DAYS, SUSPECT_NEIGHBOUR_DAYS + 1) if k)
+                 if o in items and o.isoformat() not in flags and items[o] >= MIN_VALID_KWH]
+        if len(neigh) >= SUSPECT_MIN_NEIGHBOURS and items[d] < PARTIAL_RATIO * statistics.median(neigh):
+            flags[d.isoformat()] = "partial"
+    return flags
+
+
+def day_totals_from_rows(rows: list, tz) -> dict[str, float]:
+    """Sumy dzienne z godzinowych wpisów rekordera licznika dziennego: [(początek godziny UTC, max w godzinie)].
+
+    Licznik resetuje się o godzinie zegara falownika, nie koniecznie o północy lokalnej — liczenie „max w dobie
+    lokalnej” przypisywało więc początkowi doby wynik poprzedniego dnia. Tu dzielimy wpisy na CYKLE licznika
+    (spadek wartości = reset) i bierzemy tylko cykle pełne (zamknięte resetem z obu stron, ≥ 20 godzinowych wpisów);
+    cykl dostaje datę lokalną swojego środka. Niepełne cykle (początek i koniec danych, przerwy) są pomijane."""
+    clean = []
+    for st, v in rows or []:
+        try:
+            f = float(v)
+        except (TypeError, ValueError):
+            continue
+        if f == f and isinstance(st, datetime):
+            clean.append((st, f))
+    clean.sort(key=lambda r: r[0])
+    segs: list[list] = []
+    cur: list = []
+    prev = None
+    for st, v in clean:
+        if prev is not None and v < prev * 0.5 and prev - v >= 1.0:
+            segs.append(cur)
+            cur = []
+        cur.append((st, v))
+        prev = v
+    segs.append(cur)
+    out: dict[str, float] = {}
+    for seg in segs[1:-1]:                       # pierwszy cykl nie ma znanego początku, ostatni trwa
+        if len(seg) < CYCLE_MIN_ROWS:
+            continue
+        first, last = seg[0][0], seg[-1][0]
+        hours = (last - first).total_seconds() / 3600.0 + 1.0
+        total = max(v for _, v in seg)
+        if not (20.0 <= hours <= 28.0) or not (MIN_VALID_KWH <= total <= MAX_VALID_KWH):
+            continue
+        mid = first + (last + timedelta(hours=1) - first) / 2
+        key = mid.astimezone(tz).date().isoformat()
+        out[key] = round(max(out.get(key, 0.0), total), 2)
+    return out
 
 
 def _mad_filter(values: list[float], k: float = MAD_K) -> list[float]:
@@ -240,7 +327,7 @@ class LoadForecaster:
                 {"state", "max"},
             )
             rows = stats.get(eid) or []
-            by_day: dict[str, float] = {}
+            series: list[tuple[datetime, float]] = []
             for row in rows:
                 raw_start = row.get("start")
                 if isinstance(raw_start, (int, float)):
@@ -256,11 +343,10 @@ class LoadForecaster:
                 if val is None:
                     continue
                 try:
-                    v = float(val)
+                    series.append((st, float(val)))
                 except (TypeError, ValueError):
                     continue
-                day = dt_util.as_local(st).date().isoformat()
-                by_day[day] = max(by_day.get(day, 0.0), v)
+            by_day = day_totals_from_rows(series, now.tzinfo)
 
             today = now.date().isoformat()
             added = 0
@@ -347,9 +433,16 @@ class LoadForecaster:
         if value is None or value < 0 or value > MAX_VALID_KWH:
             return
 
-        if now.hour == 0 and now.minute < 15:
-            yesterday = self.days.get((today - timedelta(days=1)).isoformat())
-            if yesterday and value > 0 and value >= yesterday - 0.01:
+        # Licznik dzienny falownika resetuje się o godzinie jego zegara, nie zawsze o północy lokalnej: do resetu
+        # pokazuje jeszcze wynik WCZORAJSZY (i dalej rośnie). Taki odczyt dopisujemy do wczoraj, a nie do dziś —
+        # inaczej dziś zostaje z wczorajszą wartością (dwa dni z tym samym wynikiem), bo realne zużycie rzadko ją przebija.
+        if now.hour < STALE_UNTIL_HOUR and today_key not in self.days:
+            ykey = (today - timedelta(days=1)).isoformat()
+            yesterday = self.days.get(ykey)
+            if yesterday and yesterday > 1.0 and value >= yesterday - DUP_EPS:
+                if value > yesterday and value <= MAX_VALID_KWH:
+                    self.days[ykey] = round(value, 2)
+                    self._schedule_save()
                 return
 
         value = round(value, 2)
@@ -654,8 +747,9 @@ class LoadForecaster:
 
     def _compute_seasonal_factors(self) -> None:
         month_vals: dict[int, list[float]] = {}
+        bad = self.suspects()
         for d_str, val in self.days.items():
-            if not (MIN_VALID_KWH <= val <= MAX_VALID_KWH):
+            if d_str in bad or not (MIN_VALID_KWH <= val <= MAX_VALID_KWH):
                 continue
             try:
                 d = date.fromisoformat(d_str)
@@ -676,9 +770,23 @@ class LoadForecaster:
         }
 
     # ----------------------------------------------------------- historia
+    def suspects(self) -> dict[str, str]:
+        """Podejrzane dni (patrz suspect_days) — przeliczane tylko po zmianie historii."""
+        today = dt_util.now().date()
+        sig = (today, len(self.days), round(sum(self.days.values()), 3))
+        cached = getattr(self, "_suspect_cache", None)
+        if cached and cached[0] == sig:
+            return cached[1]
+        flags = suspect_days(self.days, today)
+        self._suspect_cache = (sig, flags)
+        return flags
+
     def _valid_history_before(self, cutoff: date) -> dict[date, float]:
         out: dict[date, float] = {}
+        bad = self.suspects()
         for k, v in self.days.items():
+            if k in bad:
+                continue
             try:
                 d = date.fromisoformat(k)
             except ValueError:
@@ -791,7 +899,7 @@ class LoadForecaster:
         for i in range(1, BIAS_DAYS + 1):
             d = today - timedelta(days=i)
             actual = self.days.get(d.isoformat())
-            if not actual or actual < MIN_VALID_KWH:
+            if not actual or actual < MIN_VALID_KWH or d.isoformat() in self.suspects():
                 continue
             pred = self._model_core(d, today)
             if pred and pred > 0:
@@ -889,7 +997,7 @@ class LoadForecaster:
             d_str = d.isoformat()
             actual = self.days.get(d_str)
             predicted = self.forecast_history.get(d_str)
-            if actual and predicted and actual > 0:
+            if actual and predicted and actual > 0 and d_str not in self.suspects():
                 errors.append(abs(actual - predicted) / actual)
         if not errors:
             return None
@@ -964,6 +1072,8 @@ class LoadForecaster:
         for offset, label in ((-1, "Wczoraj"), (0, "Dziś"), (1, "Jutro")):
             d = today + timedelta(days=offset)
             actual = None if offset == 1 else self.days.get(d.isoformat())
+            if actual is not None and offset < 0 and d.isoformat() in self.suspects():
+                actual = None          # podejrzana suma (duplikat / niepełne dane) nie trafia na wykres „wczoraj”
             item: dict[str, Any] = {
                 "date": d.isoformat(),
                 "label": label,
@@ -1030,6 +1140,7 @@ class LoadForecaster:
                 "weekday": d.weekday(),
                 "holiday": hol,
                 "actual": None if actual is None else round(actual, 2),
+                "suspect": self.suspects().get(key),      # "duplicate" | "partial" | None
                 "issued": issued,
                 "model": self.predict(d, today, live=False),
                 "temp": self.temperatures.get(key),

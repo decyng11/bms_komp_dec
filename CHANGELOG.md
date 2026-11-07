@@ -1,3 +1,15 @@
+# EMS komp-dec — zmiany po 0.8.8 (jeszcze niewydane)
+
+## Prognoza zużycia: sumy dzienne z licznika falownika
+- **Naprawa przepisywania wyniku poprzedniego dnia.** Licznik dzienny falownika resetuje się o godzinie jego zegara, nie zawsze równo o północy. Do resetu pokazuje jeszcze wynik wczorajszy i dalej rośnie, a integracja zapisywała ten odczyt jako dzisiejszy. Realne zużycie rzadko przebijało wczorajszy wynik, więc dzień zostawał z cudzą wartością (w tabeli dwa dni z rzędu z tą samą sumą, np. 32,9). Teraz odczyty sprzed resetu (do 6:00) dopisują się do poprzedniego dnia, a nowy dzień zaczyna się od resetu licznika. Zachowanie przy resecie równo o północy się nie zmienia.
+- **Historia z rekordera liczona po cyklach licznika.** Dociąganie historii brało „największą wartość w dobie lokalnej”, co przy resecie po północy przypisywało początkowi doby wynik poprzedniego dnia. Teraz historia dzieli się na cykle licznika (spadek wartości = reset), a do historii trafiają tylko pełne cykle. Niepełne (początek i koniec danych, przerwy w pomiarze) są pomijane.
+- **Podejrzane sumy dnia są oznaczane i pomijane.** Dzień z tą samą sumą co dzień wcześniej (do 0,01 kWh, o ile nie jest to stała historia) albo poniżej 25% mediany sąsiednich dni (np. 2,5 kWh przy ok. 28) nie trafia do modelu prognozy, korekty obciążenia, sezonowości ani do średniego błędu. W tabeli „Ostatnie 14 dni” taki wiersz jest przekreślony, z ⚠ i napisem „pominięte”, zamiast absurdalnego „+830%”. Dane nie są kasowane, tylko wyłączone z obliczeń.
+
+## Karta
+- **Logo Komp-Dec** w nagłówku karty zamiast napisu „Centrum Energii” (pliki w `assets/`).
+- **Tabela cen zakupu:** kolory odwrócone względem sprzedaży (najtańsza godzina zielona, najdroższa czerwona).
+- **Wykresy godzinowe dziś i jutro:** wartości w Wh nad słupkami (poziomo na szerokim ekranie, pionowo na wąskim).
+
 # EMS komp-dec — zmiany w 0.8.8 (z 0.8.7)
 
 ## Sprzedaż z baterii
