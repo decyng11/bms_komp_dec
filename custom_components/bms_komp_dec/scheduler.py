@@ -35,6 +35,7 @@ _LOGGER = logging.getLogger(__name__)
 MORNING_PEAK = (6, 13)
 EVENING_PEAK = (15, 22)
 PV_BLOCK_MAX_SOC = 30       # nie blokuj PV gdy SOC < 30
+URGENT_MARGIN_PCT = 5.0       # SOC ≤ próg falownika + tyle pkt = „pilnie” (ładowanie od bieżącej godziny)
 HARD_FLOOR_SOC = 10         # poniżej tego SOC nigdy nie planujemy rozładowania
 
 # Mapowanie klucza time entity -> (label, para start/stop, faza)
@@ -631,7 +632,9 @@ class ScheduleOptimizer:
         ctx["dawn_margin"] = number_value(self.hass, "dawn_margin_soc", 10.0)
         if mode == "storm":
             ctx["target_cfg"] = 100.0
-        ctx["night_floor"] = max(ctx["stop_soc"], ctx["reserve_floor"], HARD_FLOOR_SOC + 5.0, ctx["inv_dawn"])
+        # próg z falownika + margines (jak „margines świtu”): plan nie schodzi tak nisko, by alarmy odzywały się przy normalnej pracy
+        ctx["night_floor"] = max(ctx["stop_soc"], ctx["reserve_floor"], HARD_FLOOR_SOC + 5.0,
+                                 min(90.0, ctx["inv_dawn"] + ctx["dawn_margin"]) if ctx["inv_dawn"] > 0 else 0.0)
         return ctx
 
     def _pv_abs(self, ctx: dict, h_abs: int) -> float:
@@ -907,6 +910,13 @@ class ScheduleOptimizer:
             self._skip_pair(out, set1 + set2,
                             "Pomiń — jutro taryfa nie ma drogich godzin, więc ładowanie z sieci nie ma uzasadnienia cenowego.")
             return out
+        # Pilnie: SOC tuż nad progiem falownika (≤ próg + 5 pkt) w taniej porze → ładujemy od bieżącej godziny, bez czekania na „najlepszą”.
+        floor_now = max(float(ctx.get("inv_now") or 0.0), float(HARD_FLOOR_SOC))
+        urgent = bool(ctx["soc"] is not None and ctx["soc"] <= floor_now + URGENT_MARGIN_PCT and not prof.is_peak(ctx["now"])
+                      and earliest == now_h + 1)
+        ctx["urgent_charge"] = urgent
+        if urgent:
+            earliest = now_h
         end = end_h + 24 if nxt else end_h
         ne = end % 24
         if earliest >= end:
@@ -929,6 +939,9 @@ class ScheduleOptimizer:
             target = 100.0
         floor_note = (f" Próg odcięcia falownika: {ctx['inv_dawn']:.0f}% ({ctx['inv']['source']})."
                       if ctx["inv_dawn"] > ctx["reserve_floor"] else "")
+        if urgent:
+            floor_note += (f" SOC {ctx['soc']:.0f}% jest tuż nad progiem falownika ({floor_now:.0f}%), więc ładowanie startuje od razu, "
+                           f"a nie dopiero w najlepszej godzinie.")
 
         # Słaby dzień po nocy: sam „most do świtu” nie wystarczy — bateria ma pokryć też drogi szczyt (domyślnie 6–22),
         # bo import w szczycie jest wielokrotnie droższy niż ładowanie nocne.
@@ -985,7 +998,7 @@ class ScheduleOptimizer:
                 s_abs, n = earliest, avail
                 grid_kwh = min(grid_kwh, avail * ctx["max_chg_kw"])
                 break
-            new_s = end - n            # ładowanie kończy się tuż przed szczytem
+            new_s = earliest if urgent else end - n            # zwykle: ładowanie kończy się tuż przed szczytem; pilnie: od razu
             if new_s == s_abs:
                 break
             s_abs = new_s
@@ -1023,7 +1036,11 @@ class ScheduleOptimizer:
             stored = max(0.0, (blk_target - soc_at) / 100.0 * cap)
             grid_kwh = stored / eff
             n_new = max(1, min(avail, math.ceil(grid_kwh / chg)))
-            best = self._cheapest_block(ctx, n_new, earliest, end)
+            if ctx.get("urgent_charge"):            # pilnie: start od razu, cena tylko do informacji
+                ps = [self._buy_at(ctx, h) for h in range(earliest, earliest + n_new)]
+                best = (earliest, sum(ps) / n_new) if ps and all(x is not None for x in ps) else (earliest, None)
+            else:
+                best = self._cheapest_block(ctx, n_new, earliest, end)
             s_new, avg = (best if best else (end - n_new, None))
             if (s_new, n_new) == (s_abs, n):
                 break
