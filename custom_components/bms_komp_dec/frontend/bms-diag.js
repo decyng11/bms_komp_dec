@@ -518,6 +518,7 @@
         case 'nt-all': this._dgNtAll(t.dataset.g, t.dataset.v === '1'); break;
         case 'mode-save': this._dgModesSave(t.dataset.k); break;
         case 'press': this._dgPress(t.dataset.eid); break;
+        case 'clear-load-hist': this._dgClearLoadHist(); break;
         case 'cfg-g': s.cfgG = t.dataset.g === s.cfgG ? '' : t.dataset.g; this._dgFilterCfg(); break;
         case 'range': s.ch.range = t.dataset.r; this._dgRenderSection(); break;
         case 'preset': this._dgPreset(t.dataset.p); break;
@@ -800,6 +801,15 @@
       const shown = [{ ...ch[0], to: to === 'on' ? 'włączone' : 'wyłączone' }];
       if (!(await this._dgConfirmChanges(shown))) return;
       await this._dgApply(ch, 'przełącznik');
+    },
+    async _dgClearLoadHist() {
+      const eid = this._eid('button', 'wyczysc_historie_zuzycia'); const st = this._hass.states[eid];
+      if (!st || st.state === 'unavailable') { this._dgToast('Przycisk niedostępny — zaktualizuj integrację EMS komp-dec.', true); return; }
+      const id = await this._dgModal('Wyczyścić historię zużycia?',
+        '<p class="dg-muted">Skasuje zebrane sumy dzienne, profile godzinowe, historię prognoz i sezonowość. Zbieranie zacznie się od zera: prognoza zużycia pojawi się po 5 pełnych dniach, profil godzinowy po 3. Do tego czasu planer pracuje bez prognozy zużycia. <b>Operacji nie da się cofnąć.</b></p>',
+        [{ id: 'cancel', label: 'Anuluj', cls: 'sec' }, { id: 'ok', label: 'Wyczyść historię', cls: 'red' }], 'Rozumiem, że historia zużycia zostanie trwale skasowana.');
+      if (id !== 'ok') return;
+      await this._dgApply([{ eid, name: 'Wyczyść historię zużycia', to: 'press' }], 'czyszczenie historii zużycia');
     },
     async _dgPress(eid) {
       const st = this._hass.states[eid]; if (!st || st.state === 'unavailable') return;
@@ -1486,7 +1496,9 @@
     },
     _dgSec_adv() {
       const ov = DG_LS.get('bms_diag_prefix', '');
-      return `<div class="dg-card"><h4>Prefiks encji falownika</h4><div class="sub">Aktualny: <b>${dgEsc(this._dgPrefix() || '(brak)')}</b> — ${dgEsc(this._dgPrefixSource())}.${this._dgDevices().length ? ' Wykryte urządzenia Solarman: ' + this._dgDevices().map(d => `<b>${dgEsc(d.prefix || d.dev.slice(0, 6))}</b> (${d.cfg} ustawień, ${d.n} encji)`).join(', ') + '.' : ''} Zmień tylko jeśli encje falownika mają inną nazwę (np. <span class="dg-mono">deye</span> zamiast <span class="dg-mono">inverter</span>).</div>
+      return `<div class="dg-card"><h4>Historia zużycia</h4><div class="sub">Dane, z których liczona jest prognoza zużycia domu. Wyczyść, jeśli zawierają nierealne dni — zbieranie rozpocznie się od zera.</div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;"><button class="dg-btn red" data-act="clear-load-hist">🗑 Wyczyść historię zużycia…</button></div></div>
+        <div class="dg-card"><h4>Prefiks encji falownika</h4><div class="sub">Aktualny: <b>${dgEsc(this._dgPrefix() || '(brak)')}</b> — ${dgEsc(this._dgPrefixSource())}.${this._dgDevices().length ? ' Wykryte urządzenia Solarman: ' + this._dgDevices().map(d => `<b>${dgEsc(d.prefix || d.dev.slice(0, 6))}</b> (${d.cfg} ustawień, ${d.n} encji)`).join(', ') + '.' : ''} Zmień tylko jeśli encje falownika mają inną nazwę (np. <span class="dg-mono">deye</span> zamiast <span class="dg-mono">inverter</span>).</div>
         <div style="display:flex;gap:8px;flex-wrap:wrap;"><input type="text" id="dgPrefix" value="${dgEsc(ov)}" placeholder="auto" style="flex:1;min-width:160px;" /><button class="dg-btn" data-act="prefix-save">Zapisz</button></div></div>
         <div class="dg-card"><h4>Rejestry Modbus (ekspert)</h4><div class="sub">Odczyt i zapis dowolnego rejestru przez usługi integracji Solarman. <b class="dg-bad">Zapis w złym rejestrze może uszkodzić falownik lub baterię.</b> Używaj tylko według dokumentacji producenta.</div>
         <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;"><input type="text" id="dgMbReg" placeholder="Rejestr (np. 0x0100 lub 256)" style="width:190px;" /><input type="number" id="dgMbQty" value="1" min="1" max="60" style="width:80px;" title="liczba rejestrów (odczyt)" /><input type="text" id="dgMbVal" placeholder="Wartość (zapis)" style="width:140px;" />
