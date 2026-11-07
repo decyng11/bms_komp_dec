@@ -1,6 +1,6 @@
 {
   "domain": "bms_komp_dec",
-  "name": "BMS komp-dec",
+  "name": "EMS komp-dec",
   "after_dependencies": [
     "energy",
     "forecast_solar"

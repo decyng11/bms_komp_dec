@@ -1,4 +1,4 @@
-# BMS komp-dec — zmiany w 0.8.6 (z 0.8.5)
+# EMS komp-dec — zmiany w 0.8.6 (z 0.8.5)
 
 ## Falowniki Sofar (eksperymentalne, na start w trybie próbnym)
 - **Rozpoznawanie marki** po opcjach trybu pracy: Deye (bez zmian), **Sofar G3** (HYD 5–20KTL-3PH, HYD 3–6K-EP — profile `sofar_g3`, `sofar_g3hyd`) i **Sofar hybrydowy** (HYD 3–6K ES, ME3000SP — profil `sofar_hybrid`). Kreator dobiera encje Sofara z profili ha-solarman jak dotąd.
@@ -17,6 +17,7 @@
 - **Niższe kafelki pogody na telefonie** (ok. 86 px zamiast ok. 135): ikona (nadal animowana), temperatura i kWh w zwartym układzie, bez zawijania „kWh”.
 - **„Aktywne funkcje” tylko włączone i zaplanowane:** wyłączone chipy znikają; włączona funkcja z oknem godzin pokazuje je (np. „Ładowanie (1) 05:00–06:00”), trwająca teraz ma pulsującą kropkę i jest pierwsza, zaplanowana na później — obrys przerywany. Ostrzeżenie „Sprzedaż zablokowana (import)” jest osobnym paskiem i widać je tylko, gdy blokada działa.
 - **„Trwa tanie okno do 03:00” w weekend.** Wyszukiwanie końca taniego okna miało limit 48 godzin, więc w sobotę o 03:41 (cały weekend jest tani) kończyło się w poniedziałek o 03:00. Teraz szuka do 8 dni naprzód, więc poprawnie pokaże poniedziałek 06:00, a przed długim weekendem ze świętem także kilka dób.
+- **Nazwa: BMS → EMS.** W kartach, powiadomieniach, tytułach, nazwach encji, autotestach, README i licencji. Identyfikatory zostają (domena `bms_komp_dec`, identyfikatory encji `…bms_…`, typ karty `custom:bms-panel-card`), więc aktualizacja nie zrywa niczego i nie trzeba nic konfigurować od nowa. „BMS baterii” w parametrach falownika oznacza układ zarządzania baterią i zostaje bez zmian.
 
 # BMS komp-dec — zmiany w 0.8.5 (z 0.8.4)
 

@@ -2,16 +2,16 @@
   "config": {
     "step": {
       "user": {
-        "title": "Dodaj do BMS komp-dec",
+        "title": "Dodaj do EMS komp-dec",
         "description": "Co chcesz dodać?",
         "menu_options": {
           "wizard": "Kreator: falownik + planer w jednym (zalecane)",
-          "bms": "Planer BMS (steruje falownikiem przez jego encje)",
+          "bms": "Planer EMS (steruje falownikiem przez jego encje)",
           "inverter": "Falownik połączony bezpośrednio (eksperymentalne, bez ha-solarman)"
         }
       },
       "bms": {
-        "title": "BMS komp-dec",
+        "title": "EMS komp-dec",
         "description": "Podaj encje źródłowe. Puste = wartości domyślne.",
         "data": {
           "soc": "Encja SOC baterii",
@@ -104,7 +104,7 @@
         }
       },
       "reconfigure": {
-        "title": "Rekonfiguracja BMS komp-dec",
+        "title": "Rekonfiguracja EMS komp-dec",
         "description": "Zmień encje i parametry. Zmiana przeładuje integrację (bez usuwania).",
         "data": {
           "soc": "Encja SOC baterii",
@@ -168,7 +168,7 @@
         }
       },
       "wizard": {
-        "title": "Kreator BMS komp-dec",
+        "title": "Kreator EMS komp-dec",
         "description": "Kreator doda falownik, poczeka aż jego encje się pojawią, dopasuje je do planera i zapisze całość. Zapis do falownika i „Auto-stosowanie” zostają wyłączone, dopóki ich sam nie włączysz.",
         "data": {
           "connection": "Skąd mają pochodzić dane falownika?"
@@ -269,7 +269,7 @@
       }
     },
     "abort": {
-      "single_instance_allowed": "Integracja BMS komp-dec jest już skonfigurowana.",
+      "single_instance_allowed": "Integracja EMS komp-dec jest już skonfigurowana.",
       "reconfigure_successful": "Konfiguracja zapisana, integracja przeładowana.",
       "unknown": "Nieznany błąd.",
       "already_configured_device": "Falownik o tym adresie jest już dodany.",
@@ -294,7 +294,7 @@
   "options": {
     "step": {
       "init": {
-        "title": "Konfiguracja BMS komp-dec",
+        "title": "Konfiguracja EMS komp-dec",
         "description": "Zmień encje i parametry. Zmiana przeładuje integrację (bez usuwania).",
         "data": {
           "soc": "Encja SOC baterii",
@@ -427,19 +427,19 @@
   },
   "issues": {
     "inverter_no_data": {
-      "title": "BMS: brak danych z falownika",
-      "description": "Od ponad 10 minut BMS nie dostaje odczytu SOC ani mocy sieci. Plan i harmonogram nie działają poprawnie bez tych danych.\n\nSprawdź logger Solarman (zasilanie, Wi-Fi) oraz integrację falownika (ha-solarman albo wpis falownika w BMS). Zgłoszenie zniknie samo, gdy dane wrócą."
+      "title": "EMS: brak danych z falownika",
+      "description": "Od ponad 10 minut EMS nie dostaje odczytu SOC ani mocy sieci. Plan i harmonogram nie działają poprawnie bez tych danych.\n\nSprawdź logger Solarman (zasilanie, Wi-Fi) oraz integrację falownika (ha-solarman albo wpis falownika w EMS). Zgłoszenie zniknie samo, gdy dane wrócą."
     },
     "price_missing": {
-      "title": "BMS: brak ceny sprzedaży energii",
-      "description": "Od ponad 30 minut encja z ceną sprzedaży ({entity}) nie podaje wartości. Planer nie oceni opłacalności sprzedaży i blokady ładowania z PV.\n\nSprawdź integrację z cenami (RCE PSE, Pstryk albo inną) albo wskaż właściwą encję w konfiguracji BMS."
+      "title": "EMS: brak ceny sprzedaży energii",
+      "description": "Od ponad 30 minut encja z ceną sprzedaży ({entity}) nie podaje wartości. Planer nie oceni opłacalności sprzedaży i blokady ładowania z PV.\n\nSprawdź integrację z cenami (RCE PSE, Pstryk albo inną) albo wskaż właściwą encję w konfiguracji EMS."
     },
     "pv_forecast_missing": {
-      "title": "BMS: brak godzinowej prognozy PV",
-      "description": "Od ponad 2 godzin nie ma godzinowej prognozy produkcji PV ani na dziś, ani na jutro. Planer liczy wtedy tak, jakby nie było słońca, i może niepotrzebnie ładować baterię z sieci.\n\nSprawdź integrację Solcast albo Forecast.Solar i encje prognozy w konfiguracji BMS."
+      "title": "EMS: brak godzinowej prognozy PV",
+      "description": "Od ponad 2 godzin nie ma godzinowej prognozy produkcji PV ani na dziś, ani na jutro. Planer liczy wtedy tak, jakby nie było słońca, i może niepotrzebnie ładować baterię z sieci.\n\nSprawdź integrację Solcast albo Forecast.Solar i encje prognozy w konfiguracji EMS."
     },
     "auto_apply_no_write": {
-      "title": "BMS: auto-stosowanie bez zapisu do falownika",
+      "title": "EMS: auto-stosowanie bez zapisu do falownika",
       "description": "Auto-stosowanie propozycji jest włączone, ale falownik połączony bezpośrednio ({inverter}) ma wyłączony zapis. Harmonogram się zmienia, a ustawienia falownika nie.\n\nWłącz zapis w opcjach wpisu falownika (Konfiguruj → Zezwól na zapis do falownika) albo wyłącz auto-stosowanie."
     }
   }

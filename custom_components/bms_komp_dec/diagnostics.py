@@ -1,4 +1,4 @@
-"""Plik diagnostyczny (Ustawienia → Urządzenia i usługi → BMS komp-dec → ⋮ → Pobierz diagnostykę).
+"""Plik diagnostyczny (Ustawienia → Urządzenia i usługi → EMS komp-dec → ⋮ → Pobierz diagnostykę).
 
 Konfiguracja, stan działania, plan, wynik sprawdzenia i ostatnie wpisy dziennika — do wysłania przy zgłaszaniu
 problemu. Adres i numer seryjny falownika, usługa powiadomień, hasła i dane lokalizacji są ukryte."""

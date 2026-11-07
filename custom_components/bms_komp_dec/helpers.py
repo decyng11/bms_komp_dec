@@ -1,4 +1,4 @@
-"""Wspólne funkcje pomocnicze BMS komp-dec (bez zależności od innych modułów integracji)."""
+"""Wspólne funkcje pomocnicze EMS komp-dec (bez zależności od innych modułów integracji)."""
 from __future__ import annotations
 
 import math

@@ -33,7 +33,7 @@ class Ledger:
         try:
             data = await self._store.async_load()
         except Exception as err:  # noqa: BLE001
-            _LOGGER.warning("BMS ledger: błąd wczytywania: %s", err)
+            _LOGGER.warning("EMS ledger: błąd wczytywania: %s", err)
             return
         if isinstance(data, dict) and isinstance(data.get("days"), dict):
             for k, v in data["days"].items():

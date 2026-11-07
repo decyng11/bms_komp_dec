@@ -1,4 +1,4 @@
-"""Platforma „datetime” — używana tylko dla falowników dodanych bezpośrednio (BMS nie ma własnych encji tego typu)."""
+"""Platforma „datetime” — używana tylko dla falowników dodanych bezpośrednio (EMS nie ma własnych encji tego typu)."""
 from __future__ import annotations
 
 from .direct import is_inverter_entry

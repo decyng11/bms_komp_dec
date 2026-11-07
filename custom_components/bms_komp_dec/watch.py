@@ -146,5 +146,5 @@ class WriteWatch:
         body = (f"{item['label']}: ustawiono {item['expected']}, a po {int(item['checks'][-1]['after_s'] // 60)} min "
                 f"falownik raportuje {val}." + (f"\n{note}." if note else "") + restore)
         await self.rt.monitor.notifier.send(
-            "drift", "⚠ BMS: parametr falownika zmienił wartość", body,
+            "drift", "⚠ EMS: parametr falownika zmienił wartość", body,
             key=f"drift:{item['entity_id']}", cooldown_s=1800, level="error")

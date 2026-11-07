@@ -121,7 +121,7 @@ const ST = {
   await e.q(() => { window.__clip = null; try { Object.defineProperty(navigator, 'clipboard', { value: { writeText: async (x) => { window.__clip = x; } }, configurable: true }); } catch (err) { /* */ } });
   await e.q(() => __el.shadowRoot.querySelector('[data-act="st-copy"]').click()); await sleep(300);
   const clip = await e.q(() => window.__clip || (__el.shadowRoot.getElementById('dgStTxt') || {}).value);
-  ok(clip && /BMS komp-dec 0\.8\.5 — autotest/.test(clip) && /\[BŁĄD\] Prognoza PV godzinowa — dziś: brak → Zainstaluj Solcast/.test(clip) && /\[OK\] SOC baterii/.test(clip), 'raport tekstowy do skopiowania');
+  ok(clip && /EMS komp-dec 0\.8\.5 — autotest/.test(clip) && /\[BŁĄD\] Prognoza PV godzinowa — dziś: brak → Zainstaluj Solcast/.test(clip) && /\[OK\] SOC baterii/.test(clip), 'raport tekstowy do skopiowania');
   await e.q(() => __el.shadowRoot.querySelector('[data-act="st-run"]').click()); await sleep(400);
   ok(await e.q(() => window.__stN === 2), 'ponowne uruchomienie');
   ok(e.errs.length === 0, 'brak błędów JS ' + JSON.stringify(e.errs));

@@ -1,5 +1,5 @@
 /**
- * BMS Centrum Energii - Integracja
+ * EMS Centrum Energii - Integracja
  * Numer wersji: stała CARD_VERSION (niżej) — Układ: Pogoda -> Funkcje -> Sankey -> Bilans · zakładka Zysk i log
  */
 (function () {
@@ -7,7 +7,7 @@
   // Ochrona przed podwójnym wykonaniem (extra_js_url + zasób Lovelace ładują ten sam plik).
   if (window.__bmsPanelLoaded) return;
   window.__bmsPanelLoaded = true;
-  console.info('>>> BMS PANEL v0.3.0 ZAŁADOWANY <<<');
+  console.info('>>> EMS PANEL v0.3.0 ZAŁADOWANY <<<');
   // true = ujemna moc baterii oznacza ładowanie (Deye/ha-solarman). Nadpisywane z backendu
   // (atrybut battery_charge_sign sensora reserve_soc: ręczne ustawienie albo wykryte z danych).
   let INVERT_BATTERY_SIGN = true;
@@ -37,7 +37,7 @@
         if (window.Chart && !adapterOk()) {
           if (!(await loadScript(VENDOR + 'chartjs-adapter-date-fns.bundle.min.js')) || !adapterOk()) await loadScript(CDN_ADAPTER);
         }
-      } catch (e) { console.warn('BMS: ładowanie Chart.js nie powiodło się', e); }
+      } catch (e) { console.warn('EMS: ładowanie Chart.js nie powiodło się', e); }
     })();
   }
 
@@ -517,10 +517,10 @@
         try {
           this._renderShell();
         } catch (e) {
-          console.error('BMS PANEL: błąd budowy interfejsu', e);
+          console.error('EMS PANEL: błąd budowy interfejsu', e);
           const err = document.createElement('div');
           err.style.cssText = 'padding:16px;color:#f87171;font:14px sans-serif';
-          err.textContent = 'BMS: błąd budowy panelu — szczegóły w konsoli przeglądarki (F12).';
+          err.textContent = 'EMS: błąd budowy panelu — szczegóły w konsoli przeglądarki (F12).';
           this.shadowRoot.appendChild(err);
           return;
         }
@@ -839,7 +839,7 @@
         this._lastHistoryFetch = Date.now();
         requestAnimationFrame(() => this._renderPvProductionChart());
       } catch (e) {
-        console.warn('BMS history fetch error:', e);
+        console.warn('EMS history fetch error:', e);
         this._lastHistoryFetch = Date.now() - 4 * 60 * 1000;
       }
     }
@@ -1599,7 +1599,7 @@
           noteText = `⚠️ Źródło (${sourceEid}) ma ${srcVal.toFixed(2)} kWh, ale historia pusta. `
                    + `Sprawdź <code>recorder:</code> w configuration.yaml i czy encja jest rejestrowana.`;
         } else if (!isNaN(ourVal) && ourVal > 0.1) {
-          noteText = `⚠️ Sensor BMS ma ${ourVal.toFixed(2)} kWh, ale historia pusta. `
+          noteText = `⚠️ Sensor EMS ma ${ourVal.toFixed(2)} kWh, ale historia pusta. `
                    + `Prawdopodobnie recorder jeszcze nie zapisał próbek — poczekaj kilka minut.`;
         } else {
           noteText = `Brak rzeczywistej produkcji dziś (może być 0 kWh jeśli PV nie pracowało).`;
@@ -1913,7 +1913,7 @@
     }
 
     _safe(fn) {
-      try { fn(); } catch (e) { console.warn('BMS PANEL render error:', e); }
+      try { fn(); } catch (e) { console.warn('EMS PANEL render error:', e); }
     }
 
     // ===== ZAAWANSOWANY WYKRES HISTORII =====
@@ -1923,7 +1923,7 @@
       if (!this._chartReady()) {
         this._chartWaitTries = (this._chartWaitTries || 0) + 1;
         if (this._chartWaitTries < 40) setTimeout(() => this._fetchHistoryData(range), 500);
-        else console.warn('BMS: Chart.js / adapter dat nie załadowany (brak dostępu do CDN?)');
+        else console.warn('EMS: Chart.js / adapter dat nie załadowany (brak dostępu do CDN?)');
         return;
       }
 
@@ -2011,7 +2011,7 @@
         this._renderHistoryChart();
 
       } catch (e) {
-        console.warn('BMS history data fetch error:', e);
+        console.warn('EMS history data fetch error:', e);
       }
     }
 
@@ -3047,7 +3047,7 @@
 
     _render() {
       if (!this._hass) return;
-      try { this._renderInner(); } catch (e) { console.warn('BMS PANEL render error:', e); }
+      try { this._renderInner(); } catch (e) { console.warn('EMS PANEL render error:', e); }
     }
 
     _renderFloorAlert() {
@@ -3599,7 +3599,7 @@
         const unit = e => { const s = this._hass.states[e]; return s && s.attributes && s.attributes.unit_of_measurement === 'kW' ? 1000 : 1; };
         const p = series(cfg.eid, cfg.sign * unit(cfg.eid));
         if (p) slot.data = { p, soc: cfg.socEid ? series(cfg.socEid, 1) : null, t0, step };
-      } catch (e) { console.warn('BMS node history error:', e); }
+      } catch (e) { console.warn('EMS node history error:', e); }
     }
 
     _renderPop(k) {
@@ -3907,7 +3907,7 @@
       const selfSuff = loadDone > 0.1 ? Math.max(0, Math.min(100, (1 - imp / loadDone) * 100)) : null;
       box.innerHTML =
         row('☀️', 'Produkcja PV — prognoza' + (pvSrc ? ` (${this._esc(pvSrc)})` : ''), pvDone, pvFc || 0, 'kWh', '#ffcc00', pvFc ? '' : 'brak prognozy PV') +
-        row('🏠', 'Zużycie domu — prognoza BMS', loadDone, loadFc || 0, 'kWh', '#0a84ff', loadFc ? '' : 'brak prognozy zużycia') +
+        row('🏠', 'Zużycie domu — prognoza EMS', loadDone, loadFc || 0, 'kWh', '#0a84ff', loadFc ? '' : 'brak prognozy zużycia') +
         (() => {
           let pvW = Math.max(0, this._num('pv_power'));
           if (pvW < 1) {
@@ -4017,7 +4017,7 @@
     };
     const install = () => {
       const fn = window[m.global];
-      try { fn(BmsPanel, { TC, version: CARD_VERSION, urlVersion: MOD_VER }); } catch (e) { m.err = 'błąd modułu: ' + (e && e.message ? e.message : e); console.error('BMS: moduł ' + name, e); return false; }
+      try { fn(BmsPanel, { TC, version: CARD_VERSION, urlVersion: MOD_VER }); } catch (e) { m.err = 'błąd modułu: ' + (e && e.message ? e.message : e); console.error('EMS: moduł ' + name, e); return false; }
       m.ready = true; m.err = ''; return true;
     };
     m.p = (async () => {
@@ -4074,7 +4074,7 @@
         const fail = (why) => { MODULES.diag.err = why; MODULES.diag.p = null; const r = this._el('diagRoot'); if (r) r.innerHTML = bmsModuleError('diag'); };
         if (!ok) { fail(MODULES.diag.err || 'nieznany błąd'); return; }
         if (this._dgOpen === DG_STUBS._dgOpen) { fail('moduł załadowany, ale nie zainstalował Diagnostyki'); return; }     // moduł nie podmienił zaślepki
-        try { this._dgOpen(); } catch (e) { console.error('BMS: Diagnostyka', e); fail('błąd przy otwieraniu Diagnostyki: ' + (e && e.message ? e.message : e)); return; }
+        try { this._dgOpen(); } catch (e) { console.error('EMS: Diagnostyka', e); fail('błąd przy otwieraniu Diagnostyki: ' + (e && e.message ? e.message : e)); return; }
         if (!this._el('dgHost')) fail('moduł nie wyświetlił Diagnostyki');          // nigdy nie zostawiamy samego napisu „Ładowanie…”
       });
     },
@@ -4124,10 +4124,10 @@
 
   if (!customElements.get('bms-panel-card')) {
     try { customElements.define('bms-panel-card', BmsPanel); }
-    catch (e) { console.error('BMS PANEL: define failed', e); }
+    catch (e) { console.error('EMS PANEL: define failed', e); }
   }
   window.customCards = window.customCards || [];
   if (!window.customCards.some(c => c && c.type === 'bms-panel-card')) {
-    window.customCards.push({ type: 'bms-panel-card', name: 'Centrum Energii', description: 'BMS Panel', preview: true });
+    window.customCards.push({ type: 'bms-panel-card', name: 'Centrum Energii', description: 'EMS Panel', preview: true });
   }
 })();

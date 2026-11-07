@@ -1,4 +1,4 @@
-"""Buttons for BMS komp-dec."""
+"""Buttons for EMS komp-dec."""
 from __future__ import annotations
 
 import logging
@@ -34,5 +34,5 @@ class BmsButton(BmsBaseEntity, ButtonEntity):
     async def async_press(self) -> None:
         runtime = getattr(self._coordinator, "runtime", None)
         if runtime is None:
-            raise HomeAssistantError("BMS nie jest jeszcze gotowy — spróbuj za chwilę.")
+            raise HomeAssistantError("EMS nie jest jeszcze gotowy — spróbuj za chwilę.")
         await runtime.run_command(self._key, source="ręcznie")

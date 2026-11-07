@@ -1,4 +1,4 @@
-"""Switches for BMS komp-dec."""
+"""Switches for EMS komp-dec."""
 from __future__ import annotations
 
 import logging
@@ -53,7 +53,7 @@ class BmsSwitch(BmsBaseEntity, RestoreEntity, SwitchEntity):
         eid = ictl.resolve(self.hass, self._cfg(), "tou_select")
         option = ictl.pick_option(self.hass, eid, "tou_off" if enable else "tou_on")
         if option is None:
-            _LOGGER.error("BMS switch %s: encja %s nie ma oczekiwanej opcji TOU (dostępne: %s)",
+            _LOGGER.error("EMS switch %s: encja %s nie ma oczekiwanej opcji TOU (dostępne: %s)",
                           self._key, eid, ictl.options_of(self.hass, eid))
             return False
         try:
@@ -61,7 +61,7 @@ class BmsSwitch(BmsBaseEntity, RestoreEntity, SwitchEntity):
                 "select", "select_option", {"entity_id": eid, "option": option}, blocking=True)
             return True
         except Exception as err:  # noqa: BLE001
-            _LOGGER.error("BMS switch %s: nie udało się ustawić %s: %s", self._key, eid, err)
+            _LOGGER.error("EMS switch %s: nie udało się ustawić %s: %s", self._key, eid, err)
             return False
 
     async def async_turn_on(self, **kwargs):

@@ -1,4 +1,4 @@
-"""BMS komp-dec integration."""
+"""EMS komp-dec integration."""
 from __future__ import annotations
 
 import logging
@@ -67,7 +67,7 @@ def _get_optimizer(hass: HomeAssistant) -> ScheduleOptimizer | None:
 def _cleanup_legacy_entities(hass: HomeAssistant) -> None:
     ent_reg = er.async_get(hass)
     removed = 0
-    # falowniki dodane bezpośrednio mają tę samą platformę (DOMAIN), ale ich encje nie należą do BMS — nie ruszać
+    # falowniki dodane bezpośrednio mają tę samą platformę (DOMAIN), ale ich encje nie należą do EMS — nie ruszać
     direct_ids = {e.entry_id for e in hass.config_entries.async_entries(DOMAIN) if is_inverter_entry(e)}
     for entity in list(ent_reg.entities.values()):
         if entity.platform != DOMAIN:
@@ -82,7 +82,7 @@ def _cleanup_legacy_entities(hass: HomeAssistant) -> None:
         except Exception:  # noqa: BLE001
             pass
     if removed:
-        _LOGGER.warning("BMS: usunięto %d starych encji", removed)
+        _LOGGER.warning("EMS: usunięto %d starych encji", removed)
 
 
 # --------------------------------------------------------------- frontend
@@ -95,25 +95,25 @@ async def _async_register_frontend(hass: HomeAssistant) -> None:
     try:
         mtime = int((await hass.async_add_executor_job(js_path.stat)).st_mtime)
     except Exception:  # noqa: BLE001
-        _LOGGER.warning("BMS: brak pliku %s", js_path)
+        _LOGGER.warning("EMS: brak pliku %s", js_path)
         mtime = 0
     try:
         await hass.http.async_register_static_paths(
             [StaticPathConfig(_JS_URL, str(js_path), cache_headers=False)]
         )
     except Exception as err:  # noqa: BLE001
-        _LOGGER.warning("BMS: rejestracja %s nie powiodła się: %s", _JS_URL, err)
+        _LOGGER.warning("EMS: rejestracja %s nie powiodła się: %s", _JS_URL, err)
     for fname in _MODULE_FILES:
         mpath = _FRONTEND_DIR / fname
         try:
             if not await hass.async_add_executor_job(mpath.is_file):
-                _LOGGER.warning("BMS: brak pliku modułu karty %s — odpowiednia zakładka nie będzie działać", fname)
+                _LOGGER.warning("EMS: brak pliku modułu karty %s — odpowiednia zakładka nie będzie działać", fname)
                 continue
             await hass.http.async_register_static_paths(
                 [StaticPathConfig(f"/{DOMAIN}/{fname}", str(mpath), cache_headers=False)]
             )
         except Exception as err:  # noqa: BLE001
-            _LOGGER.warning("BMS: rejestracja modułu %s nie powiodła się: %s", fname, err)
+            _LOGGER.warning("EMS: rejestracja modułu %s nie powiodła się: %s", fname, err)
     # opcjonalne lokalne kopie Chart.js (frontend/vendor) — panel użyje ich zamiast CDN
     for fname in _VENDOR_FILES:
         vpath = _FRONTEND_DIR / "vendor" / fname
@@ -124,7 +124,7 @@ async def _async_register_frontend(hass: HomeAssistant) -> None:
                 [StaticPathConfig(f"/{DOMAIN}/vendor/{fname}", str(vpath), cache_headers=True)]
             )
         except Exception as err:  # noqa: BLE001
-            _LOGGER.debug("BMS: lokalny plik %s niedostępny: %s", fname, err)
+            _LOGGER.debug("EMS: lokalny plik %s niedostępny: %s", fname, err)
     url = f"{_JS_URL}?v={VERSION}.{mtime}"
     add_extra_js_url(hass, url)
     if hass.is_running:
@@ -137,7 +137,7 @@ async def _async_register_frontend(hass: HomeAssistant) -> None:
 
 
 def _is_bms_card_url(url: Any) -> bool:
-    """Czy adres wygląda na plik karty BMS (np. stara ręczna kopia /local/bms-panel-final.js)."""
+    """Czy adres wygląda na plik karty EMS (np. stara ręczna kopia /local/bms-panel-final.js)."""
     path = str(url or "").split("?")[0].lower()
     return "bms-panel" in path or "bms_panel" in path
 
@@ -158,7 +158,7 @@ async def _async_ensure_lovelace_resource(hass: HomeAssistant, url: str) -> None
         if resources is None and isinstance(ll, dict):
             resources = ll.get("resources")
         if resources is None or not hasattr(resources, "async_create_item"):
-            _LOGGER.info("BMS: zasoby dashboardu nie są w trybie storage (YAML?) — karta ładuje się przez add_extra_js_url; "
+            _LOGGER.info("EMS: zasoby dashboardu nie są w trybie storage (YAML?) — karta ładuje się przez add_extra_js_url; "
                          "jeśli zasób dodałeś ręcznie, ustaw w nim adres %s", url)
             return
         if not getattr(resources, "loaded", True):
@@ -166,7 +166,7 @@ async def _async_ensure_lovelace_resource(hass: HomeAssistant, url: str) -> None
             resources.loaded = True
         items = [it for it in resources.async_items() if isinstance(it, dict)]
     except Exception as err:  # noqa: BLE001
-        _LOGGER.warning("BMS: nie udało się odczytać zasobów dashboardu: %s", err, exc_info=True)
+        _LOGGER.warning("EMS: nie udało się odczytać zasobów dashboardu: %s", err, exc_info=True)
         return
 
     ours = [it for it in items if str(it.get("url", "")).split("?")[0] == _JS_URL]
@@ -175,11 +175,11 @@ async def _async_ensure_lovelace_resource(hass: HomeAssistant, url: str) -> None
         other = str(it.get("url", ""))
         if other.split("?")[0] != _JS_URL and _is_bms_card_url(other):
             _LOGGER.warning(
-                "BMS: na liście zasobów dashboardu jest jeszcze jeden egzemplarz karty: %s. Jeśli to stary plik, może "
+                "EMS: na liście zasobów dashboardu jest jeszcze jeden egzemplarz karty: %s. Jeśli to stary plik, może "
                 "przesłaniać nową wersję (pierwszy załadowany wygrywa, kolejne są ignorowane). Usuń go: Ustawienia → "
                 "Pulpity → ⋮ → Zasoby.", other)
     for dup in ours[1:]:
-        _LOGGER.warning("BMS: zasób karty %s występuje na liście więcej niż raz — zostaw jeden wpis.", dup.get("url"))
+        _LOGGER.warning("EMS: zasób karty %s występuje na liście więcej niż raz — zostaw jeden wpis.", dup.get("url"))
 
     try:
         if ours:
@@ -187,14 +187,14 @@ async def _async_ensure_lovelace_resource(hass: HomeAssistant, url: str) -> None
             old = item.get("url")
             if old != url:
                 await resources.async_update_item(item["id"], {"res_type": "module", "url": url})
-                _LOGGER.info("BMS: zaktualizowano zasób dashboardu %s → %s", old, url)
+                _LOGGER.info("EMS: zaktualizowano zasób dashboardu %s → %s", old, url)
             return
         await resources.async_create_item({"res_type": "module", "url": url})
-        _LOGGER.info("BMS: dodano zasób dashboardu %s", url)
+        _LOGGER.info("EMS: dodano zasób dashboardu %s", url)
     except Exception as err:  # noqa: BLE001
         current = ours[0].get("url") if ours else "(brak wpisu)"
         _LOGGER.warning(
-            "BMS: nie udało się ustawić zasobu dashboardu na %s (obecnie: %s): %s. Przeglądarka może dostawać starą kopię "
+            "EMS: nie udało się ustawić zasobu dashboardu na %s (obecnie: %s): %s. Przeglądarka może dostawać starą kopię "
             "karty — ustaw adres ręcznie: Ustawienia → Pulpity → ⋮ → Zasoby.", url, current, err, exc_info=True)
 
 
@@ -239,7 +239,7 @@ def _as_bool(value: Any) -> bool | None:
 def _need_runtime(hass: HomeAssistant) -> BmsRuntime:
     rt = _get_runtime(hass)
     if rt is None:
-        raise HomeAssistantError("BMS komp-dec nie jest jeszcze uruchomiony")
+        raise HomeAssistantError("EMS komp-dec nie jest jeszcze uruchomiony")
     return rt
 
 
@@ -354,7 +354,7 @@ def _register_services(hass: HomeAssistant) -> None:
         await _require_admin(hass, call)
         rt = _need_runtime(hass)
         svc = rt.cfg.get("notify_service") or None
-        await rt.monitor.notifier.send("test", "✅ BMS: powiadomienie testowe",
+        await rt.monitor.notifier.send("test", "✅ EMS: powiadomienie testowe",
                                        "Jeśli to widzisz na telefonie, powiadomienia działają.", key=f"test:{dt_util.now().timestamp()}",
                                        level="info", force=True)
         return {"notify_service": svc, "phone": bool(svc), "enabled": switch_on(hass, "notifications_enabled", True)}
@@ -487,13 +487,13 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         try:
             await async_daily_suggest(runtime, hass, optimizer)
         except Exception as err:  # noqa: BLE001
-            _LOGGER.error("BMS auto-suggest: %s", err, exc_info=True)
+            _LOGGER.error("EMS auto-suggest: %s", err, exc_info=True)
 
     entry.async_on_unload(
         async_track_time_change(hass, _daily_suggest, hour=_SUGGEST_HOUR, minute=0, second=0)
     )
 
-    runtime.log.add("system", f"BMS komp-dec {VERSION} uruchomiony ({len(SCHEDULE_RULES)} reguł harmonogramu)")
+    runtime.log.add("system", f"EMS komp-dec {VERSION} uruchomiony ({len(SCHEDULE_RULES)} reguł harmonogramu)")
     return True
 
 

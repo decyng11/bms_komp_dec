@@ -109,7 +109,7 @@ async def main():
     check("podsumowanie w autotestcie: brak usługi notify → ostrzeżenie", r["status"] == "warn" and "nie na telefon" in r["detail"], r)
     rt.cfg["notify_service"] = "notify.mobile_app_tel"
     hass.states.set("switch.bms_notifications_enabled", "off")
-    check("podsumowanie w autotestcie: wyłączony przełącznik → ostrzeżenie", "Powiadomienia BMS" in (await sl())["detail"])
+    check("podsumowanie w autotestcie: wyłączony przełącznik → ostrzeżenie", "Powiadomienia EMS" in (await sl())["detail"])
     hass.states.set("switch.bms_notifications_enabled", "on")
     rt.state["notify_cfg"] = NC.effective({"kinds": {"summary_daily": {"on": True}}, "sched": {"daily": {"time": "21:00"}, "quiet": {"on": True, "start": "20:00", "end": "07:00"}}})
     check("podsumowanie w autotestcie: godzina w ciszy nocnej → ostrzeżenie", "ciszy nocnej" in (await sl())["detail"])

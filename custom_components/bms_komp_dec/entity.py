@@ -1,4 +1,4 @@
-"""Base entity for BMS komp-dec."""
+"""Base entity for EMS komp-dec."""
 from __future__ import annotations
 from homeassistant.helpers.entity import Entity
 

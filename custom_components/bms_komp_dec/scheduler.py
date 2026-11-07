@@ -1,4 +1,4 @@
-"""Inteligentny optymalizator harmonogramu BMS."""
+"""Inteligentny optymalizator harmonogramu EMS."""
 from __future__ import annotations
 
 import logging
@@ -213,7 +213,7 @@ class ScheduleOptimizer:
         try:
             return self._read_buy_arrays().get(d.isoformat())
         except Exception:  # noqa: BLE001
-            _LOGGER.debug("BMS: odczyt godzinowych cen zakupu nieudany", exc_info=True)
+            _LOGGER.debug("EMS: odczyt godzinowych cen zakupu nieudany", exc_info=True)
             return None
 
     def buy_report(self) -> dict[str, Any]:
@@ -711,7 +711,7 @@ class ScheduleOptimizer:
         try:
             await self.pv_fc.async_refresh()
         except Exception as err:  # noqa: BLE001
-            _LOGGER.debug("BMS: odświeżenie prognozy PV nieudane: %s", err)
+            _LOGGER.debug("EMS: odświeżenie prognozy PV nieudane: %s", err)
         now = dt_util.now()
         soc = self._read_soc()
         if soc is None:
@@ -736,7 +736,7 @@ class ScheduleOptimizer:
         try:
             curve = self._plan_curve(ctx)
         except Exception as err:  # noqa: BLE001
-            _LOGGER.warning("BMS: nie udało się policzyć krzywej planu: %s", err, exc_info=True)
+            _LOGGER.warning("EMS: nie udało się policzyć krzywej planu: %s", err, exc_info=True)
             curve = None
         return {
             "mode": ctx["mode"],

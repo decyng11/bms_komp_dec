@@ -140,7 +140,7 @@ class PvForecast:
             try:
                 res = await async_get_solar_forecast(self.hass, e.entry_id)
             except Exception as err:  # noqa: BLE001
-                _LOGGER.debug("BMS: Forecast.Solar %s: %s", e.entry_id, err)
+                _LOGGER.debug("EMS: Forecast.Solar %s: %s", e.entry_id, err)
                 continue
             wh = (res or {}).get("wh_hours") if isinstance(res, dict) else None
             if not isinstance(wh, dict) or not wh:

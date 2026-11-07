@@ -37,7 +37,7 @@ def _inverter_group(rt) -> list[dict[str, str]]:
         eid = cfg.get(key)
         st = hass.states.get(eid) if eid else None
         if st is None:
-            out.append(_c(f"live_{key}", label, "error", f"brak encji {eid or '(nie ustawiono)'}", "Wskaż encję w konfiguracji BMS."))
+            out.append(_c(f"live_{key}", label, "error", f"brak encji {eid or '(nie ustawiono)'}", "Wskaż encję w konfiguracji EMS."))
             continue
         if str(st.state).strip().lower() in _BAD:
             out.append(_c(f"live_{key}", label, "error", f"{eid} = „{st.state}”", "Logger nie odpowiada — sprawdź zasilanie i Wi-Fi loggera."))
@@ -50,10 +50,10 @@ def _inverter_group(rt) -> list[dict[str, str]]:
             out.append(_c(f"live_{key}", label, "ok", f"{eid} = {st.state}" + (f" (odczyt sprzed {age:.0f} min)" if age is not None and age >= 1 else "")))
     data = rt.coordinator.data or {}
     keys = [k for k in ("pv_power", "load_power", "battery_power", "grid_power") if isinstance(data.get(k), (int, float))]
-    out.append(_c("live_coord", "Dane w BMS (co 10 s)", "ok" if len(keys) == 4 else "warn",
+    out.append(_c("live_coord", "Dane w EMS (co 10 s)", "ok" if len(keys) == 4 else "warn",
                   ", ".join(f"{k.replace('_power', '')} {data[k]:.0f} W" for k in keys) or "brak",
                   "" if len(keys) == 4 else "Część mocy jest liczona z innych odczytów — sprawdź encje mocy w konfiguracji."))
-    # wpisy integracji (kreator: BMS + falownik bezpośredni) i skąd są encje sterujące
+    # wpisy integracji (kreator: EMS + falownik bezpośredni) i skąd są encje sterujące
     try:
         entries = hass.config_entries.async_entries(DOMAIN)
         from .direct import is_inverter_entry
@@ -62,7 +62,7 @@ def _inverter_group(rt) -> list[dict[str, str]]:
         has_solarman = bool(hass.config_entries.async_entries("solarman"))
         src = "falownik połączony bezpośrednio" if inv else ("ha-solarman" if has_solarman else "brak integracji falownika")
         st_ok = "ok" if bms and (inv or has_solarman) else "warn"
-        out.append(_c("entries", "Wpisy integracji", st_ok, f"BMS ×{len(bms)}, falownik bezpośredni ×{len(inv)}, ha-solarman: {'tak' if has_solarman else 'nie'} → {src}",
+        out.append(_c("entries", "Wpisy integracji", st_ok, f"EMS ×{len(bms)}, falownik bezpośredni ×{len(inv)}, ha-solarman: {'tak' if has_solarman else 'nie'} → {src}",
                       "" if st_ok == "ok" else "Kreator nie dokończył konfiguracji — uruchom go ponownie z Diagnostyki."))
         if inv and has_solarman:
             out.append(_c("entries_both", "Dwa połączenia z falownikiem", "warn",
@@ -106,7 +106,7 @@ def _pv_group(rt) -> list[dict[str, str]]:
                           "Suma godzinowa różni się od dziennej o ponad 25% — sprawdź, czy encja prognozy dotyczy wszystkich połaci." if bad else ""))
         else:
             out.append(_c(f"pv_{lbl}", f"Prognoza PV godzinowa — {lbl}", "error" if lbl == "dziś" else "warn", "brak",
-                          "Zainstaluj Solcast albo Forecast.Solar i wskaż encję prognozy w konfiguracji BMS."))
+                          "Zainstaluj Solcast albo Forecast.Solar i wskaż encję prognozy w konfiguracji EMS."))
     fc = getattr(opt, "pv_fc", None)
     if fc is not None and fc.has_forecast_solar():
         n = getattr(fc, "_fs_entries", 0)
@@ -126,7 +126,7 @@ def _price_group(rt) -> list[dict[str, str]]:
     b, s = rt.buy_price(), rt.sell_price()
     out.append(_c("price_now", "Ceny teraz", "ok" if s is not None and b is not None else "error",
                   f"zakup {b if b is not None else '—'} zł/kWh, sprzedaż {s if s is not None else '—'} zł/kWh",
-                  "" if s is not None and b is not None else "Sprawdź encje cen w konfiguracji BMS."))
+                  "" if s is not None and b is not None else "Sprawdź encje cen w konfiguracji EMS."))
     try:
         arr = rt.optimizer.rce_arrays()
         today = dt_util.now().date()
@@ -152,14 +152,14 @@ def _grid_group(rt) -> list[dict[str, str]]:
         pass
     if st is None:
         return [_c("grid_v", "Wykrywanie zaniku sieci", "warn", f"brak encji napięcia L1 ({eid or 'nie ustawiono'})",
-                   "Wskaż encję napięcia sieci L1 w konfiguracji — bez niej BMS nie zauważy zaniku sieci.")]
+                   "Wskaż encję napięcia sieci L1 w konfiguracji — bez niej EMS nie zauważy zaniku sieci.")]
     try:
         v = float(st.state)
     except (TypeError, ValueError):
         return [_c("grid_v", "Wykrywanie zaniku sieci", "warn", f"{eid} = „{st.state}” (brak liczby)")]
     go = rt.state.get("grid_outage") or {}
     if v < thr:
-        return [_c("grid_v", "Wykrywanie zaniku sieci", "warn", f"{eid} = {v:.0f} V — poniżej progu {thr:.0f} V, BMS uznaje to za zanik sieci"
+        return [_c("grid_v", "Wykrywanie zaniku sieci", "warn", f"{eid} = {v:.0f} V — poniżej progu {thr:.0f} V, EMS uznaje to za zanik sieci"
                    + (" (zgłoszony)" if go.get("notified") else ""),
                    "Jeśli sieć jest, a napięcie pokazuje 0 V, ta encja nie nadaje się do wykrywania zaniku — wskaż inną.")]
     return [_c("grid_v", "Wykrywanie zaniku sieci", "ok", f"{eid} = {v:.0f} V (próg zaniku {thr:.0f} V)")]
@@ -209,7 +209,7 @@ async def _devices_group(rt) -> list[dict[str, str]]:
     if n:
         out.append(_c("dev_ctl", "Sterowanie urządzeniami", "ok" if ctl["enabled"] else "warn",
                       f"{'włączone' if ctl['enabled'] else 'wyłączone'}, urządzeń z przełącznikiem: {n}",
-                      "" if ctl["enabled"] else "Włącz „Sterowanie urządzeniami” w zakładce Urządzenia, jeśli BMS ma włączać przełączniki."))
+                      "" if ctl["enabled"] else "Włącz „Sterowanie urządzeniami” w zakładce Urządzenia, jeśli EMS ma włączać przełączniki."))
     return out
 
 
@@ -227,7 +227,7 @@ def _summary_checks(rt) -> list[dict[str, str]]:
         last = (rt.state.get("summary_sent") or {}).get("daily")
         probs = []
         if not switch_on(rt.hass, "notifications_enabled", True):
-            probs.append("przełącznik „Powiadomienia BMS” jest wyłączony — nic nie zostanie wysłane")
+            probs.append("przełącznik „Powiadomienia EMS” jest wyłączony — nic nie zostanie wysłane")
         if not str(rt.cfg.get("notify_service") or "").strip():
             probs.append("nie wskazano usługi notify — podsumowanie trafi tylko do powiadomień w HA, nie na telefon")
         qh, qm = (int(x) for x in t.split(":"))

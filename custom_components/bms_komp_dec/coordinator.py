@@ -1,4 +1,4 @@
-"""Data coordinator for BMS komp-dec."""
+"""Data coordinator for EMS komp-dec."""
 from __future__ import annotations
 
 import logging
@@ -113,7 +113,7 @@ class BmsCoordinator(DataUpdateCoordinator):
             self.load_forecast.update()
             data["load_forecast"] = self.load_forecast.as_dict()
         except Exception as err:  # noqa: BLE001
-            _LOGGER.warning("BMS: błąd prognozy zużycia: %s", err, exc_info=True)
+            _LOGGER.warning("EMS: błąd prognozy zużycia: %s", err, exc_info=True)
             data["load_forecast"] = {}
 
         return data

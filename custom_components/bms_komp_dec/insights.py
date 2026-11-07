@@ -174,7 +174,7 @@ class Insights:
         try:
             raw = await self._store.async_load()
         except Exception as err:  # noqa: BLE001
-            _LOGGER.warning("BMS insights: błąd wczytywania: %s", err)
+            _LOGGER.warning("EMS insights: błąd wczytywania: %s", err)
             return
         if not isinstance(raw, dict):
             return
@@ -285,7 +285,7 @@ class Insights:
             if res is not None:
                 self.days[d] = res
         except Exception as err:  # noqa: BLE001
-            _LOGGER.debug("BMS insights: dzień %s: %s", d, err)
+            _LOGGER.debug("EMS insights: dzień %s: %s", d, err)
         rec = self.fc.get(d)
         if rec is not None:
             cnt = self.counters.get(d) or {}

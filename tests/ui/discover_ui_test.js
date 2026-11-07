@@ -28,7 +28,7 @@ const DISC = { free_slots: 2, total: 3, energy_dashboard: true, skipped: { home:
   const t = await sr(e, '#devRoot');
   ok(await e.q(() => window.__disc === 1), 'wywołana usługa devices_discover');
   ok(/Wallbox/.test(t) && /Gniazdko/.test(t) && /panel Energia/.test(t) && /niedostępne/.test(t) && /bez historii/.test(t) && /7\s?200 W|7200 W/.test(t), 'lista: nazwy, oznaczenia, moc teraz');
-  ok(/2 liczników domu/.test(t) && /5 encji BMS/.test(t) && /3 już dodanych/.test(t), 'informacja o pominiętych');
+  ok(/2 liczników domu/.test(t) && /5 encji EMS/.test(t) && /3 już dodanych/.test(t), 'informacja o pominiętych');
   ok(await e.q(() => !__el.shadowRoot.querySelector('#devRoot img') && !window.__pwn), 'nazwa zescape-owana');
   ok(await e.q(() => { const c = __el.shadowRoot.querySelectorAll('[data-dvd="on"]'); return c[0].checked && !c[1].checked && !c[2].checked; }), 'z panelu Energia zaznaczone od razu');
   ok(/Dodaj zaznaczone \(1\)/.test(t) && /Wolnych miejsc: 2/.test(t), 'licznik zaznaczonych i wolnych miejsc');

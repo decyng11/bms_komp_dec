@@ -77,7 +77,7 @@ def validate_connection(user_input: dict[str, Any]) -> dict[str, str] | None:
     except gaierror:
         error = "cannot_connect"
     except Exception as err:  # noqa: BLE001
-        _LOGGER.warning("BMS: walidacja adresu falownika nieudana: %s", strepr(err))
+        _LOGGER.warning("EMS: walidacja adresu falownika nieudana: %s", strepr(err))
     else:
         return None
     return {"base": error}

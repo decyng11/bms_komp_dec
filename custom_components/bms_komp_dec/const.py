@@ -1,4 +1,4 @@
-"""Constants for BMS komp-dec integration."""
+"""Constants for EMS komp-dec integration."""
 DOMAIN = "bms_komp_dec"
 VERSION = "0.8.6"
 
@@ -133,30 +133,30 @@ DEFAULT_CONFIG = {
 }
 
 SENSORS = [
-    ("soc", "BMS SOC", "%", "mdi:battery", CONF_SOC),
-    ("pv_power", "BMS PV Power", "W", "mdi:solar-power", CONF_PV_POWER),
-    ("load_power", "BMS Load Power", "W", "mdi:home", CONF_LOAD_POWER),
-    ("battery_power", "BMS Battery Power", "W", "mdi:battery", CONF_BATTERY_POWER),
-    ("grid_power", "BMS Grid Power", "W", "mdi:transmission-tower", CONF_GRID_POWER),
-    ("energy_pv_today", "BMS Energy PV Today", "kWh", "mdi:solar-power", CONF_ENERGY_PV_TODAY),
-    ("energy_load_today", "BMS Energy Load Today", "kWh", "mdi:home", CONF_ENERGY_LOAD_TODAY),
-    ("energy_grid_export_today", "BMS Energy Grid Export Today", "kWh", "mdi:transmission-tower-export", CONF_ENERGY_GRID_EXPORT_TODAY),
-    ("energy_grid_import_today", "BMS Energy Grid Import Today", "kWh", "mdi:transmission-tower-import", CONF_ENERGY_GRID_IMPORT_TODAY),
-    ("energy_battery_charge_today", "BMS Energy Batt Charge Today", "kWh", "mdi:battery-plus", CONF_ENERGY_BATT_CHARGE_TODAY),
-    ("energy_battery_discharge_today", "BMS Energy Batt Discharge Today", "kWh", "mdi:battery-minus", CONF_ENERGY_BATT_DISCHARGE_TODAY),
+    ("soc", "EMS SOC", "%", "mdi:battery", CONF_SOC),
+    ("pv_power", "EMS PV Power", "W", "mdi:solar-power", CONF_PV_POWER),
+    ("load_power", "EMS Load Power", "W", "mdi:home", CONF_LOAD_POWER),
+    ("battery_power", "EMS Battery Power", "W", "mdi:battery", CONF_BATTERY_POWER),
+    ("grid_power", "EMS Grid Power", "W", "mdi:transmission-tower", CONF_GRID_POWER),
+    ("energy_pv_today", "EMS Energy PV Today", "kWh", "mdi:solar-power", CONF_ENERGY_PV_TODAY),
+    ("energy_load_today", "EMS Energy Load Today", "kWh", "mdi:home", CONF_ENERGY_LOAD_TODAY),
+    ("energy_grid_export_today", "EMS Energy Grid Export Today", "kWh", "mdi:transmission-tower-export", CONF_ENERGY_GRID_EXPORT_TODAY),
+    ("energy_grid_import_today", "EMS Energy Grid Import Today", "kWh", "mdi:transmission-tower-import", CONF_ENERGY_GRID_IMPORT_TODAY),
+    ("energy_battery_charge_today", "EMS Energy Batt Charge Today", "kWh", "mdi:battery-plus", CONF_ENERGY_BATT_CHARGE_TODAY),
+    ("energy_battery_discharge_today", "EMS Energy Batt Discharge Today", "kWh", "mdi:battery-minus", CONF_ENERGY_BATT_DISCHARGE_TODAY),
 ]
 
 BINARY_SENSORS = [
-    ("sprzedaz_aktywna", "BMS Sprzedaż aktywna", "mdi:cash-fast"),
-    ("blokada_pv_aktywna", "BMS Blokada ładowania PV", "mdi:battery-off"),
-    ("peak_shaving_active", "BMS Peak shaving", "mdi:chart-bell-curve"),
-    ("grid_import_legal_blocked", "BMS Limit importu z sieci przekroczony", "mdi:transmission-tower-import"),
-    ("self_consumption_ok", "BMS Autokonsumpcja OK", "mdi:home-battery"),
-    ("sprzedaz_zablokowana_importem", "BMS Sprzedaż zablokowana importem z sieci", "mdi:transmission-tower-import"),
-    ("sprzedaz_zablokowana_arbitraz", "BMS Sprzedaż zablokowana arbitrażem (2 dni)", "mdi:battery-alert"),
-    ("ujemna_cena_aktywna", "BMS Niska/ujemna cena RCE", "mdi:cash-remove"),
-    ("sprzedaz_nieoplacalna", "BMS Sprzedaż nieopłacalna", "mdi:calculator-variant"),
-    ("dzien_swiateczny", "BMS Dzień świąteczny", "mdi:calendar-star"),
+    ("sprzedaz_aktywna", "EMS Sprzedaż aktywna", "mdi:cash-fast"),
+    ("blokada_pv_aktywna", "EMS Blokada ładowania PV", "mdi:battery-off"),
+    ("peak_shaving_active", "EMS Peak shaving", "mdi:chart-bell-curve"),
+    ("grid_import_legal_blocked", "EMS Limit importu z sieci przekroczony", "mdi:transmission-tower-import"),
+    ("self_consumption_ok", "EMS Autokonsumpcja OK", "mdi:home-battery"),
+    ("sprzedaz_zablokowana_importem", "EMS Sprzedaż zablokowana importem z sieci", "mdi:transmission-tower-import"),
+    ("sprzedaz_zablokowana_arbitraz", "EMS Sprzedaż zablokowana arbitrażem (2 dni)", "mdi:battery-alert"),
+    ("ujemna_cena_aktywna", "EMS Niska/ujemna cena RCE", "mdi:cash-remove"),
+    ("sprzedaz_nieoplacalna", "EMS Sprzedaż nieopłacalna", "mdi:calculator-variant"),
+    ("dzien_swiateczny", "EMS Dzień świąteczny", "mdi:calendar-star"),
 ]
 
 # (key, nazwa, ikona, domyślny stan gdy brak zapamiętanego)
@@ -183,7 +183,7 @@ SWITCHES = [
     ("auto_apply", "Automatyczne stosowanie propozycji", "mdi:robot", False),
     ("readback_verify", "Weryfikuj wykonanie komend (odczyt zwrotny)", "mdi:check-network", True),
     # --- powiadomienia, tryby specjalne, test na sucho
-    ("notifications_enabled", "Powiadomienia BMS", "mdi:bell-ring", True),
+    ("notifications_enabled", "Powiadomienia EMS", "mdi:bell-ring", True),
     ("storm_mode", "Tryb burzowy (rezerwa 100%, bez sprzedaży)", "mdi:weather-lightning", False),
     ("vacation_mode", "Tryb urlopowy (minimalne zużycie)", "mdi:palm-tree", False),
     ("auto_apply_dry_run", "Auto-stosowanie: tylko podgląd (bez zapisu)", "mdi:eye-check", False),
@@ -281,18 +281,18 @@ MODE_ZERO = "Zero Export To Load"
 
 # Sensory runtime (wartości liczone przez BmsRuntime): key, nazwa, jednostka, ikona
 RUNTIME_SENSORS = [
-    ("decision_log", "BMS Dziennik decyzji", None, "mdi:clipboard-text-clock"),
-    ("profit_today", "BMS Bilans dziś", "PLN", "mdi:cash"),
-    ("profit_month", "BMS Bilans miesiąc", "PLN", "mdi:cash-multiple"),
-    ("profit_total", "BMS Bilans łącznie", "PLN", "mdi:cash-register"),
-    ("reserve_soc", "BMS Rezerwa SOC", "%", "mdi:battery-heart-variant"),
-    ("plan_curve", "BMS Plan 24 h", None, "mdi:chart-areaspline"),
-    ("battery_health", "BMS Sprawność baterii", "%", "mdi:battery-heart"),
-    ("monthly_report", "BMS Raport miesięczny", "PLN", "mdi:file-chart"),
-    ("monitor_status", "BMS Stan monitoringu", None, "mdi:shield-check"),
-    ("devices", "BMS Urządzenia", None, "mdi:power-plug"),
-    ("savings", "BMS Oszczędność (miesiąc, wobec braku baterii)", "PLN", "mdi:piggy-bank"),
-    ("forecast_accuracy", "BMS Trafność prognozy PV (błąd 30 dni)", "%", "mdi:bullseye-arrow"),
+    ("decision_log", "EMS Dziennik decyzji", None, "mdi:clipboard-text-clock"),
+    ("profit_today", "EMS Bilans dziś", "PLN", "mdi:cash"),
+    ("profit_month", "EMS Bilans miesiąc", "PLN", "mdi:cash-multiple"),
+    ("profit_total", "EMS Bilans łącznie", "PLN", "mdi:cash-register"),
+    ("reserve_soc", "EMS Rezerwa SOC", "%", "mdi:battery-heart-variant"),
+    ("plan_curve", "EMS Plan 24 h", None, "mdi:chart-areaspline"),
+    ("battery_health", "EMS Sprawność baterii", "%", "mdi:battery-heart"),
+    ("monthly_report", "EMS Raport miesięczny", "PLN", "mdi:file-chart"),
+    ("monitor_status", "EMS Stan monitoringu", None, "mdi:shield-check"),
+    ("devices", "EMS Urządzenia", None, "mdi:power-plug"),
+    ("savings", "EMS Oszczędność (miesiąc, wobec braku baterii)", "PLN", "mdi:piggy-bank"),
+    ("forecast_accuracy", "EMS Trafność prognozy PV (błąd 30 dni)", "%", "mdi:bullseye-arrow"),
 ]
 
 PLATFORMS = ["sensor", "binary_sensor", "switch", "button", "number", "time"]

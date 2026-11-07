@@ -1,4 +1,4 @@
-"""Dziennik decyzji BMS — co, kiedy i dlaczego system zrobił (funkcja 4)."""
+"""Dziennik decyzji EMS — co, kiedy i dlaczego system zrobił (funkcja 4)."""
 from __future__ import annotations
 
 import logging
@@ -31,7 +31,7 @@ class DecisionLog:
         try:
             data = await self._store.async_load()
         except Exception as err:  # noqa: BLE001
-            _LOGGER.warning("BMS log: błąd wczytywania: %s", err)
+            _LOGGER.warning("EMS log: błąd wczytywania: %s", err)
             return
         if isinstance(data, dict) and isinstance(data.get("entries"), list):
             for item in data["entries"][-MAX_ENTRIES:]:
@@ -60,7 +60,7 @@ class DecisionLog:
             entry["extra"] = {k: v for k, v in extra.items() if v is not None}
         self.entries.append(entry)
         log = {"warn": _LOGGER.warning, "error": _LOGGER.error}.get(level, _LOGGER.info)
-        log("BMS [%s] %s", kind, msg)
+        log("EMS [%s] %s", kind, msg)
         self._store.request_save(lambda: {"entries": list(self.entries)})
         for cb in list(self._listeners):
             try:

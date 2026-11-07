@@ -6,7 +6,7 @@ przez jego stronę WWW (adres, tryb, chmura, restart), oraz zależność od aioh
 """
 from datetime import timedelta
 
-from ..const import DOMAIN  # noqa: F401  (ta sama domena co integracja BMS)
+from ..const import DOMAIN  # noqa: F401  (ta sama domena co integracja EMS)
 
 IP_BROADCAST = "<broadcast>"
 IP_ANY = "0.0.0.0"

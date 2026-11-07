@@ -1,4 +1,4 @@
-"""Config flow for BMS komp-dec."""
+"""Config flow for EMS komp-dec."""
 from __future__ import annotations
 
 import asyncio
@@ -143,7 +143,7 @@ def validate_input(user_input: dict) -> dict[str, str]:
     errors: dict[str, str] = {}
     peaks, err = parse_peaks(str(user_input.get(CONF_TARIFF_PEAKS) or ""))
     if peaks is None:
-        _LOGGER.warning("BMS config flow: nieprawidłowe okna szczytu: %s", err)
+        _LOGGER.warning("EMS config flow: nieprawidłowe okna szczytu: %s", err)
         errors[CONF_TARIFF_PEAKS] = "invalid_peaks"
     svc = str(user_input.get(CONF_NOTIFY_SERVICE) or "").strip()
     if svc and not re.fullmatch(r"(notify\.)?[a-z0-9_]+", svc):
@@ -163,28 +163,28 @@ def apply_detection(hass, user_input: dict) -> dict:
     try:
         found = detect_solarman(collect_records(hass))
     except Exception as err:  # noqa: BLE001
-        _LOGGER.warning("BMS: wykrywanie ha-solarman nieudane: %s", err)
+        _LOGGER.warning("EMS: wykrywanie ha-solarman nieudane: %s", err)
         found = None
     if found:
         for role, eid in found["entities"].items():
             conf_key = _PRESET_TO_CONF.get(role)
             if conf_key:
                 data[conf_key] = eid
-        _LOGGER.info("BMS: wykryto %s (%d encji)", found["label"], found["matched"])
+        _LOGGER.info("EMS: wykryto %s (%d encji)", found["label"], found["matched"])
     # ceny: gdy wskazana encja nie istnieje — pierwsza znana encja (RCE PSE, Pstryk…), osobno dla sprzedaży i zakupu
     try:
         for key, eid in detect_price_entities(hass).items():
             if hass.states.get(data.get(key) or "") is None:
                 data[key] = eid
     except Exception as err:  # noqa: BLE001
-        _LOGGER.warning("BMS: wykrywanie encji cen nieudane: %s", err)
+        _LOGGER.warning("EMS: wykrywanie encji cen nieudane: %s", err)
     # prognozy PV: gdy wskazana encja nie istnieje — Solcast albo Forecast.Solar
     try:
         for key, eid in detect_forecast_entities(hass).items():
             if hass.states.get(data.get(key) or "") is None:
                 data[key] = eid
     except Exception as err:  # noqa: BLE001
-        _LOGGER.warning("BMS: wykrywanie prognoz PV nieudane: %s", err)
+        _LOGGER.warning("EMS: wykrywanie prognoz PV nieudane: %s", err)
     return data
 
 
@@ -199,7 +199,7 @@ _WIZARD_MIN_CORE = 3          # tyle głównych ról musi być widocznych, zanim
 _REQUIRED_CORE = (CONF_SOC, CONF_PV_POWER, CONF_LOAD_POWER, CONF_BATTERY_POWER, CONF_GRID_POWER)
 # domena encji dla pól, które nie są czujnikami
 _KEY_DOMAIN = {CONF_WORK_MODE: "select", CONF_TOU: "select", CONF_CHARGE_CURRENT: "number", CONF_EXPORT_SURPLUS: "number"}
-# wartości, które kreator zapisuje obok wybranych encji (jak formularz „Planer BMS”)
+# wartości, które kreator zapisuje obok wybranych encji (jak formularz „Planer EMS”)
 _STATIC_DEFAULTS = {
     CONF_MAX_CHARGE_POWER_W: DEFAULT_MAX_CHARGE_POWER_W, CONF_MAX_DISCHARGE_POWER_W: DEFAULT_MAX_DISCHARGE_POWER_W,
     CONF_TARGET_SOC_CHARGE: DEFAULT_TARGET_SOC_CHARGE, CONF_MIN_SELL_MARGIN: DEFAULT_MIN_SELL_MARGIN,
@@ -308,7 +308,7 @@ class BmsConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         return any(not is_inverter_entry(e) for e in self._async_current_entries())
 
     async def async_step_user(self, user_input=None):
-        """Menu: BMS (planer; tylko jeden) albo falownik połączony bezpośrednio (może być kilka)."""
+        """Menu: EMS (planer; tylko jeden) albo falownik połączony bezpośrednio (może być kilka)."""
         if self._has_bms_entry():
             return await self.async_step_inverter()
         return self.async_show_menu(step_id="user", menu_options=["wizard", "bms", "inverter"])
@@ -348,7 +348,7 @@ class BmsConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                         ip = found["ip"]
                         break
             except Exception as err:  # noqa: BLE001
-                _LOGGER.debug("BMS: wyszukiwanie loggera Solarman nieudane: %s", err)
+                _LOGGER.debug("EMS: wyszukiwanie loggera Solarman nieudane: %s", err)
             schema = await data_schema(self.hass, creation_schema() | configuration_schema())
             return self.async_show_form(
                 step_id=step_id,
@@ -415,7 +415,7 @@ class BmsConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             try:
                 await self.hass.config_entries.async_remove(entry.entry_id)    # bez porzuconego, niedziałającego wpisu
             except Exception as err:  # noqa: BLE001
-                _LOGGER.warning("BMS kreator: nie udało się usunąć nieudanego wpisu falownika: %s", err)
+                _LOGGER.warning("EMS kreator: nie udało się usunąć nieudanego wpisu falownika: %s", err)
             return await self._inverter_form("wizard_inverter", user_input, wizard=True, extra_errors={"base": "setup_failed"})
         if not await self._wizard_data_ready(WIZARD_DATA_WAIT):
             return await self.async_step_wizard_wait()
@@ -503,7 +503,7 @@ class BmsConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             elif (e := validate_input(flat)):
                 errors = e
             if not errors:
-                return self.async_create_entry(title="BMS komp-dec", data=clean({**_STATIC_DEFAULTS, **flat}))
+                return self.async_create_entry(title="EMS komp-dec", data=clean({**_STATIC_DEFAULTS, **flat}))
             defaults = {**defaults, **flat}
         found = self._detect_solarman()
         if found:
@@ -519,7 +519,7 @@ class BmsConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         )
 
     async def async_step_bms(self, user_input=None):
-        # Integracja BMS działa jako jedna instancja (stałe unique_id encji, usługi globalne).
+        # Integracja EMS działa jako jedna instancja (stałe unique_id encji, usługi globalne).
         if self._has_bms_entry():
             return self.async_abort(reason="single_instance_allowed")
 
@@ -528,7 +528,7 @@ class BmsConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         if user_input is not None:
             errors = validate_input(user_input)
             if not errors:
-                return self.async_create_entry(title="BMS komp-dec", data=clean(user_input))
+                return self.async_create_entry(title="EMS komp-dec", data=clean(user_input))
             defaults = {**defaults, **user_input}
 
         return self.async_show_form(
@@ -568,7 +568,7 @@ class BmsConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         try:
             return detect_solarman(collect_records(self.hass))
         except Exception as err:  # noqa: BLE001
-            _LOGGER.warning("BMS config flow: wykrywanie ha-solarman nieudane: %s", err)
+            _LOGGER.warning("EMS config flow: wykrywanie ha-solarman nieudane: %s", err)
             return None
 
     def _build_defaults(self) -> dict[str, str]:
@@ -600,13 +600,13 @@ class BmsConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     if conf_key:
                         defaults[conf_key] = eid
                 _LOGGER.info(
-                    "BMS config flow: wykryto %s, dopasowano %d/%d encji",
+                    "EMS config flow: wykryto %s, dopasowano %d/%d encji",
                     self._detected_brand, len(detected), len(_PRESET_TO_CONF),
                 )
             else:
-                _LOGGER.info("BMS config flow: brak znanej marki, używam DEFAULT_CONFIG")
+                _LOGGER.info("EMS config flow: brak znanej marki, używam DEFAULT_CONFIG")
         except Exception as err:  # noqa: BLE001
-            _LOGGER.warning("BMS config flow: auto-detekcja nieudana: %s", err)
+            _LOGGER.warning("EMS config flow: auto-detekcja nieudana: %s", err)
             self._detected_brand = "custom"
         return defaults
 
@@ -640,7 +640,7 @@ class InverterOptionsFlow(config_entries.OptionsFlow):
         self._entry = config_entry
 
     async def async_step_init(self, user_input=None):
-        # osobny step_id, żeby tłumaczenia nie myliły się z opcjami planera BMS (też „init”)
+        # osobny step_id, żeby tłumaczenia nie myliły się z opcjami planera EMS (też „init”)
         return await self.async_step_inverter(user_input)
 
     async def async_step_inverter(self, user_input=None):

@@ -1,4 +1,4 @@
-"""Prognoza zużycia domu (dziennie, kWh) dla BMS komp-dec.
+"""Prognoza zużycia domu (dziennie, kWh) dla EMS komp-dec.
 
 v2 — wszystkie ulepszenia:
   • outliery MAD (3 × 1.4826 × MAD)
@@ -123,7 +123,7 @@ class LoadForecaster:
             if isinstance(data, dict):
                 self._load_from_storage(data)
         except Exception as err:
-            _LOGGER.warning("BMS forecast: błąd wczytywania: %s", err)
+            _LOGGER.warning("EMS forecast: błąd wczytywania: %s", err)
         self._loaded = True
 
         if len(self._valid_history_before(dt_util.now().date())) < 7:
@@ -266,10 +266,10 @@ class LoadForecaster:
                     self.days[day] = round(val, 2)
                     added += 1
             if added:
-                _LOGGER.info("BMS forecast: dociągnięto %d dni historii z rekordera", added)
+                _LOGGER.info("EMS forecast: dociągnięto %d dni historii z rekordera", added)
                 self._schedule_save()
         except Exception as err:
-            _LOGGER.warning("BMS forecast: backfill nieudany: %s", err)
+            _LOGGER.warning("EMS forecast: backfill nieudany: %s", err)
 
     async def _async_backfill_profiles(self) -> None:
         """Profil godzinowy z długoterminowych statystyk rekordera (średnia moc na godzinę).
@@ -322,10 +322,10 @@ class LoadForecaster:
                 self.profiles[day] = [round(v / total, 4) for v in vals]
                 added += 1
             if added:
-                _LOGGER.info("BMS forecast: odtworzono %d profili godzinowych z rekordera", added)
+                _LOGGER.info("EMS forecast: odtworzono %d profili godzinowych z rekordera", added)
                 self._schedule_save()
         except Exception as err:  # noqa: BLE001
-            _LOGGER.warning("BMS forecast: backfill profili nieudany: %s", err)
+            _LOGGER.warning("EMS forecast: backfill profili nieudany: %s", err)
 
     # ------------------------------------------------------- update (10 s)
     def update(self) -> None:
@@ -443,7 +443,7 @@ class LoadForecaster:
             ratio = total / expected
             if ratio < 0.6 or ratio > 1.5:
                 _LOGGER.debug(
-                    "BMS forecast: pomijam profil %s (ratio=%.2f)",
+                    "EMS forecast: pomijam profil %s (ratio=%.2f)",
                     self._hourly_sample_date.isoformat(), ratio,
                 )
                 return
@@ -964,7 +964,7 @@ class LoadForecaster:
             try:
                 split = self.split_hook(self, tomorrow, today)
             except Exception as err:  # noqa: BLE001
-                _LOGGER.debug("BMS: prognoza z podziałem na urządzenia nieudana: %s", err)
+                _LOGGER.debug("EMS: prognoza z podziałem na urządzenia nieudana: %s", err)
                 split = None
             ov_st = self.hass.states.get(OVERRIDE_EID)
             try:

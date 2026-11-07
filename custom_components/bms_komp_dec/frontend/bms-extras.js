@@ -1,5 +1,5 @@
 /**
- * BMS Centrum Energii — moduł dodatków (plan 24 h, raport, zdrowie baterii, kreator)
+ * EMS Centrum Energii — moduł dodatków (plan 24 h, raport, zdrowie baterii, kreator)
  * Ładowany na żądanie przez bms-panel.js (kontrakt modułu: 1). Nie dodawaj tego pliku do zasobów dashboardu ręcznie.
  */
 (function () {
@@ -641,7 +641,7 @@
 
       _exWizText() {
         const d = this._exS().wiz.data; if (!d) return '';
-        const out = [`BMS komp-dec ${d.version || ''} — raport konfiguracji`, ''];
+        const out = [`EMS komp-dec ${d.version || ''} — raport konfiguracji`, ''];
         (d.checks || []).forEach((c) => out.push(`[${String(c.status).toUpperCase()}] ${c.title}: ${c.detail}${c.fix ? ' → ' + c.fix : ''}`));
         out.push('', 'Komendy:');
         (d.commands || []).forEach((c) => {

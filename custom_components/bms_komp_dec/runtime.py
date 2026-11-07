@@ -1,4 +1,4 @@
-"""Rdzeń logiki BMS komp-dec.
+"""Rdzeń logiki EMS komp-dec.
 
 Zawiera: wykonywanie komend na falowniku (z odczytem zwrotnym), harmonogram (dni tygodnia,
 święta), zabezpieczenia sprzedaży, reakcję na niskie/ujemne ceny RCE, sprawdzanie
@@ -158,18 +158,18 @@ class BmsRuntime:
         try:
             await self.devices.async_load()
         except Exception as err:  # noqa: BLE001
-            _LOGGER.warning("BMS: nie udało się wczytać urządzeń: %s", err)
+            _LOGGER.warning("EMS: nie udało się wczytać urządzeń: %s", err)
         try:
             await self.insights.async_load()
         except Exception as err:  # noqa: BLE001
-            _LOGGER.warning("BMS: nie udało się wczytać historii godzinowej: %s", err)
+            _LOGGER.warning("EMS: nie udało się wczytać historii godzinowej: %s", err)
         lf = getattr(self.coordinator, "load_forecast", None)
         if lf is not None:
             lf.split_hook = lambda f, target, today: devmod.forecast_split(self.devices, f, target, today)
         try:
             data = await self._state_store.async_load()
         except Exception as err:  # noqa: BLE001
-            _LOGGER.warning("BMS runtime: błąd wczytywania stanu: %s", err)
+            _LOGGER.warning("EMS runtime: błąd wczytywania stanu: %s", err)
             data = None
         if isinstance(data, dict):
             # wszystkie zapisane klucze, nie tylko te z wartościami domyślnymi powyżej — inaczej po restarcie
@@ -410,7 +410,7 @@ class BmsRuntime:
             try:
                 ref = self.optimizer.profit_reference()
             except Exception as err:  # noqa: BLE001
-                _LOGGER.debug("BMS profit_reference: %s", err)
+                _LOGGER.debug("EMS profit_reference: %s", err)
                 ref = None
             self._profit_ref = (now_ts, ref)
         ref = self._profit_ref[1]
@@ -452,7 +452,7 @@ class BmsRuntime:
             pv_hourly = self.optimizer.pv_hourly_today()
             scale = self.optimizer.pv_scale_next_day()
         except Exception as err:  # noqa: BLE001
-            _LOGGER.debug("BMS reserve: brak prognozy PV: %s", err)
+            _LOGGER.debug("EMS reserve: brak prognozy PV: %s", err)
             pv_hourly, scale = None, 1.0
         now_h = dt_util.now().hour
         rem = lf.get("hourly_remaining_today")
@@ -479,7 +479,7 @@ class BmsRuntime:
         try:
             return floor_profile(self.hass)
         except Exception as err:  # noqa: BLE001
-            _LOGGER.debug("BMS: próg odcięcia falownika niedostępny: %s", err)
+            _LOGGER.debug("EMS: próg odcięcia falownika niedostępny: %s", err)
             return {"hourly": [0.0] * 24, "shutdown": None, "source": "brak danych", "manual": 0.0, "programs": []}
 
     def sell_soc_threshold(self) -> float:
@@ -572,7 +572,7 @@ class BmsRuntime:
             self.log.add("command", f"{label} ({source}): {err}", "error")
             raise HomeAssistantError(f"{label}: {err}") from err
         if not steps:
-            _LOGGER.warning("BMS: nieznana komenda %s", key)
+            _LOGGER.warning("EMS: nieznana komenda %s", key)
             return
         # Żaden krok nie jest wykonywany, dopóki wszystkie encje nie istnieją — komenda nie zostaje „w połowie”.
         missing = [eid for _d, eid, _v in steps if self.hass.states.get(eid) is None]
@@ -659,7 +659,7 @@ class BmsRuntime:
                 desc = ", ".join(f"{e}≠{v}" for _d, e, v in bad)
                 self.log.add("verify", f"{label}: falownik NIE potwierdził zmiany ({desc})", "error")
                 await self.monitor.notifier.send(
-                    "command_unconfirmed", "⚠ BMS: falownik nie potwierdził komendy",
+                    "command_unconfirmed", "⚠ EMS: falownik nie potwierdził komendy",
                     f"{label}: po komendzie i ponowieniu stan się nie zgadza ({desc}). Sprawdź falownik.",
                     key=f"cmd:{key}", level="error")
             else:
@@ -667,7 +667,7 @@ class BmsRuntime:
         except asyncio.CancelledError:
             raise
         except Exception as err:  # noqa: BLE001
-            _LOGGER.error("BMS verify: %s", err, exc_info=True)
+            _LOGGER.error("EMS verify: %s", err, exc_info=True)
 
     # --------------------------------------------------------------- harmonogram
     def _log_skip(self, time_key: str, now_hm: str, msg: str, level: str = "info") -> None:
@@ -677,7 +677,7 @@ class BmsRuntime:
         self._skip_logged[time_key] = marker
         self.log.add("schedule", f"Pominięto {time_key}: {msg}", level)
         if time_key in START_KEYS:
-            self._spawn(self.monitor.notifier.send("schedule_skipped", "⏭ BMS: pominięty start harmonogramu",
+            self._spawn(self.monitor.notifier.send("schedule_skipped", "⏭ EMS: pominięty start harmonogramu",
                                                    f"{now_hm} {time_key}: {msg}", key=f"skip:{time_key}", level="info"))
 
     async def process_rules(self, now: datetime, dry_run: bool = False) -> dict[str, Any]:
@@ -692,7 +692,7 @@ class BmsRuntime:
 
         if dry_run:
             _LOGGER.warning(
-                "BMS TEST (dry-run): godzina=%s SOC=%s%% dzień=%s (%s) święto=%s cykliczny=%s",
+                "EMS TEST (dry-run): godzina=%s SOC=%s%% dzień=%s (%s) święto=%s cykliczny=%s",
                 now_hm, soc_val, day_key, "aktywny" if day_ok else "wyłączony", is_hol, recurring,
             )
 
@@ -708,7 +708,7 @@ class BmsRuntime:
 
             if dry_run:
                 _LOGGER.warning(
-                    "BMS TEST: %s=%s | switch(%s)=%s | -> %s | SOC_now=%s",
+                    "EMS TEST: %s=%s | switch(%s)=%s | -> %s | SOC_now=%s",
                     time_eid, t_val, switch_eid or "—", sw_state or "—", button_eid, soc_val,
                 )
 
@@ -733,11 +733,11 @@ class BmsRuntime:
                        else number_value(self.hass, soc_key, SOC_DEFAULTS.get(soc_key, 0.0)))
                 if soc_val is None:
                     self._log_skip(time_key, now_hm, "SOC nieznany", "warn")
-                    lg("BMS SCHEDULE: SKIP %s — SOC nieznany", time_key)
+                    lg("EMS SCHEDULE: SKIP %s — SOC nieznany", time_key)
                     continue
                 if soc_val < thr:
                     self._log_skip(time_key, now_hm, f"SOC {soc_val:.0f}% < próg {thr:.0f}%")
-                    lg("BMS SCHEDULE: SKIP %s — SOC %.1f%% < próg %.1f%%", time_key, soc_val, thr)
+                    lg("EMS SCHEDULE: SKIP %s — SOC %.1f%% < próg %.1f%%", time_key, soc_val, thr)
                     continue
 
             # --- przełącznik zestawu
@@ -747,7 +747,7 @@ class BmsRuntime:
                 started = self.fired.get(partner) if partner else None
                 started_recently = started is not None and (now - started).total_seconds() < 24 * 3600
                 if not (is_stop and started_recently):
-                    lg("BMS SCHEDULE: SKIP %s — przełącznik %s = %s", time_key, switch_eid, sw_state)
+                    lg("EMS SCHEDULE: SKIP %s — przełącznik %s = %s", time_key, switch_eid, sw_state)
                     continue
 
             # --- zabezpieczenia startu sprzedaży
@@ -773,11 +773,11 @@ class BmsRuntime:
                         continue
 
             if not self.hass.states.get(button_eid):
-                _LOGGER.warning("BMS SCHEDULE: BRAK przycisku %s", button_eid)
+                _LOGGER.warning("EMS SCHEDULE: BRAK przycisku %s", button_eid)
                 continue
 
             if dry_run:
-                _LOGGER.warning("BMS TEST: %s -> ZADZIAŁAŁBY %s", time_eid, button_eid)
+                _LOGGER.warning("EMS TEST: %s -> ZADZIAŁAŁBY %s", time_eid, button_eid)
                 results.append({"time_key": time_key, "button": button_eid, "fired": False, "dry_run": True})
                 continue
 
@@ -785,7 +785,7 @@ class BmsRuntime:
             try:
                 await self.run_command(button_key, source=f"harmonogram {time_key} {now_hm}", enforce_guard=False)
             except Exception as err:  # noqa: BLE001
-                _LOGGER.error("BMS SCHEDULE: błąd %s: %s", button_eid, err)
+                _LOGGER.error("EMS SCHEDULE: błąd %s: %s", button_eid, err)
                 self.fired.pop(time_key, None)
                 results.append({"time_key": time_key, "button": button_eid, "fired": False, "error": str(err)})
                 continue
@@ -800,7 +800,7 @@ class BmsRuntime:
                 try:
                     await self.hass.services.async_call("switch", "turn_off", {"entity_id": switch_eid}, blocking=True)
                 except Exception as err:  # noqa: BLE001
-                    _LOGGER.error("BMS SCHEDULE: off %s: %s", switch_eid, err)
+                    _LOGGER.error("EMS SCHEDULE: off %s: %s", switch_eid, err)
 
             results.append({"time_key": time_key, "button": button_eid, "fired": True})
 
@@ -812,17 +812,17 @@ class BmsRuntime:
         soc_txt = f" SOC {soc:.0f}%." if soc is not None else ""
         set_no = "2" if time_key.endswith("_2") else "1"
         if button_key == "sprzedaz_6000w":
-            await n.send("sale", "💰 BMS: start sprzedaży z baterii", f"{now_hm} — zestaw {set_no}.{soc_txt}", key=f"sale:{time_key}", level="info")
+            await n.send("sale", "💰 EMS: start sprzedaży z baterii", f"{now_hm} — zestaw {set_no}.{soc_txt}", key=f"sale:{time_key}", level="info")
         elif button_key == "nadwyzka_9700w" and time_key.startswith("bateria_sprzedaz_stop"):
-            await n.send("sale", "💰 BMS: koniec sprzedaży z baterii", f"{now_hm} — zestaw {set_no}.{soc_txt}", key=f"sale:{time_key}", level="info")
+            await n.send("sale", "💰 EMS: koniec sprzedaży z baterii", f"{now_hm} — zestaw {set_no}.{soc_txt}", key=f"sale:{time_key}", level="info")
         elif button_key == "wlacz_ladowanie_siec":
-            await n.send("grid_charge", "🔌 BMS: start ładowania z sieci", f"{now_hm} — zestaw {set_no}.{soc_txt}", key=f"gc:{time_key}", level="info")
+            await n.send("grid_charge", "🔌 EMS: start ładowania z sieci", f"{now_hm} — zestaw {set_no}.{soc_txt}", key=f"gc:{time_key}", level="info")
         elif button_key == "wylacz_ladowanie_siec":
-            await n.send("grid_charge", "🔌 BMS: koniec ładowania z sieci", f"{now_hm} — zestaw {set_no}.{soc_txt}", key=f"gc:{time_key}", level="info")
+            await n.send("grid_charge", "🔌 EMS: koniec ładowania z sieci", f"{now_hm} — zestaw {set_no}.{soc_txt}", key=f"gc:{time_key}", level="info")
             tgt = self.state.get("grid_target_plan") or {}
             tol = n.cfg()["kinds"]["grid_charge_target"].get("thr", 5.0)
             if soc is not None and isinstance(tgt.get("target"), (int, float)) and soc < float(tgt["target"]) - float(tol):
-                await n.send("grid_charge_target", "🔋 BMS: ładowanie z sieci poniżej celu",
+                await n.send("grid_charge_target", "🔋 EMS: ładowanie z sieci poniżej celu",
                              f"Po ładowaniu z sieci SOC {soc:.0f}%, a plan zakładał ~{float(tgt['target']):.0f}%. "
                              "Sprawdź prąd ładowania z sieci w falowniku i program Time of Use.", key="gc_target")
 
@@ -834,16 +834,16 @@ class BmsRuntime:
         if ev["type"] == "cycle" and d.get("notify_cycle"):
             c = ev["cycle"]
             cost = f", koszt {_pl(c['cost'], 2)} zł" if c.get("cost") is not None else ""
-            await n.send("device_cycle", f"✅ BMS: {name} — koniec", f"Cykl trwał {c['min']:.0f} min, zużył {_pl(c['kwh'], 2)} kWh{cost}.",
+            await n.send("device_cycle", f"✅ EMS: {name} — koniec", f"Cykl trwał {c['min']:.0f} min, zużył {_pl(c['kwh'], 2)} kWh{cost}.",
                          key=f"cycle:{d['id']}:{c['start']}", level="info")
         elif ev["type"] == "anomaly" and d.get("notify_anomaly"):
-            await n.send("device_anomaly", f"⚠ BMS: {name} pracuje bez przerwy",
+            await n.send("device_anomaly", f"⚠ EMS: {name} pracuje bez przerwy",
                          f"Od {ev['hours']:.1f} h ciągła praca (teraz {ev['power']:.0f} W), limit {d['max_run_h']:.0f} h. Sprawdź urządzenie.",
                          key=f"anom:{d['id']}")
         elif ev["type"] == "hint" and d.get("notify_hint"):
             why = (f"nadwyżka PV — eksport do sieci {ev['export_w'] / 1000:.1f} kW, bateria pełna" if ev["why"] == "surplus"
                    else "trwa jedna z najtańszych godzin doby")
-            await n.send("device_hint", f"💡 BMS: dobry moment na {d['name']}", f"Teraz {why}.", key=f"hint:{d['id']}:{ev['why']}", level="info")
+            await n.send("device_hint", f"💡 EMS: dobry moment na {d['name']}", f"Teraz {why}.", key=f"hint:{d['id']}:{ev['why']}", level="info")
 
     def _cheap_now(self, now: datetime) -> bool:
         """Taryfa dynamiczna: bieżąca godzina jest wśród 3 najtańszych z pozostałych godzin doby."""
@@ -877,7 +877,7 @@ class BmsRuntime:
             if plan:
                 lines = [f"{p['icon']} {p['name']}: {p['start'][11:16]}–{p['end'][11:16]} (~{_pl(p['kwh'], 1)} kWh, {p['why']}, ok. {_pl(p['cost'], 2)} zł)"
                          for p in plan]
-                await n.send("device_plan", "🗓 BMS: najlepsze godziny dla urządzeń", "\n".join(lines), key=f"devplan:{day}", level="info")
+                await n.send("device_plan", "🗓 EMS: najlepsze godziny dla urządzeń", "\n".join(lines), key=f"devplan:{day}", level="info")
         # 22:00: zużycie dnia ponad 2× typowe
         if loc.hour >= 22 and done.get("daily_high") != day:
             done["daily_high"] = day
@@ -891,7 +891,7 @@ class BmsRuntime:
                 if len(hist) >= 7:
                     med = sorted(hist)[len(hist) // 2]
                     if today_kwh > max(1.0, 2.0 * med):
-                        await n.send("device_anomaly", f"⚠ BMS: {d['name']} — dziś dużo więcej niż zwykle",
+                        await n.send("device_anomaly", f"⚠ EMS: {d['name']} — dziś dużo więcej niż zwykle",
                                      f"Dziś {_pl(today_kwh, 1)} kWh, zwykle ok. {_pl(med, 1)} kWh na dobę.", key=f"high:{d['id']}:{day}")
         # raz w tygodniu (poniedziałek 12:00): nierozpoznany odbiornik w „reszcie domu”
         if loc.weekday() == 0 and loc.hour >= 12 and done.get("unknown") != day:
@@ -899,7 +899,7 @@ class BmsRuntime:
             lf = getattr(self.coordinator, "load_forecast", None)
             u = dm.unknown_load(getattr(lf, "profiles", {}) or {}, getattr(lf, "days", {}) or {}) if lf else None
             if u:
-                await n.send("devices_unknown", "🔎 BMS: nierozpoznany odbiornik",
+                await n.send("devices_unknown", "🔎 EMS: nierozpoznany odbiornik",
                              f"Przez {u['days']} z {u['of']} ostatnich dni ok. {u['hour']:02d}:00 dom pobiera ok. {_pl(u['kwh'], 1)} kWh więcej niż w innych godzinach, "
                              "a żadne dodane urządzenie tego nie tłumaczy. Jeśli wiesz, co to jest, dodaj je w zakładce Urządzenia.",
                              key="unknown")
@@ -910,7 +910,7 @@ class BmsRuntime:
             thr = (n.cfg()["kinds"].get("island_overload") or {}).get("thr", 5.0)
             if isinstance(load, (int, float)) and load > float(thr) * 1000.0:
                 top = ", ".join(f"{nm} {p / 1000:.1f} kW" for nm, p in dm.top_now())
-                await n.send("island_overload", "⚡ BMS: duży pobór przy zaniku sieci",
+                await n.send("island_overload", "⚡ EMS: duży pobór przy zaniku sieci",
                              f"Dom pobiera {load / 1000:.1f} kW z baterii (próg {float(thr):.1f} kW)." + (f" Największe: {top}." if top else ""),
                              key="island")
 
@@ -954,10 +954,10 @@ class BmsRuntime:
                 self.log.add("guard", "Zatrzymuję sprzedaż: " + "; ".join(reasons), "warn")
                 try:
                     await self.run_command("nadwyzka_9700w", source="zabezpieczenie")
-                    await self.monitor.notifier.send("guard_action", "🛡 BMS: zabezpieczenie zatrzymało sprzedaż",
+                    await self.monitor.notifier.send("guard_action", "🛡 EMS: zabezpieczenie zatrzymało sprzedaż",
                                                      "Powód: " + "; ".join(reasons) + ".", key="guard:sale")
                 except Exception as err:  # noqa: BLE001
-                    _LOGGER.error("BMS GUARD: błąd zatrzymania sprzedaży: %s", err)
+                    _LOGGER.error("EMS GUARD: błąd zatrzymania sprzedaży: %s", err)
 
         if self.pv_charge_blocked() and soc is not None:
             floor = number_value(self.hass, "min_soc_for_pv_export_stop", SOC_DEFAULTS["min_soc_for_pv_export_stop"])
@@ -965,10 +965,10 @@ class BmsRuntime:
                 self.log.add("guard", f"SOC {soc:.0f}% < {floor:.0f}% — odblokowuję ładowanie z PV", "warn")
                 try:
                     await self.run_command("odblokuj_ladowanie", source="zabezpieczenie")
-                    await self.monitor.notifier.send("guard_action", "🛡 BMS: odblokowano ładowanie z PV",
+                    await self.monitor.notifier.send("guard_action", "🛡 EMS: odblokowano ładowanie z PV",
                                                      f"SOC {soc:.0f}% spadł poniżej {floor:.0f}% przy zablokowanym ładowaniu z PV.", key="guard:charge")
                 except Exception as err:  # noqa: BLE001
-                    _LOGGER.error("BMS GUARD: błąd odblokowania ładowania: %s", err)
+                    _LOGGER.error("EMS GUARD: błąd odblokowania ładowania: %s", err)
 
     # --------------------------------------------- niskie/ujemne ceny (funkcja 1)
     async def price_reaction_tick(self, now: datetime) -> None:
@@ -992,10 +992,10 @@ class BmsRuntime:
                     try:
                         await self.run_command("sprzedaz_6000w", source="cena RCE")
                     except Exception as err:  # noqa: BLE001
-                        _LOGGER.error("BMS price: wznowienie nieudane: %s", err)
+                        _LOGGER.error("EMS price: wznowienie nieudane: %s", err)
             else:
                 self.log.add("price", f"{why} — koniec ograniczenia eksportu", "ok")
-            await self.monitor.notifier.send("price_reaction", "💹 BMS: koniec ograniczenia eksportu", f"{why}.", key="price_end", level="info")
+            await self.monitor.notifier.send("price_reaction", "💹 EMS: koniec ograniczenia eksportu", f"{why}.", key="price_end", level="info")
             return
 
         if not enabled or price is None:
@@ -1011,19 +1011,19 @@ class BmsRuntime:
                 f"Cena RCE {price:.3f} < próg {thr:.3f} PLN/kWh — wstrzymuję eksport do sieci",
                 "warn", price=round(price, 4), threshold=thr,
             )
-            await self.monitor.notifier.send("price_reaction", "💹 BMS: niska cena — eksport wstrzymany",
+            await self.monitor.notifier.send("price_reaction", "💹 EMS: niska cena — eksport wstrzymany",
                                              f"Cena RCE {price:.3f} < próg {thr:.3f} zł/kWh.", key="price_start", level="info")
             if self.is_mode_export(wm):
                 try:
                     await self.run_command("nadwyzka_9700w", source="cena RCE")
                 except Exception as err:  # noqa: BLE001
-                    _LOGGER.error("BMS price: wstrzymanie nieudane: %s", err)
+                    _LOGGER.error("EMS price: wstrzymanie nieudane: %s", err)
         elif pr.get("active") and self.is_selling() and self._cooldown_ok("price_stop", now):
             self.log.add("price", "Sprzedaż włączona przy niskiej cenie — zatrzymuję", "warn")
             try:
                 await self.run_command("nadwyzka_9700w", source="cena RCE")
             except Exception as err:  # noqa: BLE001
-                _LOGGER.error("BMS price: zatrzymanie nieudane: %s", err)
+                _LOGGER.error("EMS price: zatrzymanie nieudane: %s", err)
 
     # --------------------------------------------------------------- tick / listenery
     # --------------------------------------------------------- tryby burza / urlop
@@ -1043,7 +1043,7 @@ class BmsRuntime:
                 self.log.add("mode", f"Tryb burzowy WŁĄCZONY: rezerwa 100%, sprzedaż zablokowana, "
                                      f"auto-wyłączenie za {hours:.0f} h", "warn")
                 await self.monitor.notifier.send(
-                    "storm", "⛈ BMS: tryb burzowy włączony",
+                    "storm", "⛈ EMS: tryb burzowy włączony",
                     f"Bateria jest ładowana do 100% w najbliższym tanim oknie i nie sprzedaje energii. "
                     f"Tryb wyłączy się sam za {hours:.0f} h.", key="storm_on", cooldown_s=300, level="info")
                 self._plan_ts = 0.0
@@ -1052,13 +1052,13 @@ class BmsRuntime:
                 self._save_state()
                 self._reserve_cache = None
                 self.log.add("mode", "Tryb burzowy wygasł — wyłączam", "ok")
-                await self.monitor.notifier.send("storm", "⛈ BMS: tryb burzowy wyłączony", "Minął ustawiony czas — wracam do zwykłego planu.",
+                await self.monitor.notifier.send("storm", "⛈ EMS: tryb burzowy wyłączony", "Minął ustawiony czas — wracam do zwykłego planu.",
                                                  key="storm_off", level="info")
                 try:
                     await self.hass.services.async_call(
                         "switch", "turn_off", {"entity_id": find_eid(self.hass, "switch", "storm_mode")}, blocking=True)
                 except Exception as err:  # noqa: BLE001
-                    _LOGGER.error("BMS: nie udało się wyłączyć trybu burzowego: %s", err)
+                    _LOGGER.error("EMS: nie udało się wyłączyć trybu burzowego: %s", err)
                 self._plan_ts = 0.0
         elif st.get("storm_until") is not None:
             st["storm_until"] = None
@@ -1090,7 +1090,7 @@ class BmsRuntime:
             try:
                 res = await self.optimizer.suggest()
             except Exception as err:  # noqa: BLE001
-                _LOGGER.warning("BMS: plan 24 h niedostępny: %s", err, exc_info=True)
+                _LOGGER.warning("EMS: plan 24 h niedostępny: %s", err, exc_info=True)
                 return self._plan
             self._plan_ts = dt_util.now().timestamp()
             self._plan = {
@@ -1100,7 +1100,7 @@ class BmsRuntime:
                                   "label": p.get("label")} for k, p in (res.get("proposals") or {}).items()},
             }
             if res.get("error"):
-                self._spawn(self.monitor.notifier.send("plan_error", "📉 BMS: plan niedostępny", str(res["error"]), key="plan_error"))
+                self._spawn(self.monitor.notifier.send("plan_error", "📉 EMS: plan niedostępny", str(res["error"]), key="plan_error"))
             else:
                 self._remember_grid_target(self._plan)
             return self._plan
@@ -1154,7 +1154,7 @@ class BmsRuntime:
         except Exception:  # noqa: BLE001
             pass
         await self.monitor.notifier.send(
-            "summary_monthly", f"📊 BMS: raport za {rep['title']}", text,
+            "summary_monthly", f"📊 EMS: raport za {rep['title']}", text,
             key=f"report:{tag}", level="info")
 
     # --------------------------------------------------------------- podsumowania (konfigurator powiadomień)
@@ -1231,7 +1231,7 @@ class BmsRuntime:
                 else:
                     await coro(now)
             except Exception as err:  # noqa: BLE001
-                _LOGGER.error("BMS tick [%s]: %s", name, err, exc_info=True)
+                _LOGGER.error("EMS tick [%s]: %s", name, err, exc_info=True)
         try:
             self.optimizer.tariff.sample()
         except Exception:  # noqa: BLE001
@@ -1287,24 +1287,24 @@ class BmsRuntime:
         try:
             self.ledger.update(now, self.grid_power(), self.sell_price(), self.buy_price())
         except Exception as err:  # noqa: BLE001
-            _LOGGER.debug("BMS ledger: %s", err)
+            _LOGGER.debug("EMS ledger: %s", err)
         try:
             for ev in self.devices.update(now, self.coordinator.data or {}, self.buy_price()):
                 self._spawn(self._device_event(ev))
         except Exception as err:  # noqa: BLE001
-            _LOGGER.debug("BMS urządzenia: %s", err)
+            _LOGGER.debug("EMS urządzenia: %s", err)
         try:
             self.insights.update(now, self.coordinator.data or {}, self.buy_price(), self.sell_price(),
                                  int(self.battery_sign()["sign"]), self.soc())
         except Exception as err:  # noqa: BLE001
-            _LOGGER.debug("BMS insights: %s", err)
+            _LOGGER.debug("EMS insights: %s", err)
         try:
             data = self.coordinator.data or {}
             soc = self.soc()
             self.stats.update_day(now, data, soc)
             self.stats.add_power(now, soc, data.get("battery_power"), int(self.battery_sign()["sign"]))
         except Exception as err:  # noqa: BLE001
-            _LOGGER.debug("BMS stats: %s", err)
+            _LOGGER.debug("EMS stats: %s", err)
 
     # --------------------------------------------------------------- dane dla encji
     def holiday_label(self) -> str | None:

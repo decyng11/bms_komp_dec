@@ -70,7 +70,7 @@ class Device():
 
     async def execute(self, code, address, **kwargs):
         if code in WRITE_CODES and not self.config.allow_write:
-            raise HomeAssistantError(f"Zapis do falownika „{self.config.name}” jest wyłączony. Włącz „Zezwól na zapis” w opcjach tego falownika (Ustawienia → Urządzenia i usługi → BMS komp-dec → falownik → Konfiguruj).")
+            raise HomeAssistantError(f"Zapis do falownika „{self.config.name}” jest wyłączony. Włącz „Zezwól na zapis” w opcjach tego falownika (Ustawienia → Urządzenia i usługi → EMS komp-dec → falownik → Konfiguruj).")
 
         _LOGGER.debug(f"[{self.endpoint.host}] Request {code:02} ❘ 0x{code:02X} ~ {address:04} ❘ 0x{address:04X}: {kwargs}")
 

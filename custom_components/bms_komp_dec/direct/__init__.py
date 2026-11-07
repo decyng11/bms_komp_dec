@@ -1,4 +1,4 @@
-"""Tryb bezpośredni: falownik dodawany do integracji BMS bez integracji ha-solarman.
+"""Tryb bezpośredni: falownik dodawany do integracji EMS bez integracji ha-solarman.
 
 Klient Solarman V5 / Modbus, parser definicji YAML i warstwa encji pochodzą z projektu ha-solarman
 (https://github.com/davidrapan/ha-solarman, licencja MIT) oraz dołączonego w nim klienta Modbus uModbus
@@ -8,7 +8,7 @@ Klient Solarman V5 / Modbus, parser definicji YAML i warstwa encji pochodzą z p
   * po każdym zapisie następuje odczyt kontrolny rejestru;
   * brak usług „zapisz dowolny rejestr” — zapis przechodzi tylko przez encje (number / select / switch / time / ...).
 
-Wpis konfiguracji falownika ma w `entry.data` klucz `kind: "inverter"`; wpis BMS (planer) go nie ma.
+Wpis konfiguracji falownika ma w `entry.data` klucz `kind: "inverter"`; wpis EMS (planer) go nie ma.
 """
 from __future__ import annotations
 
@@ -40,7 +40,7 @@ async def async_setup_inverter_entry(hass: HomeAssistant, entry: ConfigEntry) ->
         await hass_.config_entries.async_reload(changed.entry_id)
 
     entry.async_on_unload(entry.add_update_listener(_reload))
-    _LOGGER.info("BMS: falownik „%s” (%s) połączony bezpośrednio; zapis %s", entry.title,
+    _LOGGER.info("EMS: falownik „%s” (%s) połączony bezpośrednio; zapis %s", entry.title,
                  (entry.options or {}).get("host"), "włączony" if (entry.options or {}).get("allow_write") else "wyłączony")
     return True
 

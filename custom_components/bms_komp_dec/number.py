@@ -1,4 +1,4 @@
-"""Numbers for BMS komp-dec."""
+"""Numbers for EMS komp-dec."""
 from __future__ import annotations
 
 from homeassistant.components.number import NumberEntity

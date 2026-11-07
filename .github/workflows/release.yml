@@ -53,5 +53,5 @@ jobs:
             exit 0
           fi
           gh release create "$RELEASE_TAG" bms_komp_dec.zip \
-            --title "BMS komp-dec $RELEASE_TAG" \
+            --title "EMS komp-dec $RELEASE_TAG" \
             --notes "Zmiany: CHANGELOG.md w repozytorium. Instalacja ręczna: rozpakuj bms_komp_dec.zip do /config/custom_components/bms_komp_dec/ i zrestartuj Home Assistant."

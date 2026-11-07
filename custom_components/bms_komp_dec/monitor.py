@@ -137,7 +137,7 @@ class Notifier:
                 "persistent_notification", "create",
                 {"title": title, "message": message, "notification_id": f"{NOTIFY_ID_PREFIX}{kind}"})
         except Exception as err:  # noqa: BLE001
-            _LOGGER.warning("BMS: nie udało się utworzyć powiadomienia: %s", err)
+            _LOGGER.warning("EMS: nie udało się utworzyć powiadomienia: %s", err)
         svc = self._service()
         loc = dt_util.as_local(now)
         quiet = not force and not kc.get("quiet_ok") and ncfg.in_quiet(cfg, loc.hour, loc.minute)
@@ -177,7 +177,7 @@ class Monitor:
             try:
                 await chk(now)
             except Exception as err:  # noqa: BLE001
-                _LOGGER.error("BMS monitor [%s]: %s", name, err, exc_info=True)
+                _LOGGER.error("EMS monitor [%s]: %s", name, err, exc_info=True)
 
     # ------------------------------------------------------------- niski SOC
     async def _low_soc(self, now: datetime) -> None:
@@ -202,7 +202,7 @@ class Monitor:
                 pass
             floor_txt = f"próg odcięcia falownika {fl:.0f}%" if fl > 0 else "bardzo niski poziom"
             sent = await self.notifier.send(
-                "low_soc", "🔋 BMS: niski stan baterii",
+                "low_soc", "🔋 EMS: niski stan baterii",
                 f"Bateria {soc:.0f}% ({floor_txt}). Poniżej progu falownik nie zasila domu z baterii i pobiera prąd z sieci.{cheap}",
                 cooldown_s=LOW_SOC_COOLDOWN_S)
             st["low_soc_active"] = True
@@ -229,7 +229,7 @@ class Monitor:
             txt = fault_text(a["state"])
             body = f"{a['name']}: {a['state']}" + (f" — {txt}" if txt else "")
             await self.notifier.send(
-                "alarm", "⚠ BMS: alarm falownika",
+                "alarm", "⚠ EMS: alarm falownika",
                 body + (f"\n{FAULT_NOTE}" if txt else "") + "\nSzczegóły: Diagnostyka → Alarmy.",
                 key=f"alarm:{eid}:{a['state']}", cooldown_s=ALARM_COOLDOWN_S, level="error")
         for eid in [e for e in known if e not in active]:
@@ -258,7 +258,7 @@ class Monitor:
                 self.rt.log.add("notify", "Ceny RCE na jutro są już pełne", "ok")
             return
         sent = await self.notifier.send(
-            "rce_missing", "💰 BMS: brak cen RCE na jutro",
+            "rce_missing", "💰 EMS: brak cen RCE na jutro",
             f"Po godz. {RCE_CHECK_FROM_HOUR}:00 nie ma pełnych cen RCE na jutro ({n}/{need} godzin). "
             "Plan sprzedaży z baterii na jutro będzie niepełny — sprawdź integrację z cenami RCE." + self._rce_detail(),
             key=f"rce_missing:{key}", cooldown_s=RCE_COOLDOWN_S)
@@ -299,7 +299,7 @@ class Monitor:
             elif (now - self._comm_since).total_seconds() >= COMM_LOSS_AFTER_S:
                 mins = int((now - self._comm_since).total_seconds() // 60)
                 if await self.notifier.send(
-                        "comm_loss", "📡 BMS: brak danych z falownika",
+                        "comm_loss", "📡 EMS: brak danych z falownika",
                         f"Od ok. {mins} min brak odczytu SOC i mocy sieci. Sprawdź logger Solarman i sieć Wi-Fi falownika.",
                         cooldown_s=COMM_COOLDOWN_S, level="error"):
                     self._comm_notified = True
@@ -347,7 +347,7 @@ class Monitor:
             return
         day = dt_util.as_local(now).date().isoformat()
         if self._once("battery_full", day):
-            await self.notifier.send("battery_full", "🔋 BMS: bateria naładowana", f"SOC {soc:.0f}% — bateria jest pełna.",
+            await self.notifier.send("battery_full", "🔋 EMS: bateria naładowana", f"SOC {soc:.0f}% — bateria jest pełna.",
                                      key=f"full:{day}", level="info")
 
     async def _battery_temp(self, now: datetime) -> None:
@@ -359,14 +359,14 @@ class Monitor:
         if hi is not None:
             if t > hi and not st.get("hi"):
                 st["hi"] = True
-                await self.notifier.send("battery_temp_high", "🌡 BMS: wysoka temperatura baterii",
+                await self.notifier.send("battery_temp_high", "🌡 EMS: wysoka temperatura baterii",
                                          f"Temperatura baterii {t:.1f} °C (próg {hi:.0f} °C).", level="error")
             elif t < hi - 3.0:
                 st["hi"] = False
         if lo is not None:
             if t < lo and not st.get("lo"):
                 st["lo"] = True
-                await self.notifier.send("battery_temp_low", "🥶 BMS: niska temperatura baterii",
+                await self.notifier.send("battery_temp_low", "🥶 EMS: niska temperatura baterii",
                                          f"Temperatura baterii {t:.1f} °C (próg {lo:.0f} °C). Ładowanie w niskiej temperaturze skraca życie ogniw.")
             elif t > lo + 3.0:
                 st["lo"] = False
@@ -387,7 +387,7 @@ class Monitor:
                     top = ", ".join(f"{nm} {p / 1000:.1f} kW" for nm, p in self.rt.devices.top_now())
                 except Exception:  # noqa: BLE001
                     top = ""
-                await self.notifier.send("grid_outage", "⚡ BMS: zanik sieci",
+                await self.notifier.send("grid_outage", "⚡ EMS: zanik sieci",
                                          f"Napięcie sieci L1 {v:.0f} V — dom zasilany z baterii" + (f" (SOC {soc:.0f}%)." if soc is not None else ".")
                                          + (f" Teraz najwięcej pobierają: {top}." if top else ""),
                                          key="grid_down", level="error")
@@ -396,7 +396,7 @@ class Monitor:
             mins = int((now.timestamp() - float(st["since"])) // 60)
             st.clear()
             if was:
-                await self.notifier.send("grid_outage", "⚡ BMS: sieć wróciła", f"Napięcie sieci L1 {v:.0f} V. Przerwa trwała ok. {mins} min.",
+                await self.notifier.send("grid_outage", "⚡ EMS: sieć wróciła", f"Napięcie sieci L1 {v:.0f} V. Przerwa trwała ok. {mins} min.",
                                          key="grid_up", level="info")
 
     async def _high_import(self, now: datetime) -> None:
@@ -410,7 +410,7 @@ class Monitor:
                 st["since"] = now.timestamp()
             elif now.timestamp() - float(st["since"]) >= 300 and not st.get("sent"):
                 st["sent"] = True
-                await self.notifier.send("high_import", "🔌 BMS: duży pobór z sieci",
+                await self.notifier.send("high_import", "🔌 EMS: duży pobór z sieci",
                                          f"Od 5 min pobór z sieci {p / 1000.0:.1f} kW (próg {thr / 1000.0:.1f} kW).")
         else:
             st.clear()
@@ -435,7 +435,7 @@ class Monitor:
         if low and self._once("rce_negative", key):
             spans = _spans(low)
             mn = min(v for _h, v in vals)
-            await self.notifier.send("rce_negative", "📉 BMS: niskie ceny RCE jutro",
+            await self.notifier.send("rce_negative", "📉 EMS: niskie ceny RCE jutro",
                                      f"Jutro cena sprzedaży ≤ {lo:.2f} zł/kWh w godzinach {spans} (najniżej {mn:.2f} zł/kWh). "
                                      "W tych godzinach lepiej ładować baterię niż eksportować do sieci.", key=f"rce_neg:{key}", level="info")
         hi = self._thr("rce_high")
@@ -444,7 +444,7 @@ class Monitor:
             props = self._plan_props()
             sale = [f"{p.get('proposed')}" for k, p in props.items() if k.startswith("bateria_sprzedaz_start") and p.get("proposed") and not p.get("skip")]
             plan_txt = f" Plan sprzedaży z baterii: start {', '.join(sale)}." if sale else " Plan nie przewiduje sprzedaży z baterii."
-            await self.notifier.send("rce_high", "📈 BMS: wysoka cena sprzedaży jutro",
+            await self.notifier.send("rce_high", "📈 EMS: wysoka cena sprzedaży jutro",
                                      f"Jutro o {top_h:02d}:00 cena RCE {top_v:.2f} zł/kWh (próg {hi:.2f}).{plan_txt}", key=f"rce_high:{key}", level="info")
 
     async def _sources(self, now: datetime) -> None:
@@ -456,16 +456,16 @@ class Monitor:
             except Exception:  # noqa: BLE001
                 pv1 = None
             if pv1 is None and self._once("pv_forecast_missing", today.isoformat()):
-                await self.notifier.send("pv_forecast_missing", "☀️ BMS: brak prognozy PV",
+                await self.notifier.send("pv_forecast_missing", "☀️ EMS: brak prognozy PV",
                                          "Brak godzinowej prognozy PV na jutro (Solcast / Forecast.Solar). Plan liczy tak, jakby jutro nie było słońca. "
-                                         "Sprawdź integrację prognozy i encje prognozy w konfiguracji BMS.")
+                                         "Sprawdź integrację prognozy i encje prognozy w konfiguracji EMS.")
         if now.hour >= 6 and get_profile().mode == "dynamic":
             try:
                 have = opt.buy_hourly_for(today)
             except Exception:  # noqa: BLE001
                 have = None
             if not have and self._once("buy_prices_missing", today.isoformat()):
-                await self.notifier.send("buy_prices_missing", "💸 BMS: brak cen zakupu",
+                await self.notifier.send("buy_prices_missing", "💸 EMS: brak cen zakupu",
                                          "Tryb taryfy „dynamiczna”, a encja ceny zakupu nie podaje dziś cen godzinowych. "
                                          "Planer używa okien z konfiguracji. Sprawdź integrację cen (np. Pstryk).")
 
@@ -482,7 +482,7 @@ class Monitor:
         if isinstance(fc, (int, float)) and isinstance(nc, (int, float)) and fc > 0.5 and nc > fc * (1 + thr / 100.0):
             day = dt_util.as_local(now).date().isoformat()
             if self._once("load_above", day):
-                await self.notifier.send("load_above", "🏠 BMS: zużycie dziś wyższe niż zwykle",
+                await self.notifier.send("load_above", "🏠 EMS: zużycie dziś wyższe niż zwykle",
                                          f"Przy obecnym tempie dom zużyje dziś ok. {nc:.1f} kWh, a prognoza dnia to {fc:.1f} kWh "
                                          f"(+{(nc / fc - 1) * 100:.0f}%). Bateria może nie wystarczyć do rana.")
 
@@ -505,7 +505,7 @@ class Monitor:
             gc = f" Plan: ładowanie z sieci {st.get('proposed')}–{sp.get('proposed') or '?'}."
         else:
             gc = " Plan nie przewiduje ładowania z sieci."
-        await self.notifier.send("weak_pv", "☁️ BMS: słaba prognoza PV na jutro",
+        await self.notifier.send("weak_pv", "☁️ EMS: słaba prognoza PV na jutro",
                                  f"Prognoza PV na jutro {pv:.1f} kWh (próg {thr:.1f} kWh).{gc}", level="info")
 
     async def _health(self, now: datetime) -> None:
@@ -520,7 +520,7 @@ class Monitor:
         trend = s.get("eff_trend_pp")
         thr = self._thr("battery_health") or 3.0
         if isinstance(trend, (int, float)) and trend <= -thr:
-            await self.notifier.send("battery_health", "🔋 BMS: spadek sprawności baterii",
+            await self.notifier.send("battery_health", "🔋 EMS: spadek sprawności baterii",
                                      f"Sprawność cyklu z 30 dni {s.get('eff_30d')}% wobec {s.get('eff_90d')}% z 90 dni ({trend:+.1f} pkt). "
                                      "To orientacyjny wskaźnik — sprawdź, czy nie zmieniło się coś w instalacji.", key="health")
 
@@ -535,21 +535,21 @@ class Monitor:
         if ncfg.kind(cfg, "summary_daily").get("on") and hm >= sch["daily"]["time"] and sent.get("daily") != today.isoformat():
             sent["daily"] = today.isoformat()
             self.rt._save_state()  # noqa: SLF001
-            await self.notifier.send("summary_daily", f"📅 BMS: podsumowanie dnia {today:%d.%m}", self._summary_body("day", today), level="info")
+            await self.notifier.send("summary_daily", f"📅 EMS: podsumowanie dnia {today:%d.%m}", self._summary_body("day", today), level="info")
         if (ncfg.kind(cfg, "summary_weekly").get("on") and loc.weekday() == sch["weekly"]["weekday"]
                 and hm >= sch["weekly"]["time"] and sent.get("weekly") != today.isoformat()):
             sent["weekly"] = today.isoformat()
             self.rt._save_state()  # noqa: SLF001
-            await self.notifier.send("summary_weekly", "🗓 BMS: podsumowanie tygodnia", self._summary_body("week", today), level="info")
+            await self.notifier.send("summary_weekly", "🗓 EMS: podsumowanie tygodnia", self._summary_body("week", today), level="info")
 
     def _summary_body(self, kind: str, day) -> str:
         """Treść podsumowania; błąd w liczeniu nie może zgubić całej wiadomości (znacznik „wysłano” jest już ustawiony)."""
         try:
             text = self.rt.summary_text(kind, day)
         except Exception as err:  # noqa: BLE001
-            _LOGGER.error("BMS: podsumowanie (%s) — błąd liczenia: %s", kind, err, exc_info=True)
+            _LOGGER.error("EMS: podsumowanie (%s) — błąd liczenia: %s", kind, err, exc_info=True)
             self.rt.log.add("notify", f"Podsumowanie ({kind}): nie udało się policzyć szczegółów — {err}", "error")
-            return f"Nie udało się policzyć szczegółów podsumowania ({err}). Sprawdź dziennik BMS."
+            return f"Nie udało się policzyć szczegółów podsumowania ({err}). Sprawdź dziennik EMS."
         return text or "Brak danych do podsumowania za ten okres."
 
 

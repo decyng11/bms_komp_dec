@@ -1,4 +1,4 @@
-"""Sensors for BMS komp-dec."""
+"""Sensors for EMS komp-dec."""
 from __future__ import annotations
 
 from datetime import timedelta
@@ -77,7 +77,7 @@ class BmsLoadForecastSensor(BmsBaseEntity, SensorEntity):
     })
 
     def __init__(self, coordinator):
-        super().__init__("load_forecast", "BMS Prognoza zużycia domu", domain="sensor")
+        super().__init__("load_forecast", "EMS Prognoza zużycia domu", domain="sensor")
         self.coordinator = coordinator
         self._attr_native_unit_of_measurement = "kWh"
         self._attr_icon = "mdi:chart-bar"

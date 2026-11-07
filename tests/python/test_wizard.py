@@ -141,7 +141,7 @@ def match_input(form):
     return {**top, "battery_capacity_kwh": 10.0, "tariff_mode": "auto", "details": det}
 inp = match_input(r)
 res = arun(f.async_step_wizard_match(inp))
-check("poprawne dopasowanie tworzy wpis planera", res["type"] == "create_entry" and res["title"] == "BMS komp-dec", {k: res.get(k) for k in ("type", "errors")})
+check("poprawne dopasowanie tworzy wpis planera", res["type"] == "create_entry" and res["title"] == "EMS komp-dec", {k: res.get(k) for k in ("type", "errors")})
 d = res.get("data", {})
 check("wpis ma główne encje i fazy L1–L3", d.get("soc") == "sensor.inverter_battery" and d.get("grid_voltage_l3") and d.get("load_power_l2"), d)
 check("wpis ma ustawienia domyślne planera", d.get("max_charge_power_w") and d.get("tariff_peaks") and d.get("tariff_mode") == "auto" and d.get("battery_capacity_kwh") == 10.0, d)

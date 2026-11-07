@@ -235,7 +235,7 @@ class DynamicTariffProfile:
             eff = self._eff_fn() if self._eff_fn else 0.9
             key = (tuple(prices) if prices else None, eff)
         except Exception:  # noqa: BLE001
-            _LOGGER.debug("BMS: nie udało się odczytać cen godzinowych dla %s", d, exc_info=True)
+            _LOGGER.debug("EMS: nie udało się odczytać cen godzinowych dla %s", d, exc_info=True)
             return None
         hit = self._cache.get(d)
         if hit is not None and hit[0] == key:
@@ -245,7 +245,7 @@ class DynamicTariffProfile:
             if prices and (self._mode == "dynamic" or price_levels(prices) >= DYN_MIN_LEVELS):
                 spans = derive_peaks(prices, eff)
         except Exception:  # noqa: BLE001
-            _LOGGER.debug("BMS: nie udało się wyznaczyć okien taryfy dynamicznej dla %s", d, exc_info=True)
+            _LOGGER.debug("EMS: nie udało się wyznaczyć okien taryfy dynamicznej dla %s", d, exc_info=True)
             spans = None
         if len(self._cache) > 8:
             self._cache.clear()
@@ -351,7 +351,7 @@ def profile_from_config(cfg: dict) -> TariffProfile:
     """Profil z ustawień integracji; błędne wartości → domyślna taryfa G12w (z ostrzeżeniem w logu)."""
     peaks, err = parse_peaks(str(cfg.get("tariff_peaks") or ""))
     if peaks is None:
-        _LOGGER.warning("BMS: nieprawidłowe okna szczytu taryfy (%s) — używam domyślnych %s", err, DEFAULT_PEAKS_TEXT)
+        _LOGGER.warning("EMS: nieprawidłowe okna szczytu taryfy (%s) — używam domyślnych %s", err, DEFAULT_PEAKS_TEXT)
         peaks = DEFAULT_PEAKS
     return TariffProfile(
         peaks=peaks,

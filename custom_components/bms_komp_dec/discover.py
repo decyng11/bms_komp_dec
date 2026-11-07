@@ -1,8 +1,8 @@
 """Wyszukiwanie urządzeń z licznikiem energii (kWh) w Home Assistant — propozycje dla zakładki „Urządzenia”.
 
 Szukamy encji `sensor` z jednostką Wh/kWh/MWh, grupujemy je po urządzeniu HA i do każdego dobieramy encję mocy
-(W/kW) tego samego urządzenia. Pomijamy: encje BMS i falownika, liczniki domu z panelu Energia (sieć, PV,
-bateria — razem z ich urządzeniami), encje z konfiguracji BMS, prognozy PV, kopie liczników z Utility Meter
+(W/kW) tego samego urządzenia. Pomijamy: encje EMS i falownika, liczniki domu z panelu Energia (sieć, PV,
+bateria — razem z ich urządzeniami), encje z konfiguracji EMS, prognozy PV, kopie liczników z Utility Meter
 oraz urządzenia już dodane. Nic tu nie jest zapisywane — karta pokazuje listę, a zapis idzie przez devices_set.
 """
 from __future__ import annotations
@@ -256,7 +256,7 @@ async def async_discover(hass, cfg: dict, existing: list[dict]) -> dict[str, Any
         from homeassistant.components.energy.data import async_get_manager
         prefs = (await async_get_manager(hass)).data
     except Exception as err:  # noqa: BLE001 — panel Energia nieskonfigurowany / brak komponentu
-        _LOGGER.debug("BMS: panel Energia niedostępny: %s", err)
+        _LOGGER.debug("EMS: panel Energia niedostępny: %s", err)
     sources, energy_devices = energy_prefs_split(prefs)
 
     cfg_eids: set[str] = set()
@@ -286,7 +286,7 @@ async def async_discover(hass, cfg: dict, existing: list[dict]) -> dict[str, Any
             "state": st.state, "disabled": bool(getattr(ent, "disabled_by", None)),
         })
 
-    # urządzenia, do których należą liczniki domu (sieć / PV / bateria) i encje z konfiguracji BMS
+    # urządzenia, do których należą liczniki domu (sieć / PV / bateria) i encje z konfiguracji EMS
     exclude_devices: set[str] = set()
     for e in entities:
         if e["eid"] in exclude_eids and e["device_id"]:

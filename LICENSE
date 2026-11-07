@@ -1,7 +1,7 @@
-BMS komp-dec — Licencja (wszelkie prawa zastrzeżone)
+EMS komp-dec — Licencja (wszelkie prawa zastrzeżone)
 Copyright (c) 2026 decyng11. Wszelkie prawa zastrzeżone.
 
-1. Oprogramowanie (kod integracji „BMS komp-dec” oraz karty „Centrum Energii”, wraz z dokumentacją)
+1. Oprogramowanie (kod integracji „EMS komp-dec” oraz karty „Centrum Energii”, wraz z dokumentacją)
    jest własnością autora. Udostępnienie kodu w repozytorium nie oznacza udzielenia licencji
    w zakresie szerszym niż opisany w punkcie 2.
 
@@ -33,7 +33,7 @@ W sprawie zgody na inne wykorzystanie: https://github.com/decyng11/bms_komp_dec/
 
 ---
 
-BMS komp-dec — License (All rights reserved)
+EMS komp-dec — License (All rights reserved)
 Copyright (c) 2026 decyng11. All rights reserved.
 
 You may download this software and install it in your own Home Assistant instance solely for

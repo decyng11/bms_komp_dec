@@ -4,10 +4,10 @@ Działa tylko przy włączonym switch.bms_device_control (domyślnie wyłączony
 Urządzenia wskazano przełącznik (switch / input_boolean) i tryb. Zasady bezpieczeństwa:
   • stan zmieniamy najwyżej co 10 minut, a warunek musi trwać 5 minut (bez „migania”),
   • wyłączamy tylko to, co sami włączyliśmy — urządzenia włączonego ręcznie nie ruszamy,
-  • gdy ktoś przełączy urządzenie ręcznie wbrew BMS, BMS nie steruje nim do końca dnia,
+  • gdy ktoś przełączy urządzenie ręcznie wbrew EMS, EMS nie steruje nim do końca dnia,
   • przy zaniku sieci niczego nie włączamy, a to, co włączyliśmy, wyłączamy,
   • dzienny limit czasu pracy (ctl_max_h) wyłącza urządzenie po jego przekroczeniu,
-  • po wyłączeniu głównego przełącznika wyłączamy urządzenia, które BMS włączył,
+  • po wyłączeniu głównego przełącznika wyłączamy urządzenia, które EMS włączył,
   • każda akcja trafia do dziennika decyzji.
 """
 from __future__ import annotations
@@ -174,13 +174,13 @@ class DeviceController:
                     rec["cmd"] = "off"
                 rec["reason"] = "sterowanie wyłączone"
                 continue
-            # ręczne przełączenie wbrew BMS (po czasie na odświeżenie stanu) → do końca dnia bez sterowania
+            # ręczne przełączenie wbrew EMS (po czasie na odświeżenie stanu) → do końca dnia bez sterowania
             if (rec.get("cmd") in ("on", "off") and is_on != (rec["cmd"] == "on")
                     and ts - float(rec.get("ts") or 0.0) > MANUAL_GRACE_S and not rec.get("manual")):
                 rec["manual"] = True
                 rec["cmd"] = None
-                rec["reason"] = "przełączone ręcznie — BMS nie steruje do końca dnia"
-                self.rt.log.add("devices", f"{d['name']}: przełączone ręcznie — BMS nie steruje nim do końca dnia", "info")
+                rec["reason"] = "przełączone ręcznie — EMS nie steruje do końca dnia"
+                self.rt.log.add("devices", f"{d['name']}: przełączone ręcznie — EMS nie steruje nim do końca dnia", "info")
                 self.rt._save_state()  # noqa: SLF001
                 continue
             if rec.get("manual"):

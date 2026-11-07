@@ -57,7 +57,7 @@ class BatteryStats:
         try:
             data = await self._store.async_load()
         except Exception as err:  # noqa: BLE001
-            _LOGGER.warning("BMS stats: błąd wczytywania: %s", err)
+            _LOGGER.warning("EMS stats: błąd wczytywania: %s", err)
             return
         if not isinstance(data, dict):
             return

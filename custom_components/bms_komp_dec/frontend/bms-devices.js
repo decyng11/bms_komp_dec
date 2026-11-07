@@ -1,5 +1,5 @@
 /**
- * BMS Centrum Energii — moduł „Urządzenia” (dodatkowe odbiorniki z pomiarem W / kWh)
+ * EMS Centrum Energii — moduł „Urządzenia” (dodatkowe odbiorniki z pomiarem W / kWh)
  * Ładowany na żądanie przez bms-panel.js (kontrakt modułu: 1). Nie dodawaj tego pliku do zasobów dashboardu ręcznie.
  * Dane liczy integracja (usługi devices_get / devices_set, sensor bms_devices); historia sprzed dodania urządzenia
  * jest uzupełniana ze statystyk długoterminowych Home Assistanta (dla encji z state_class).
@@ -297,7 +297,7 @@
         const mode = d.ctl_mode === 'pv' ? 'nadwyżka PV' : 'najtańsze godziny';
         let txt, cls = '';
         if (!c.enabled) { txt = `🎛 ${mode} · sterowanie wyłączone`; cls = 'opacity:.7;'; }
-        else if (st.manual) txt = '✋ przełączone ręcznie — BMS nie steruje do jutra';
+        else if (st.manual) txt = '✋ przełączone ręcznie — EMS nie steruje do jutra';
         else txt = `🎛 ${mode} · ${on ? 'wł.' : 'wył.'}${st.reason ? ' · ' + st.reason : ''}`;
         return `<div class="s" style="margin-top:4px;${cls}">${dvEsc(txt)}</div>`;
       },
@@ -309,7 +309,7 @@
         const on = st.state === 'on';
         return `<div class="dv-bar" style="margin-top:-2px;"><label class="dv-note" style="margin:0;display:flex;gap:8px;align-items:center;cursor:pointer;">
           <input type="checkbox" data-dv="ctl-master" ${on ? 'checked' : ''}/> Sterowanie urządzeniami ${on ? 'włączone' : 'wyłączone'}
-          ${n ? `(${n} ${n === 1 ? 'urządzenie' : 'urządzeń'} z przełącznikiem)` : '— wskaż przełącznik w „Edytuj”, żeby BMS mógł włączać urządzenie'}</label></div>`;
+          ${n ? `(${n} ${n === 1 ? 'urządzenie' : 'urządzeń'} z przełącznikiem)` : '— wskaż przełącznik w „Edytuj”, żeby EMS mógł włączać urządzenie'}</label></div>`;
       },
       _dvRender() {
         const root = this._el('devRoot'); if (!root) return;
@@ -390,8 +390,8 @@
             ${num('ctl_power_w', 'Moc urządzenia (W) — tyle nadwyżki potrzeba', 10)}${num('ctl_soc', 'Nadwyżka PV: włączaj od SOC (%)', 1)}
             ${num('ctl_hours', 'Najtańsze godziny: ile godzin pracy', 0.5)}${num('ctl_max_h', 'Limit pracy na dobę (h, 0 = bez limitu)', 0.5)}
           </div>
-          <div class="dv-note">BMS włącza i wyłącza przełącznik tylko przy włączonym „Sterowaniu urządzeniami” (przełącznik nad listą urządzeń). Zmienia stan najwyżej co 10 minut, a warunek musi trwać 5 minut.
-            Wyłącza tylko to, co sam włączył; gdy przełączysz urządzenie ręcznie, BMS nie steruje nim do końca dnia. Przy zaniku sieci niczego nie włącza.</div>
+          <div class="dv-note">EMS włącza i wyłącza przełącznik tylko przy włączonym „Sterowaniu urządzeniami” (przełącznik nad listą urządzeń). Zmienia stan najwyżej co 10 minut, a warunek musi trwać 5 minut.
+            Wyłącza tylko to, co sam włączył; gdy przełączysz urządzenie ręcznie, EMS nie steruje nim do końca dnia. Przy zaniku sieci niczego nie włącza.</div>
           <div class="dv-bar" style="margin-top:12px;"><button class="dv-btn" data-dv="save">💾 Zapisz</button><button class="dv-btn sec" data-dv="cancel">Anuluj</button>
             ${e._new ? '' : '<span style="flex:1;"></span><button class="dv-btn bad" data-dv="del">🗑 Usuń</button>'}<span class="dv-note" id="dvMsg" style="margin:0;color:var(--red);"></span></div></div></div>`;
       },
@@ -463,7 +463,7 @@
         if (!e.power_eid && !e.energy_eid) { if (msg) msg.textContent = 'Wskaż encję mocy (W) albo energii (kWh).'; return; }
         if (bad(e.power_eid) || bad(e.energy_eid)) { if (msg) msg.textContent = 'Encja musi mieć postać sensor.nazwa_encji.'; return; }
         if (e.switch_eid && !/^(switch|input_boolean)\.[a-z0-9_]+$/.test(e.switch_eid)) { if (msg) msg.textContent = 'Przełącznik musi mieć postać switch.nazwa albo input_boolean.nazwa.'; return; }
-        if (e.ctl_mode && e.ctl_mode !== 'off' && !e.switch_eid) { if (msg) msg.textContent = 'Żeby BMS sterował urządzeniem, wskaż jego przełącznik.'; return; }
+        if (e.ctl_mode && e.ctl_mode !== 'off' && !e.switch_eid) { if (msg) msg.textContent = 'Żeby EMS sterował urządzeniem, wskaż jego przełącznik.'; return; }
         if (!String(e.name || '').trim()) { if (msg) msg.textContent = 'Podaj nazwę.'; return; }
         const list = this._dvDevs().filter((d) => d.id !== e.id);
         if (e._new) list.push(e); else { const i = this._dvDevs().findIndex((d) => d.id === e.id); list.splice(i < 0 ? list.length : i, 0, e); }
@@ -505,7 +505,7 @@
         const cats = (s.data && s.data.categories) || []; const groups = (s.data && s.data.groups) || [];
         const free = d.free_slots == null ? 40 : d.free_slots;
         const picked = list.filter((c) => (ds.picks[c.key] || {}).on).length;
-        const skipNote = [sk.home ? `${sk.home} liczników domu (sieć, PV, bateria, encje z konfiguracji BMS)` : '', sk.bms ? `${sk.bms} encji BMS / falownika` : '',
+        const skipNote = [sk.home ? `${sk.home} liczników domu (sieć, PV, bateria, encje z konfiguracji EMS)` : '', sk.bms ? `${sk.bms} encji EMS / falownika` : '',
           sk.helper ? `${sk.helper} pomocniczych (Utility Meter, prognozy, inne falowniki)` : '', sk.added ? `${sk.added} już dodanych` : ''].filter(Boolean).join(', ');
         if (!list.length) {
           return wrap(`<div class="chart-empty">Nie znalazłem nowych urządzeń z licznikiem kWh.</div>${skipNote ? `<div class="dv-note">Pominięto: ${dvEsc(skipNote)}.</div>` : ''}

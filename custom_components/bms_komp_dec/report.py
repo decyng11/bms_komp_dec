@@ -75,7 +75,7 @@ def monthly_report(ledger, stats, year: int, month: int, cap_kwh: float) -> dict
 
 def report_text(rep: dict[str, Any]) -> str:
     """Krótka wersja tekstowa do powiadomienia."""
-    lines = [f"Raport BMS — {rep['title']}",
+    lines = [f"Raport EMS — {rep['title']}",
              f"Bilans z siecią: {rep['net']:+.2f} zł (sprzedaż {rep['revenue']:.2f} zł − zakup {rep['cost']:.2f} zł)",
              f"Energia: eksport {rep['export_kwh']:.1f} kWh, import {rep['import_kwh']:.1f} kWh"]
     if rep.get("pv_kwh") is not None:

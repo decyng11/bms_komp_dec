@@ -2,16 +2,16 @@
   "config": {
     "step": {
       "user": {
-        "title": "Add to BMS komp-dec",
+        "title": "Add to EMS komp-dec",
         "description": "What do you want to add?",
         "menu_options": {
           "wizard": "Wizard: inverter + planner in one go (recommended)",
-          "bms": "BMS planner (controls the inverter through its entities)",
+          "bms": "EMS planner (controls the inverter through its entities)",
           "inverter": "Inverter connected directly (experimental, without ha-solarman)"
         }
       },
       "bms": {
-        "title": "BMS komp-dec",
+        "title": "EMS komp-dec",
         "description": "Select the source entities. Empty = defaults.",
         "data": {
           "soc": "Battery SOC entity",
@@ -104,7 +104,7 @@
         }
       },
       "reconfigure": {
-        "title": "BMS komp-dec reconfiguration",
+        "title": "EMS komp-dec reconfiguration",
         "description": "Change entities and parameters. Saving reloads the integration (no need to remove it).",
         "data": {
           "soc": "Battery SOC entity",
@@ -168,7 +168,7 @@
         }
       },
       "wizard": {
-        "title": "BMS komp-dec wizard",
+        "title": "EMS komp-dec wizard",
         "description": "The wizard adds the inverter, waits for its entities to appear, matches them to the planner and saves everything. Writing to the inverter and auto-apply stay off until you enable them.",
         "data": {
           "connection": "Where should the inverter data come from?"
@@ -269,7 +269,7 @@
       }
     },
     "abort": {
-      "single_instance_allowed": "BMS komp-dec is already configured.",
+      "single_instance_allowed": "EMS komp-dec is already configured.",
       "reconfigure_successful": "Configuration saved, integration reloaded.",
       "unknown": "Unknown error.",
       "already_configured_device": "An inverter with this address is already added.",
@@ -294,7 +294,7 @@
   "options": {
     "step": {
       "init": {
-        "title": "BMS komp-dec settings",
+        "title": "EMS komp-dec settings",
         "description": "Change entities and parameters. Saving reloads the integration (no need to remove it).",
         "data": {
           "soc": "Battery SOC entity",
@@ -427,19 +427,19 @@
   },
   "issues": {
     "inverter_no_data": {
-      "title": "BMS: no data from the inverter",
-      "description": "For more than 10 minutes BMS has not received SOC or grid power readings. The plan and schedule cannot work properly without them.\n\nCheck the Solarman logger (power, Wi-Fi) and the inverter integration (ha-solarman or the inverter entry in BMS). This issue clears itself when data comes back."
+      "title": "EMS: no data from the inverter",
+      "description": "For more than 10 minutes EMS has not received SOC or grid power readings. The plan and schedule cannot work properly without them.\n\nCheck the Solarman logger (power, Wi-Fi) and the inverter integration (ha-solarman or the inverter entry in EMS). This issue clears itself when data comes back."
     },
     "price_missing": {
-      "title": "BMS: no energy sell price",
-      "description": "For more than 30 minutes the sell price entity ({entity}) has had no value. The planner cannot judge whether selling or blocking PV charging pays off.\n\nCheck the price integration (RCE PSE, Pstryk or other) or select the right entity in the BMS configuration."
+      "title": "EMS: no energy sell price",
+      "description": "For more than 30 minutes the sell price entity ({entity}) has had no value. The planner cannot judge whether selling or blocking PV charging pays off.\n\nCheck the price integration (RCE PSE, Pstryk or other) or select the right entity in the EMS configuration."
     },
     "pv_forecast_missing": {
-      "title": "BMS: no hourly PV forecast",
-      "description": "For more than 2 hours there has been no hourly PV production forecast for today or tomorrow. The planner then assumes no sun and may charge the battery from the grid unnecessarily.\n\nCheck the Solcast or Forecast.Solar integration and the forecast entities in the BMS configuration."
+      "title": "EMS: no hourly PV forecast",
+      "description": "For more than 2 hours there has been no hourly PV production forecast for today or tomorrow. The planner then assumes no sun and may charge the battery from the grid unnecessarily.\n\nCheck the Solcast or Forecast.Solar integration and the forecast entities in the EMS configuration."
     },
     "auto_apply_no_write": {
-      "title": "BMS: auto-apply without inverter writes",
+      "title": "EMS: auto-apply without inverter writes",
       "description": "Auto-apply of proposals is on, but the directly connected inverter ({inverter}) has writes disabled. The schedule changes, the inverter settings do not.\n\nEnable writes in the inverter entry options (Configure → Allow writing to the inverter) or turn auto-apply off."
     }
   }

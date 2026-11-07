@@ -54,7 +54,7 @@ async def apply_times(hass: HomeAssistant, times: dict[str, Any]) -> tuple[int, 
                 "time", "set_value", {"entity_id": eid, "time": val + ":00"}, blocking=True)
             applied += 1
         except Exception as err:  # noqa: BLE001
-            _LOGGER.error("BMS apply: błąd %s: %s", eid, err)
+            _LOGGER.error("EMS apply: błąd %s: %s", eid, err)
             skipped.append(f"{key}: {err}")
     return applied, skipped
 
@@ -148,11 +148,11 @@ async def async_auto_apply(runtime, hass: HomeAssistant, result: dict[str, Any],
     if applied_n:
         try:
             await runtime.monitor.notifier.send(
-                "auto_apply", "🤖 BMS: auto-stosowanie zmieniło harmonogram",
+                "auto_apply", "🤖 EMS: auto-stosowanie zmieniło harmonogram",
                 f"Zmieniono {applied_n}: {changes}.\nCofnięcie: usługa bms_komp_dec.undo_auto_apply lub zakładka EMS.",
                 key="auto_apply", level="info")
         except Exception as err:  # noqa: BLE001
-            _LOGGER.debug("BMS: powiadomienie o auto-stosowaniu nieudane: %s", err)
+            _LOGGER.debug("EMS: powiadomienie o auto-stosowaniu nieudane: %s", err)
     return {"applied": final, "skipped": skipped}
 
 
@@ -183,7 +183,7 @@ async def async_daily_suggest(runtime, hass: HomeAssistant, optimizer) -> None:
         runtime.log.add("auto", "Propozycja harmonogramu: bez zmian")
         return
 
-    lines = ["Nowa propozycja harmonogramu (BMS):", ""]
+    lines = ["Nowa propozycja harmonogramu (EMS):", ""]
     for p in worthwhile:
         lines.append(f"• {p['label']}: {p['current']} → {p['proposed']}")
 
@@ -201,5 +201,5 @@ async def async_daily_suggest(runtime, hass: HomeAssistant, optimizer) -> None:
         runtime.log.add("auto", f"Nowa propozycja harmonogramu ({len(worthwhile)} zmian) — czeka na zatwierdzenie")
         lines += ["", "Otwórz panel → zakładka EMS → 'Zaproponuj' → 'Zastosuj zaznaczone'."]
 
-    await runtime.monitor.notifier.send("proposal", "🤖 BMS: propozycja harmonogramu", "\n".join(lines),
+    await runtime.monitor.notifier.send("proposal", "🤖 EMS: propozycja harmonogramu", "\n".join(lines),
                                         key="proposal", level="info")

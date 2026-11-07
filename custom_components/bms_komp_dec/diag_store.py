@@ -31,7 +31,7 @@ class DiagStore:
         try:
             raw = await self._store.async_load()
         except Exception as err:  # noqa: BLE001
-            _LOGGER.warning("BMS diag store: błąd wczytywania: %s", err)
+            _LOGGER.warning("EMS diag store: błąd wczytywania: %s", err)
             return
         if isinstance(raw, dict):
             for k, v in raw.items():

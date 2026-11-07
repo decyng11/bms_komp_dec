@@ -1,4 +1,4 @@
-"""Sterowanie falownikami różnych marek: te same komendy BMS, różne kroki na falowniku.
+"""Sterowanie falownikami różnych marek: te same komendy EMS, różne kroki na falowniku.
 
 Deye (domyślnie): tryb pracy Zero Export / Export First, prąd ładowania, moc nadwyżki, Time of Use — jak dotąd
 (inverter_ctl + runtime._steps).
@@ -126,7 +126,7 @@ def role_eid(hass: HomeAssistant, cfg: dict[str, Any], brand: str, role: str) ->
 
 
 def control_entities(hass: HomeAssistant, cfg: dict[str, Any]) -> dict[str, str | None]:
-    """Encje, którymi BMS steruje falownikiem (do sprawdzenia i podglądu)."""
+    """Encje, którymi EMS steruje falownikiem (do sprawdzenia i podglądu)."""
     brand = detect(hass, cfg)
     if brand == DEYE:
         return {r: ictl.resolve(hass, cfg, r) for r in ("work_mode", "charge_current", "export_surplus", "tou_select")}
@@ -154,7 +154,7 @@ class StepError(Exception):
 
 def steps(hass: HomeAssistant, cfg: dict[str, Any], brand: str, key: str, *, sell_w: float, charge_w: float,
           discharge_w: float, normal_current: float | None) -> list[tuple[str, str, Any]]:
-    """Kroki komendy BMS dla Sofara (domena, encja, wartość)."""
+    """Kroki komendy EMS dla Sofara (domena, encja, wartość)."""
     r = {role: role_eid(hass, cfg, brand, role) for role in ROLES[brand]}
 
     def need(*roles: str) -> None:
@@ -256,7 +256,7 @@ def state(hass: HomeAssistant, cfg: dict[str, Any], brand: str) -> dict[str, Any
 
 
 def powers(hass: HomeAssistant, cfg: dict[str, Any]) -> tuple[float, float, float]:
-    """(moc sprzedaży, moc ładowania z sieci, moc rozładowania) w W — z ustawień BMS."""
+    """(moc sprzedaży, moc ładowania z sieci, moc rozładowania) w W — z ustawień EMS."""
     sell = number_value(hass, "sell_export_power_w", 6000.0) or 6000.0
     try:
         chg = float(cfg.get("max_charge_power_w") or 5000.0)

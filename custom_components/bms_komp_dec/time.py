@@ -1,4 +1,4 @@
-"""Time entities for BMS komp-dec."""
+"""Time entities for EMS komp-dec."""
 from __future__ import annotations
 from datetime import time as dt_time
 from homeassistant.components.time import TimeEntity

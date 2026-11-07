@@ -145,7 +145,7 @@ def health_check(rt) -> dict[str, Any]:
         test = switch_on(hass, "brand_test_mode", True)
         checks.append(_chk("brand_test", "Tryb próbny (Sofar)", "warn" if test else "ok",
                            "włączony — komendy trafiają tylko do dziennika jako „ustawiłbym …”" if test
-                           else "wyłączony — BMS zapisuje ustawienia do falownika",
+                           else "wyłączony — EMS zapisuje ustawienia do falownika",
                            "Sprawdź w dzienniku, czy kroki komend są właściwe, i dopiero wtedy wyłącz switch.bms_brand_test_mode." if test else ""))
     else:
         for role in ("work_mode", "charge_current", "export_surplus", "tou_select"):
@@ -159,14 +159,14 @@ def health_check(rt) -> dict[str, Any]:
                                    "Sprawdź połączenie z loggerem Solarman; komendy nie zadziałają, dopóki encja jest niedostępna."))
             else:
                 checks.append(_chk(f"ctl_{role}", ROLE_LABEL[role], "ok", f"{eid} = {st.state}"))
-    # falownik dodany bezpośrednio: bez „Zezwól na zapis” żadna komenda BMS nie dojdzie do falownika
+    # falownik dodany bezpośrednio: bez „Zezwól na zapis” żadna komenda EMS nie dojdzie do falownika
     blocked = _direct_write_blocked(hass, [e for e in ctl.values() if e])
     if blocked:
         names = ", ".join(dict.fromkeys(n for _e, n in blocked))
         checks.append(_chk("direct_write", "Zapis do falownika", "error",
-                           f"Falownik „{names}” (połączony bezpośrednio) ma wyłączony zapis — komendy i harmonogram BMS "
+                           f"Falownik „{names}” (połączony bezpośrednio) ma wyłączony zapis — komendy i harmonogram EMS "
                            f"nie zmienią jego ustawień ({', '.join(e for e, _n in blocked)}).",
-                           "Ustawienia → Urządzenia i usługi → BMS komp-dec → wpis falownika → Konfiguruj → zaznacz „Zezwól na zapis do falownika”."))
+                           "Ustawienia → Urządzenia i usługi → EMS komp-dec → wpis falownika → Konfiguruj → zaznacz „Zezwól na zapis do falownika”."))
     # nazwy opcji select (Deye)
     for role, kinds in ((("work_mode", ("export", "zero")), ("tou_select", ("tou_off", "tou_on"))) if brand == brands.DEYE else ()):
         eid = rt.eid(role)
@@ -310,7 +310,7 @@ def health_check(rt) -> dict[str, Any]:
     miss = [k for k, _ in TIMES if hass.states.get(find_eid(hass, "time", k)) is None]
     checks.append(_chk("times", "Godziny harmonogramu", "ok" if not miss else "error",
                        "wszystkie encje czasu istnieją" if not miss else "brak: " + ", ".join(miss),
-                       "" if not miss else "Przeładuj integrację (Ustawienia → Urządzenia i usługi → BMS komp-dec → ⋮ → Przeładuj)."))
+                       "" if not miss else "Przeładuj integrację (Ustawienia → Urządzenia i usługi → EMS komp-dec → ⋮ → Przeładuj)."))
 
     # --- powiadomienia
     svc = str(cfg.get("notify_service") or "").strip()

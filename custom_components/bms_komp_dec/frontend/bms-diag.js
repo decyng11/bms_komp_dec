@@ -1,5 +1,5 @@
 /**
- * BMS Centrum Energii — moduł Diagnostyki
+ * EMS Centrum Energii — moduł Diagnostyki
  * Ładowany na żądanie przez bms-panel.js (kontrakt modułu: 1). Nie dodawaj tego pliku do zasobów dashboardu ręcznie.
  */
 (function () {
@@ -314,7 +314,7 @@
       const b = this._el('tabDiag');
       if (b) { b.style.display = this._dgIsAdmin() ? '' : 'none'; const ms = this._hass.states[this._eid('sensor', 'monitor_status')]; const be = ms && ms.attributes && Array.isArray(ms.attributes.alarms) ? ms.attributes.alarms.length : 0; const bad = (DG_LS.get('bms_diag_alarms', []).length || be) ? ' ⚠' : ''; const want = '🛠️ Diagnostyka' + bad; if (b.textContent !== want) b.textContent = want; }
       const s = this._dgS();
-      const nw = Date.now(); if (nw - (s._wcAt || 0) > 5000) { s._wcAt = nw; try { this._dgWatchCheck(); } catch (e) { console.warn('BMS diag watch', e); } }
+      const nw = Date.now(); if (nw - (s._wcAt || 0) > 5000) { s._wcAt = nw; try { this._dgWatchCheck(); } catch (e) { console.warn('EMS diag watch', e); } }
       if (s.until && !this._dgUnlocked() && this._activeTab === 'diag' && this._el('dgBody')) { s.until = 0; this._dgRender(); }
     },
     // Urządzenia Solarman wykryte w rejestrze encji HA (niezależnie od nazw encji)
@@ -1181,7 +1181,7 @@
     },
     async _dgImportFile(file) {
       if (!file) return;
-      try { const doc = JSON.parse(await file.text()); if (!doc || typeof doc.values !== 'object') throw new Error('To nie jest plik konfiguracji BMS.'); await this._dgApplyValues(doc.values, `Import: ${file.name}`); }
+      try { const doc = JSON.parse(await file.text()); if (!doc || typeof doc.values !== 'object') throw new Error('To nie jest plik konfiguracji EMS.'); await this._dgApplyValues(doc.values, `Import: ${file.name}`); }
       catch (e) { this._dgToast('❌ ' + (e && e.message || e), true); }
       const f = this._el('dgFile'); if (f) f.value = '';
     },
@@ -1307,7 +1307,7 @@
       const d = this._dgStState().data; if (!d) return '';
       const ic = { ok: 'OK', warn: 'UWAGA', error: 'BŁĄD' };
       const sm = d.summary || {};
-      const lines = [`BMS komp-dec ${d.version || '?'} — autotest ${d.time || ''}`, `Wynik: ${sm.errors || 0} błędów, ${sm.warnings || 0} ostrzeżeń, ${sm.ok || 0} OK`];
+      const lines = [`EMS komp-dec ${d.version || '?'} — autotest ${d.time || ''}`, `Wynik: ${sm.errors || 0} błędów, ${sm.warnings || 0} ostrzeżeń, ${sm.ok || 0} OK`];
       (d.groups || []).forEach((g) => {
         lines.push('', `== ${g.name}`);
         (g.checks || []).forEach((c) => { lines.push(`[${ic[c.status] || c.status}] ${c.title}: ${c.detail}${c.fix && c.status !== 'ok' ? ` → ${c.fix}` : ''}`); });
@@ -1377,7 +1377,7 @@
       const svc = d.notify_service;
       const head = `<div class="dg-card"><h4>🔔 Powiadomienia</h4>
         <div class="sub">Wybierz, co ma przychodzić, gdzie (telefon albo tylko Home Assistant) i jak często najwyżej. Ustawienia zapisują się w integracji — działają także przy zamkniętej karcie.</div>
-        <div class="dg-muted" style="margin-bottom:8px;">Telefon: ${svc ? `<b>${dgEsc(svc)}</b>` : '<span class="dg-bad">nie ustawiono usługi notify — powiadomienia trafiają tylko do HA</span> (BMS komp-dec → Konfiguruj → usługa powiadomień)'} · główny wyłącznik: <b>${d.enabled === false ? 'WYŁĄCZONY' : 'włączony'}</b></div>
+        <div class="dg-muted" style="margin-bottom:8px;">Telefon: ${svc ? `<b>${dgEsc(svc)}</b>` : '<span class="dg-bad">nie ustawiono usługi notify — powiadomienia trafiają tylko do HA</span> (EMS komp-dec → Konfiguruj → usługa powiadomień)'} · główny wyłącznik: <b>${d.enabled === false ? 'WYŁĄCZONY' : 'włączony'}</b></div>
         <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
           <button class="dg-btn sm" data-act="nt-save" ${nt.dirty ? '' : 'disabled'}>💾 Zapisz${nt.dirty ? ' zmiany' : ''}</button>
           <button class="dg-btn sec sm" data-act="nt-test">📲 Wyślij testowe</button>
