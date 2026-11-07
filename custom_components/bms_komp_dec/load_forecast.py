@@ -230,6 +230,20 @@ class LoadForecaster:
         self._fit_temperature_coefficients()
         self._compute_seasonal_factors()
 
+    def clear_history(self) -> None:
+        """Kasuje zebraną historię zużycia; model i prognoza startują od zera (wymagane ≥5 dni)."""
+        self.days.clear()
+        self.profiles.clear()
+        self.forecast_history.clear()
+        self.seasonal_factors = {}
+        self._hourly_accum = [0.0] * 24
+        self._hourly_cov = [0.0] * 24
+        self._hourly_last_sample = None
+        self._hourly_sample_date = None
+        self._ewma_kw = self._ewma_at = self._ewma_since = None
+        self._fit_temperature_coefficients()
+        self._schedule_save()
+
     def _load_from_storage(self, data: dict) -> None:
         days = data.get("days")
         if isinstance(days, dict):

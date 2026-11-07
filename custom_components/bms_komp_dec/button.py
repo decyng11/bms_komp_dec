@@ -22,7 +22,8 @@ async def async_setup_entry(hass, entry, async_add_entities):
 
 async def _async_setup_bms_entry(hass, entry, async_add_entities):
     coordinator = hass.data["bms_komp_dec"][entry.entry_id]
-    async_add_entities([BmsButton(coordinator, k, n, i) for k, n, i in BUTTONS])
+    async_add_entities([BmsButton(coordinator, k, n, i) for k, n, i in BUTTONS]
+                        + [BmsClearHistoryButton(coordinator)])
 
 
 class BmsButton(BmsBaseEntity, ButtonEntity):
@@ -36,3 +37,24 @@ class BmsButton(BmsBaseEntity, ButtonEntity):
         if runtime is None:
             raise HomeAssistantError("EMS nie jest jeszcze gotowy — spróbuj za chwilę.")
         await runtime.run_command(self._key, source="ręcznie")
+
+
+class BmsClearHistoryButton(BmsBaseEntity, ButtonEntity):
+    """Czyści zebraną historię zużycia (dni, profile godzinowe, historia prognoz) — zbieranie zaczyna się od zera."""
+
+    def __init__(self, coordinator):
+        super().__init__("wyczysc_historie_zuzycia", "Wyczyść historię zużycia", domain="button")
+        self._coordinator = coordinator
+        self._attr_icon = "mdi:database-remove"
+
+    async def async_press(self) -> None:
+        lf = getattr(self._coordinator, "load_forecast", None)
+        if lf is None:
+            raise HomeAssistantError("EMS nie jest jeszcze gotowy — spróbuj za chwilę.")
+        lf.clear_history()
+        runtime = getattr(self._coordinator, "runtime", None)
+        if runtime is not None:
+            runtime.log.add("command", "Wyczyszczono historię zużycia — zbieranie od zera (ręcznie)", "ok")
+        refresh = getattr(self._coordinator, "async_request_refresh", None)
+        if refresh is not None:
+            await refresh()

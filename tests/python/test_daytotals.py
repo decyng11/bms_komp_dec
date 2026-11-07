@@ -149,4 +149,20 @@ try:
 finally:
     lfm.BACKFILL_FROM_RECORDER = False
 
+# ---- 9. przycisk „Wyczyść historię zużycia”
+hass, lf = mk(); at(2026, 11, 7, 12)
+lf.days.update({"2026-11-04": 20.0, "2026-11-05": 21.0}); lf.profiles["2026-11-05"] = [1.0] * 24
+lf.forecast_history["2026-11-05"] = 20.0; lf.seasonal_factors = {11: 1.1}; lf._hourly_accum[3] = 5.0
+lf.clear_history()
+check("clear_history czyści dni, profile, historię prognoz, sezonowość, akumulator",
+      not lf.days and not lf.profiles and not lf.forecast_history and not lf.seasonal_factors and sum(lf._hourly_accum) == 0)
+import importlib as _il
+bt = _il.import_module("custom_components.bms_komp_dec.button")
+class _C: pass
+c = _C(); c.load_forecast = lf; lf.days["2026-11-06"] = 9.0
+b = bt.BmsClearHistoryButton(c)
+asyncio.run(b.async_press())
+check("przycisk czyści historię", lf.days == {}, lf.days)
+check("encja przycisku: button.bms_wyczysc_historie_zuzycia", getattr(b, "_key", "") == "wyczysc_historie_zuzycia")
+
 print(f"DAYTOTALS PASS={PASS} FAIL={FAIL}")
