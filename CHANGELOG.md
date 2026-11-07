@@ -1,4 +1,4 @@
-# EMS komp-dec — zmiany w 0.8.6 (z 0.8.5)
+# EMS komp-dec — zmiany w 0.8.7 (z 0.8.5; wersja 0.8.6 nie została wydana, jej zmiany są tutaj)
 
 ## Falowniki Sofar (eksperymentalne, na start w trybie próbnym)
 - **Rozpoznawanie marki** po opcjach trybu pracy: Deye (bez zmian), **Sofar G3** (HYD 5–20KTL-3PH, HYD 3–6K-EP — profile `sofar_g3`, `sofar_g3hyd`) i **Sofar hybrydowy** (HYD 3–6K ES, ME3000SP — profil `sofar_hybrid`). Kreator dobiera encje Sofara z profili ha-solarman jak dotąd.

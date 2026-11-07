@@ -1,6 +1,6 @@
 name: Wydanie
 
-# Utwórz wydanie z tagiem równym wersji (v0.8.6 albo 0.8.6). Akcja sprawdzi, czy tag zgadza się z wersją
+# Utwórz wydanie z tagiem równym wersji (v0.8.7 albo 0.8.7). Akcja sprawdzi, czy tag zgadza się z wersją
 # w manifest.json, i doda do wydania bms_komp_dec.zip (w środku sam folder z plikami integracji).
 # Gdy paczki zabrakło (np. tag bez „v” przed tą poprawką): Actions → Wydanie → Run workflow → podaj tag.
 
