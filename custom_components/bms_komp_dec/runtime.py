@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from homeassistant.core import HomeAssistant
@@ -527,7 +527,9 @@ class BmsRuntime:
             return ictl.normal_charge_current(h, cc, self.state.get("normal_charge_current"))
 
         def sell_w() -> float:
-            return ictl.power_setting(h, ex, "sell_export_power_w", 6000.0)
+            w = ictl.power_setting(h, ex, "sell_export_power_w", 6000.0)
+            cap_w = self.planned_sale_power_w()          # plan obniżył moc, by sprzedać tylko zapas energii
+            return min(w, cap_w) if cap_w else w
 
         def surplus_w() -> float:
             return ictl.power_setting(h, ex, "surplus_power_w", 9700.0)
@@ -680,9 +682,24 @@ class BmsRuntime:
             self._spawn(self.monitor.notifier.send("schedule_skipped", "⏭ EMS: pominięty start harmonogramu",
                                                    f"{now_hm} {time_key}: {msg}", key=f"skip:{time_key}", level="info"))
 
+    @staticmethod
+    def due_times(now: datetime) -> set[str]:
+        """Godziny HH:MM, których reguły są teraz „na czasie”: bieżąca minuta, a tuż po wiosennej zmianie czasu
+        (02:00 → 03:00) także cała nieistniejąca godzina 02:xx — inaczej np. STOP ładowania o 02:00 nigdy by nie zadziałał."""
+        due = {now.strftime("%H:%M")}
+        off = now.utcoffset()
+        prev = (now.astimezone(timezone.utc) - timedelta(minutes=2)).astimezone(now.tzinfo)
+        poff = prev.utcoffset()
+        if off is not None and poff is not None and off > poff:
+            gap = int((off - poff).total_seconds() // 60)
+            t0 = now.replace(minute=0, second=0, microsecond=0, tzinfo=None) - timedelta(minutes=gap)
+            due.update((t0 + timedelta(minutes=i)).strftime("%H:%M") for i in range(gap))
+        return due
+
     async def process_rules(self, now: datetime, dry_run: bool = False) -> dict[str, Any]:
         now = dt_util.as_local(now)
         now_hm = now.strftime("%H:%M")
+        due = self.due_times(now)
         soc_val = self.soc()
         results: list[dict[str, Any]] = []
         day_ok, day_key, is_hol = self.day_info(now)
@@ -714,7 +731,9 @@ class BmsRuntime:
 
             if not t_st or t_val in ("unknown", "unavailable", "", "BRAK"):
                 continue
-            if t_val[:5] == "00:00" or t_val[:5] != now_hm:
+            if t_val[:5] == "00:00" or t_val[:5] not in due:
+                continue
+            if now.fold and not dry_run:        # jesienna zmiana czasu: godzina 02:xx powtarza się, a reguły wykonały się w pierwszym przejściu
                 continue
 
             last = self.fired.get(time_key)
@@ -925,6 +944,70 @@ class BmsRuntime:
         except Exception:  # noqa: BLE001
             pass
 
+    def _remember_sale_power(self, plan: dict[str, Any] | None) -> None:
+        """Zapamiętuje okna sprzedaży z planu (start, stop, moc) — plan liczy tylko przyszłe godziny, więc w chwili
+        startu okna go już nie ma. Wpisy mają klucz „data|start”; starsze niż wczoraj są usuwane."""
+        try:
+            today = dt_util.now().date()
+            mem = self.state.setdefault("sale_power_plan", {})
+            for w in ((plan or {}).get("assumptions") or {}).get("sale_windows") or []:
+                d = today + timedelta(days=int(w["day"]))
+                mem[f"{d.isoformat()}|{int(w['start']):02d}"] = {"stop": int(w["stop"]), "power_w": w.get("power_w")}
+            keep = (today - timedelta(days=1)).isoformat()
+            for k in [k for k in mem if k.split("|")[0] < keep]:
+                mem.pop(k, None)
+        except Exception:  # noqa: BLE001
+            pass
+
+    PLAN_LOG_GROUPS = (
+        ("ładowanie z sieci (noc)", ("start_grid_charge", "stop_grid_charge")),
+        ("ładowanie z sieci (zestaw 2)", ("start_grid_charge_2", "stop_grid_charge_2")),
+        ("sprzedaż z baterii (zestaw 1)", ("bateria_sprzedaz_start", "bateria_sprzedaz_stop")),
+        ("sprzedaż z baterii (zestaw 2)", ("bateria_sprzedaz_start_2", "bateria_sprzedaz_stop_2")),
+        ("blokada ładowania z PV", ("pv_export_start", "pv_export_stop")),
+    )
+
+    def _log_plan_decisions(self, plan: dict[str, Any] | None) -> None:
+        """Dziennik decyzji: wpis „Plan: …” tylko wtedy, gdy decyzja planu się zmieniła (zaplanowano / pominięto / inne godziny).
+        Dzięki temu widać, DLACZEGO plan coś zrobił albo nie zrobił i o której godzinie zmienił zdanie."""
+        try:
+            props = (plan or {}).get("proposals") or {}
+            sigs = self.state.setdefault("plan_sig", {})
+            for name, (k1, k2) in self.PLAN_LOG_GROUPS:
+                a, b = props.get(k1), props.get(k2)
+                if not isinstance(a, dict):
+                    continue
+                skip = bool(a.get("skip")) or not a.get("proposed")
+                sig = ["skip"] if skip else [str(a.get("proposed")), str((b or {}).get("proposed"))]
+                if sigs.get(name) == sig:
+                    continue
+                had = name in sigs
+                sigs[name] = sig
+                reason = str(a.get("reason") or "").replace("Pomiń — ", "").strip()
+                if skip:
+                    msg = f"Plan: {name} — pomijam" + (f": {reason[:260]}" if reason else ".")
+                    self.log.add("plan", msg, "info", changed=had)
+                else:
+                    msg = f"Plan: {name} {sig[0]}–{sig[1]}" + (f". {reason[:260]}" if reason else "")
+                    self.log.add("plan", msg, "info", changed=had)
+        except Exception:  # noqa: BLE001
+            pass
+
+    def planned_sale_power_w(self, now: datetime | None = None) -> float | None:
+        """Moc sprzedaży z planu dla bieżącej godziny (gdy plan ją obniżył), albo None = bez ograniczenia."""
+        try:
+            if not switch_on(self.hass, "sale_power_fit", True):
+                return None
+            now = dt_util.as_local(now or dt_util.now())
+            for k, v in (self.state.get("sale_power_plan") or {}).items():
+                d, h = k.split("|")
+                if d == now.date().isoformat() and int(h) <= now.hour < int(v["stop"]):
+                    p = v.get("power_w")
+                    return float(p) if isinstance(p, (int, float)) and p >= 500 else None
+        except Exception:  # noqa: BLE001
+            return None
+        return None
+
     # --------------------------------------------------------------- zabezpieczenia
     def _cooldown_ok(self, name: str, now: datetime) -> bool:
         last = self._guard_last.get(name)
@@ -1097,12 +1180,15 @@ class BmsRuntime:
                 "generated_at": res.get("generated_at"), "mode": res.get("mode"),
                 "error": res.get("error"), "curve": res.get("curve"), "assumptions": res.get("assumptions"),
                 "proposals": {k: {"proposed": p.get("proposed"), "current": p.get("current"), "skip": p.get("skip"),
-                                  "label": p.get("label")} for k, p in (res.get("proposals") or {}).items()},
+                                  "label": p.get("label"), "reason": str(p.get("reason") or "")[:600]}
+                              for k, p in (res.get("proposals") or {}).items()},
             }
             if res.get("error"):
                 self._spawn(self.monitor.notifier.send("plan_error", "📉 EMS: plan niedostępny", str(res["error"]), key="plan_error"))
             else:
                 self._remember_grid_target(self._plan)
+                self._remember_sale_power(self._plan)
+                self._log_plan_decisions(self._plan)
             return self._plan
 
     def _plan_ttl(self) -> float:

@@ -580,6 +580,6 @@
     });
   };
   install.contract = 1;
-  install.version = '0.8.7';
+  install.version = '0.8.8';
   window.__bmsDevicesInstall = install;
 })();

@@ -47,6 +47,7 @@ CATALOG: dict[str, tuple] = {
                    ("próg", "%", 30.0, 10.0, 200.0, 5.0)),
     "proposal": ("Ceny i plan", "Codzienna propozycja harmonogramu", "Propozycja z 16:00 (co by się zmieniło w godzinach).", True, False, 0, False, None),
     "auto_apply": ("Ceny i plan", "Auto-stosowanie zmieniło harmonogram", "Które godziny zmieniono (z możliwością cofnięcia).", True, True, 0, False, None),
+    "plan_floor": ("Ceny i plan", "Plan: bateria dojdzie do progu", "Plan 24 h przewiduje zejście SOC do progu odcięcia falownika w ciągu 16 h (dom pobierałby z sieci), mimo zaplanowanego ładowania i sprzedaży.", True, True, 720, False, None),
     "plan_error": ("Ceny i plan", "Plan niedostępny", "Planer nie mógł policzyć planu (np. brak SOC).", True, True, 360, False, None),
     "schedule_skipped": ("Ceny i plan", "Pominięty start harmonogramu", "Start sprzedaży/ładowania pominięty (SOC, cena, zabezpieczenie).", False, True, 60, False, None),
     # --- działanie

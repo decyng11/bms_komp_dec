@@ -2344,7 +2344,7 @@
 
       const LEVEL = { ok: '#34d399', warn: '#fbbf24', error: '#f87171', info: TC('muted') };
       const KIND = { schedule: 'harmonogram', guard: 'zabezpieczenie', price: 'cena', profit: 'opłacalność',
-        reserve: 'rezerwa', command: 'komenda', verify: 'weryfikacja', auto: 'auto', system: 'system' };
+        reserve: 'rezerwa', command: 'komenda', verify: 'weryfikacja', auto: 'auto', system: 'system', plan: 'plan', notify: 'powiadomienie' };
       const rows = entries.length ? entries.map(e => {
         const d = new Date(e.ts);
         const when = isNaN(d) ? this._esc(e.ts) : d.toLocaleString('pl-PL', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit' });
@@ -4018,7 +4018,7 @@
   // =====================================================================
   // Wersja tego pliku (ustawiana skryptem pakującym z manifest.json). Każdy moduł niesie tę samą w install.version:
   // gdy się różnią, przeglądarka podała starą kopię modułu z pamięci podręcznej.
-  const CARD_VERSION = '0.8.7';
+  const CARD_VERSION = '0.8.8';
   const MOD_TIMEOUT_MS = 20000;
   const MODULES = {
     diag:   { file: 'bms-diag.js',   global: '__bmsDiagInstall',   contract: 1, label: 'Diagnostyki', p: null, ready: false, err: '', got: '' },

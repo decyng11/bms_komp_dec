@@ -1,6 +1,6 @@
 """Constants for EMS komp-dec integration."""
 DOMAIN = "bms_komp_dec"
-VERSION = "0.8.7"
+VERSION = "0.8.8"
 
 # Mapowanie encji źródłowych
 CONF_PV_POWER = "pv_power"
@@ -189,6 +189,7 @@ SWITCHES = [
     ("auto_apply_dry_run", "Auto-stosowanie: tylko podgląd (bez zapisu)", "mdi:eye-check", False),
     ("pv_forecast_correction", "Korekta prognozy PV z historii (planer)", "mdi:solar-power-variant", True),
     ("live_load_correction", "Korekta planu o bieżące zużycie domu", "mdi:home-lightning-bolt", True),
+    ("sale_power_fit", "Obniżaj moc sprzedaży do zapasu energii", "mdi:flash-triangle", True),
     ("device_control", "Sterowanie urządzeniami (włączanie przełączników)", "mdi:power-socket-eu", False),
     ("brand_test_mode", "Sofar: tryb próbny (komendy tylko w dzienniku)", "mdi:flask-outline", True),
 ]

@@ -185,6 +185,15 @@
           if (pf !== null && Math.abs(pf - 1) > 0.004) parts.push(`prognoza PV × <b>${exFmt(pf, 2)}</b> (korekta z historii)`);
           if (exNum(as.wear_cost) > 0) parts.push(`zużycie baterii <b>${exFmt(as.wear_cost, 2)} zł/kWh</b>`);
           lines.push(`<div>📋 Plan zakłada: ${parts.join(' · ')}.</div>`);
+          const acc = (this._hass.states[this._eid('sensor', 'monitor_status')] || {}).attributes;
+          const ac = acc && acc.accuracy;
+          const accTxt = (st, what) => {
+            if (!st || exNum(st.mae_pct) === null) return null;
+            const b = exNum(st.bias_pct);
+            return `${what} ±<b>${exFmt(st.mae_pct, 0)}%</b>${b !== null && Math.abs(b) >= 3 ? ` (zwykle ${b > 0 ? 'zawyżona' : 'zaniżona'} o ${exFmt(Math.abs(b), 0)}%)` : ''}`;
+          };
+          const accParts = ac ? [accTxt(ac.load, 'zużycie'), accTxt(ac.pv, 'PV')].filter(Boolean) : [];
+          if (accParts.length) lines.push(`<div>🎯 Trafność prognoz (ostatnie dni: ${exFmt(Math.max((ac.load || {}).n || 0, (ac.pv || {}).n || 0), 0)}): ${accParts.join(' · ')}.</div>`);
           if (!as.pv_hourly_tomorrow) lines.push(`<div style="color:var(--red);">⚠ Brak godzinowej prognozy PV na jutro — plan liczy tak, jakby jutro nie było słońca. Wskaż encję prognozy Solcast albo Forecast.Solar w konfiguracji.</div>`);
         }
         const lowTxt = `Najniższy SOC w planie: <b>${exFmt(soc[mi], 0, '%')}</b> o ${hm(mi + 1)}`;
@@ -199,8 +208,19 @@
         } else lines.push('<div>🔌 Ładowanie z sieci: <b>nie jest potrzebne</b> w tym horyzoncie.</div>');
         const sr = exRanges(c.sale || []);
         if (p.mode === 'storm') lines.push('<div>💰 Sprzedaż z baterii: <b>wyłączona</b> (tryb burzowy).</div>');
-        else if (sr.length) lines.push('<div>💰 Sprzedaż z baterii: ' + sr.map((r) => `<b>${hm(r[0])}–${hm(r[1])}</b>`).join(', ') + '</div>');
-        else lines.push('<div>💰 Sprzedaż z baterii: <b>brak opłacalnych godzin</b> (lub brak pełnych cen RCE).</div>');
+        else if (sr.length) lines.push('<div>💰 Sprzedaż z baterii: ' + sr.map((r) => {
+          const w = ((as && as.sale_windows) || []).find((x) => `${String(x.start).padStart(2, '0')}:00` === hm(r[0]) && exNum(x.power_w) > 0);
+          return `<b>${hm(r[0])}–${hm(r[1])}</b>${w ? ` (moc obniżona do ${exFmt(exNum(w.power_w) / 1000, 1)} kW — sprzedaję tylko zapas energii)` : ''}`;
+        }).join(', ') + '</div>');
+        else {
+          // przyczyna z planera (zestaw 1 i 2 mogą mieć różne); bez niej — stary, ogólny opis
+          const why = ['bateria_sprzedaz_start', 'bateria_sprzedaz_start_2'].map((k) => (p.proposals || {})[k])
+            .filter((x) => x && x.skip && x.reason).map((x) => String(x.reason).replace(/^Pomiń\s*[—-]\s*/, '').trim());
+          const uniq = why.filter((x, i) => why.indexOf(x) === i);
+          lines.push(uniq.length
+            ? `<div>💰 Sprzedaż z baterii: <b>nie planuję</b> — ${uniq.map((x) => exEsc(x.charAt(0).toLowerCase() + x.slice(1))).join('<br>oraz ')}</div>`
+            : '<div>💰 Sprzedaż z baterii: <b>brak opłacalnych godzin</b> (lub brak pełnych cen RCE).</div>');
+        }
         const sell = (c.sell || []).map(exNum);
         const buy = (c.buy || []).map(exNum);
         if (sell.some((v) => v !== null)) {
@@ -666,6 +686,6 @@
 
   };
   install.contract = 1;
-  install.version = '0.8.7';
+  install.version = '0.8.8';
   window.__bmsExtrasInstall = install;
 })();

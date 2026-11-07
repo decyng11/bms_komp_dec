@@ -1,4 +1,24 @@
-# EMS komp-dec — zmiany po 0.8.7 (jeszcze niewydane)
+# EMS komp-dec — zmiany w 0.8.8 (z 0.8.7)
+
+## Sprzedaż z baterii
+- **Czytelne przyczyny, gdy sprzedaż nie jest planowana.** Planer próbuje okien 3 h, 2 h i 1 h. Dotąd w komunikacie zostawała przyczyna pierwszej (najdłuższej) próby, co bywało mylące. Teraz widać przyczynę najkrótszego okna, a dłuższe są wymienione obok, np. „okno 1 h: po sprzedaży 18–19 (~5,0 kWh przy 5,0 kW) bateria spadłaby do ~12% przed świtem — brakuje ~0,8 kWh (dłuższe okna też odpadły — …)”. W planie na karcie zamiast ogólnego „brak opłacalnych godzin (lub brak pełnych cen RCE)” pojawia się ta konkretna przyczyna.
+- **Obniżona moc sprzedaży.** Gdy zapas energii nie wystarcza na pełną moc w najkrótszym oknie, planer nie odrzuca już okna, tylko planuje sprzedaż mniejszą mocą (krok 0,1 kW, minimum 0,5 kW i co najmniej 1 kWh), tak by bateria nie zeszła poniżej progu nocnego przed świtem. Moc jest zapamiętywana z planu i przy starcie sprzedaży komenda używa niższej wartości (nigdy wyższej niż „Moc sprzedaży” z ustawień). Okno z pełną mocą znosi wcześniejsze ograniczenie. Przełącznik „Obniżaj moc sprzedaży do zapasu energii” (domyślnie włączony); po wyłączeniu zostaje dawne zachowanie. Plan na karcie pokazuje dopisek „moc obniżona do X kW”. Nie sprawdzono na prawdziwym falowniku.
+
+## Plan i powiadomienia
+- **Jedna kafelka „Bateria”** zamiast „Do pełnego naładowania” i „Do rozładowania”: ładuje się — kiedy będzie pełna; zaplanowane ładowanie z sieci — kiedy startuje i w jakim oknie; rozładowanie — za ile dojdzie do progu falownika, wraz z ostrzeżeniem, gdy dojdzie do niego przed startem ładowania; naładowana — na jak długo wystarczy. Dawna prognoza „do pełna z PV” przy rozładowującej się baterii już się nie wyświetla.
+- **Nowe powiadomienie „Plan: bateria dojdzie do progu”.** Gdy plan 24 h przewiduje zejście SOC do progu odcięcia falownika w ciągu 16 godzin (mimo zaplanowanego ładowania i sprzedaży), dostajesz wiadomość z godziną i powodem braku ładowania z sieci. Domyślnie włączone, odstęp 12 h; ustawiasz w Diagnostyka → Powiadomienia.
+- **Trafność prognoz.** Integracja zapamiętuje rano prognozę dnia (zużycie, PV), a po 23:00 porównuje ją z faktem. Pod wykresem planu widać średni błąd z ostatnich 7 dni oraz stałe odchylenie („zużycie ±8% (zwykle zawyżona o 5%), PV ±23%”). Dane gromadzą się od pierwszej doby po aktualizacji.
+- **Dziennik decyzji planu.** W dzienniku pojawiają się wpisy „Plan: …” za każdym razem, gdy decyzja planu się zmieni (zaplanowano ładowanie / sprzedaż, zmienione godziny, pominięto) wraz z powodem. Bez wpisów przy każdym przeliczeniu.
+- **Korekta planu o bieżące zużycie domu** (z wersji roboczej): średnia z ok. 15 minut koryguje bieżącą godzinę i dwie następne (wagi 100/60/30%), z ograniczeniami; przełącznik „Korekta planu o bieżące zużycie domu”.
+
+## Zmiana czasu
+- Sprawdzone doby 23 h (28.03.2027) i 25 h (25.10.2026): ceny, prognoza PV i taryfa trafiają na właściwe godziny zegarowe, plan nie zgłasza błędów. W dobie wiosennej nieistniejąca godzina 02:00 nie ma ceny (planer traktuje ją ostrożnie).
+- **Poprawka:** reguły harmonogramu o 02:xx nie wykonywały się w wiosenną zmianę czasu (godzina nie istnieje, więc np. STOP ładowania o 02:00 nigdy nie zadziałałby). Teraz wykonują się tuż po skoku (03:00). Jesienią, gdy godzina 02:xx się powtarza, reguła wykonuje się tylko w pierwszym przejściu (wcześniej chroniła przed tym tylko przypadkowa blokada 90 s).
+
+## Testy
+- Nowe: test_salefit (26 sprawdzeń), test_planfloor (17), test_accuracy (28), test_plandecisions (16), test_dst_rules (26), battery_tile_test, sale_reason_test, accuracy_ui_test. Każdy sprawdza także, że po celowym uszkodzeniu kodu przestaje przechodzić. Zmieniony test „sprzedaż pominięta, gdy nie starczy do świtu” — dziś dotyczy trybu z wyłączoną obniżoną mocą.
+
+# EMS komp-dec — zmiany po 0.8.7 (opis roboczy, wchodzi do 0.8.8)
 
 - **Jedna kafelka „Bateria” zamiast „Do pełnego naładowania” i „Do rozładowania”.** Pokazuje to, co ważne w danej chwili: gdy bateria się ładuje — kiedy będzie pełna; gdy jest zaplanowane ładowanie z sieci — kiedy startuje (godzina z planu 24 h, czas do startu, okno); gdy się rozładowuje — za ile dojdzie do progu falownika; gdy jest naładowana — na jak długo wystarczy. Jeśli bateria zejdzie do progu przed startem zaplanowanego ładowania, kafelka ostrzega. Dawna prognoza „do pełnego naładowania z PV” (wprowadzająca w błąd przy rozładowującej się baterii) już się nie wyświetla.
 - **Plan reaguje na bieżące zużycie domu.** Dotąd planer liczył tylko z profilu godzinowego i tempa dnia. Teraz porównuje zużycie z ostatnich kilkunastu minut (średnia krocząca, więc włączony na chwilę czajnik nic nie zmienia) z tym, czego oczekiwano, i koryguje bieżącą godzinę oraz dwie następne (waga 100%, 60%, 30%). Korekta jest ograniczona (w górę do +4 kW, w dół najwyżej o połowę), działa dopiero po 10 minutach ciągłych pomiarów i pomija odchylenia poniżej 0,3 kW (i 25%). Pod wykresem planu widać, że zużycie zostało skorygowane. Przełącznik „Korekta planu o bieżące zużycie domu” (domyślnie włączony).

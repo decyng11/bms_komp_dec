@@ -14,6 +14,7 @@ from typing import Any
 
 from homeassistant.util import dt as dt_util
 
+from . import accuracy as acc
 from . import inverter_ctl as ictl
 from . import notify_cfg as ncfg
 from .const import CONF_BATTERY_TEMPERATURE, CONF_GRID_POWER, CONF_GRID_VOLTAGE_L1
@@ -172,7 +173,7 @@ class Monitor:
                           ("temperatura", self._battery_temp), ("sieć", self._grid_outage),
                           ("pobór z sieci", self._high_import), ("ceny jutro", self._prices_tomorrow),
                           ("źródła danych", self._sources), ("zużycie", self._load_above),
-                          ("PV jutro", self._weak_pv), ("zdrowie baterii", self._health),
+                          ("PV jutro", self._weak_pv), ("plan a próg", self._plan_floor), ("trafność prognoz", self._accuracy), ("zdrowie baterii", self._health),
                           ("podsumowania", self._summaries)):
             try:
                 await chk(now)
@@ -485,6 +486,69 @@ class Monitor:
                 await self.notifier.send("load_above", "🏠 EMS: zużycie dziś wyższe niż zwykle",
                                          f"Przy obecnym tempie dom zużyje dziś ok. {nc:.1f} kWh, a prognoza dnia to {fc:.1f} kWh "
                                          f"(+{(nc / fc - 1) * 100:.0f}%). Bateria może nie wystarczyć do rana.")
+
+    async def _accuracy(self, now: datetime) -> None:
+        """Rano zapamiętuje prognozę dnia (zużycie, PV), wieczorem (od 23:00) porównuje ją z faktem i dopisuje wpis
+        do historii trafności (pokazywanej na karcie). Raz na dobę, niezależnie od restartów w ciągu dnia."""
+        local = dt_util.as_local(now)
+        day = local.date().isoformat()
+        st = self.rt.state
+        data = self.rt.coordinator.data or {}
+        fc = st.get("accuracy_fc") or {}
+        if local.hour >= 5 and fc.get("date") != day:
+            lf = data.get("load_forecast") or {}
+            today = next((d for d in (lf.get("days") or []) if isinstance(d, dict) and d.get("label") == "Dziś"), None)
+            load_fc = today.get("forecast") if today else None
+            try:
+                pv_fc = self.rt.optimizer._read_pv_forecast_kwh("pv_forecast_today", "")  # noqa: SLF001
+            except Exception:  # noqa: BLE001
+                pv_fc = None
+            st["accuracy_fc"] = fc = {"date": day, "load": load_fc if isinstance(load_fc, (int, float)) else None,
+                                      "pv": pv_fc if isinstance(pv_fc, (int, float)) else None}
+        if local.hour >= 23 and fc.get("date") == day and st.get("accuracy_done") != day:
+            st["accuracy_done"] = day
+            st["accuracy"] = acc.add_day(st.get("accuracy") or [], day, fc.get("load"), data.get("energy_load_today"),
+                                         fc.get("pv"), data.get("energy_pv_today"))
+            self.rt._save_state()  # noqa: SLF001
+
+    PLAN_FLOOR_HORIZON_H = 16
+
+    async def _plan_floor(self, now: datetime) -> None:
+        """Plan 24 h przewiduje, że bateria dojdzie do progu odcięcia falownika w ciągu najbliższych godzin — nawet po
+        zaplanowanym ładowaniu z sieci. Wtedy dom pobierałby prąd z sieci po cenie ze szczytu; warto zareagować wcześniej."""
+        plan = self.rt.plan() or {}
+        cur = plan.get("curve") or {}
+        soc, fl = cur.get("soc") or [], cur.get("floor") or []
+        if plan.get("error") or not soc or len(fl) != len(soc):
+            return
+        try:
+            start = datetime.fromisoformat(str(cur.get("start")))
+        except (TypeError, ValueError):
+            return
+        soc_now = self.rt.soc()
+        if soc_now is not None and fl[0] and soc_now <= float(fl[0]) + 3.0:
+            return                                        # już przy progu — to zgłasza „Niski stan baterii”
+        idx = next((i for i, (s, f) in enumerate(zip(soc, fl))
+                    if isinstance(s, (int, float)) and isinstance(f, (int, float)) and f > 0 and s <= f + 0.5), None)
+        if idx is None:
+            return
+        hit = start + timedelta(hours=idx)
+        local_now = dt_util.as_local(now)
+        if (dt_util.as_local(hit) - local_now).total_seconds() > self.PLAN_FLOOR_HORIZON_H * 3600:
+            return
+        hit_l = dt_util.as_local(hit)
+        day = "dziś" if hit_l.date() == local_now.date() else ("jutro" if (hit_l.date() - local_now.date()).days == 1 else hit_l.strftime("%d.%m"))
+        props = self._plan_props()
+        st, sp = props.get("start_grid_charge") or {}, props.get("stop_grid_charge") or {}
+        if st.get("proposed") and not st.get("skip"):
+            gc = f"Zaplanowane ładowanie z sieci ({st.get('proposed')}–{sp.get('proposed') or '?'}) nie wystarcza."
+        else:
+            why = str(st.get("reason") or "").replace("Pomiń — ", "").strip()
+            gc = "Plan nie przewiduje ładowania z sieci" + (f": {why[:200]}" if why else ".")
+        await self.notifier.send("plan_floor", "📉 EMS: plan zakłada zejście do progu baterii",
+                                 f"Wg planu bateria dojdzie do progu odcięcia falownika ({float(fl[idx]):.0f}%) {day} ok. {hit_l:%H}:00; "
+                                 f"od tej chwili dom pobierałby prąd z sieci. {gc} Sprawdź plan na karcie albo ustaw ładowanie ręcznie.",
+                                 key="plan_floor")
 
     async def _weak_pv(self, now: datetime) -> None:
         if now.hour < 17:

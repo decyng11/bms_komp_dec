@@ -649,6 +649,7 @@ class ScheduleOptimizer:
             "arb_now": rt.arbitrage_status() if rt is not None else (False, ""),
             "grid_hours": set(), "grid_end": 0, "grid_target": 0.0, "grid_kwh": 0.0,
             "grid_targets": {}, "sold": set(), "midday_hours": set(),
+            "sale_kw": {}, "sale_windows": [], "sale_fit": switch_on(self.hass, "sale_power_fit", True),
             "mode": mode,
         }
         ctx["ref"] = [self._ref_for_day(rce_days[0], pv_days[0], pv_act[0]), self._ref_for_day(rce_days[1], pv_days[1], pv_act[1])]
@@ -689,7 +690,7 @@ class ScheduleOptimizer:
         for h in range(h0, h1):
             delta = self._pv_abs(ctx, h) - self._load_abs(ctx, h)
             if h in sale_hours:
-                delta -= ctx["max_dis_kw"]
+                delta -= ctx.get("sale_kw", {}).get(h, ctx["max_dis_kw"])
             new = soc + delta / cap * 100.0
             if h in grid_hours:
                 new = min(soc + (delta + ctx["max_chg_kw"] * ctx["eff"]) / cap * 100.0,
@@ -814,6 +815,7 @@ class ScheduleOptimizer:
             "pv_source": self.pv_source(),
             "pv_factor": round(float(ctx.get("pv_factor", 1.0)), 3),
             "wear_cost": round(float(ctx.get("wear", 0.0)), 3),
+            "sale_windows": [dict(w) for w in (ctx.get("sale_windows") or [])],
             "mode": ctx["mode"],
         }
 
@@ -1298,56 +1300,115 @@ class ScheduleOptimizer:
             day_avg, ref = ctx["avg"][day], ctx["ref"][day]
             eff, margin = ctx["eff"], ctx["margin"]
 
-            chosen, why_not = None, None
+            chosen, tried = None, []
             for nn in range(n0, 0, -1):      # najdłuższe okno, które nie zostawi domu bez energii przed świtem
                 w = self._best_window(prices, lo, b, nn)
                 if not w:
                     miss = [f"{h:02d}" for h in range(lo, min(b, lo + nn)) if not isinstance(prices[h] if h < len(prices) else None, (int, float))]
-                    why_not = why_not or (f"brak cen RCE {dname} dla godz. {', '.join(miss) or f'{lo:02d}–{b:02d}'}", "low")
+                    tried.append((nn, f"brak cen RCE {dname} dla godz. {', '.join(miss) or f'{lo:02d}–{b:02d}'}", "low"))
                     continue
                 s, e, avg = w
                 if day_avg is not None and avg < day_avg:
-                    why_not = why_not or (f"najlepsze okno {dname} ({avg:.3f} zł/kWh) jest poniżej średniej dnia ({day_avg:.3f})", "high")
+                    tried.append((nn, f"najlepsze okno {dname} ({avg:.3f} zł/kWh) jest poniżej średniej dnia ({day_avg:.3f})", "high"))
                     continue
                 wear = ctx.get("wear", 0.0)
                 net = avg * eff - (ref if ref is not None else 0.0) - wear
                 if net < margin:
                     wear_txt = f" − {wear:.3f} (zużycie baterii)" if wear > 0 else ""
-                    why_not = why_not or (f"sprzedaż nieopłacalna {dname}: {avg:.3f} × {eff:.0%} − {(ref or 0):.3f} (koszt alternatywny)"
-                                          f"{wear_txt} = {net:.3f} < min. marża {margin:.2f} zł/kWh", "high")
+                    tried.append((nn, f"sprzedaż nieopłacalna {dname}: {avg:.3f} × {eff:.0%} − {(ref or 0):.3f} (koszt alternatywny)"
+                                      f"{wear_txt} = {net:.3f} < min. marża {margin:.2f} zł/kWh", "high"))
                     continue
                 s_abs = day * 24 + s
                 soc_s = soc_lo if s_abs <= lo_abs else self._simulate(ctx, soc_lo, lo_abs, s_abs, ctx["grid_hours"], sold)
                 avail = (soc_s - floor) / 100.0 * ctx["cap"]
                 if soc_s < need_soc or avail < 1.0:
-                    why_not = why_not or (f"przewidywany SOC {soc_s:.0f}% o {s:02d}:00 ({dname}) jest za niski na sprzedaż", "medium")
+                    tried.append((nn, f"przewidywany SOC {soc_s:.0f}% o {s:02d}:00 ({dname}) jest za niski na sprzedaż "
+                                      f"(zapas ponad {floor:.0f}%: ~{max(0.0, avail):.1f} kWh, potrzeba min. 1,0 kWh)", "medium"))
                     continue
                 sh = sold | set(range(s_abs, day * 24 + e))
                 dawn = self._dawn_abs(ctx, day * 24 + e)
                 _, low_pt = self._run(ctx, soc_s, s_abs, dawn, ctx["grid_hours"], sh, floor=None)
                 if low_pt < ctx["night_floor"]:
-                    why_not = why_not or (f"po sprzedaży {s:02d}–{e:02d} bateria spadłaby do ~{max(0.0, low_pt):.0f}% przed świtem "
-                                          f"(PV pokryje dom dopiero ok. {dawn % 24:02d}:00; min. {ctx['night_floor']:.0f}%)", "high")
+                    lack = max(0.0, (ctx["night_floor"] - low_pt) / 100.0 * ctx["cap"])
+                    reason_n = (f"po sprzedaży {s:02d}–{e:02d} (~{ctx['max_dis_kw'] * (e - s):.1f} kWh przy {ctx['max_dis_kw']:.1f} kW) "
+                                f"bateria spadłaby do ~{max(0.0, low_pt):.0f}% przed świtem (PV pokryje dom dopiero ok. {dawn % 24:02d}:00; "
+                                f"min. {ctx['night_floor']:.0f}%) — brakuje ~{lack:.1f} kWh")
+                    if nn == 1 and ctx.get("sale_fit", True):
+                        fit = self._fit_sale_power(ctx, soc_s, s_abs, day * 24 + e, sold, dawn)
+                        if fit is not None:        # krótsze okno już nie istnieje — obniżamy moc, by sprzedać tylko zapas energii
+                            p_kw, low_fit = fit
+                            chosen = (s, e, avg, net, soc_s, avail, low_fit, dawn, p_kw)
+                            break
+                        reason_n += "; nawet przy obniżonej mocy (min. 0,5 kW) zapas energii jest za mały"
+                    tried.append((nn, reason_n, "high"))
                     continue
-                chosen = (s, e, avg, net, soc_s, avail, low_pt, dawn)
+                chosen = (s, e, avg, net, soc_s, avail, low_pt, dawn, None)
                 break
             if not chosen:
-                reason, conf = why_not or ("brak opłacalnego okna", "high")
+                if tried:
+                    nn_l, r_l, conf = tried[-1]
+                    reason = f"okno {nn_l} h: {r_l}"
+                    if len(tried) > 1:
+                        reason += " (dłuższe okna też odpadły — " + "; ".join(f"{n_} h: {r_}" for n_, r_, _c in tried[:-1]) + ")"
+                else:
+                    reason, conf = "brak opłacalnego okna", "high"
                 skip(f"Pomiń — {reason}.", conf)
                 continue
-            s, e, avg, net, soc_s, avail, low_pt, dawn = chosen
+            s, e, avg, net, soc_s, avail, low_pt, dawn, p_kw = chosen
+            power_kw = p_kw if p_kw is not None else ctx["max_dis_kw"]
+            for h_ in range(day * 24 + s, day * 24 + e):
+                ctx["sale_kw"][h_] = power_kw
+            ctx["sale_windows"].append({"day": day, "start": s, "stop": e,
+                                        "power_w": int(round(p_kw * 1000)) if p_kw is not None else None})
 
-            sell_kwh = min(avail, ctx["max_dis_kw"] * (e - s))
+            sell_kwh = min(avail, power_kw * (e - s))
+            fit_txt = (f" Moc sprzedaży obniżona do {power_kw:.1f} kW (zamiast {ctx['max_dis_kw']:.1f} kW), bo zapas energii "
+                       f"ponad próg nocny wystarcza na ~{sell_kwh:.1f} kWh.") if p_kw is not None else ""
             reason = (f"Najlepsze okno {dname} w szczycie {lbl}: {s:02d}–{e:02d}, śr. {avg:.3f} zł/kWh "
                       f"(dzień śr. {(day_avg or 0):.3f}). Przewidywany SOC o {s:02d}:00 ~{soc_s:.0f}%, "
                       f"sprzedaż ~{sell_kwh:.1f} kWh, zysk netto ~{net * sell_kwh:+.2f} zł. "
-                      f"Do świtu (PV pokryje dom ok. {dawn % 24:02d}:00) SOC nie spadnie poniżej ~{max(0.0, low_pt):.0f}%.")
-            conf = "high" if (avg - (day_avg or avg)) > 0.05 and net >= 2 * margin else "medium"
+                      f"Do świtu (PV pokryje dom ok. {dawn % 24:02d}:00) SOC nie spadnie poniżej ~{max(0.0, low_pt):.0f}%.{fit_txt}")
+            conf = "high" if (avg - (day_avg or avg)) > 0.05 and net >= 2 * margin and p_kw is None else "medium"
             k_s, k_e = keys
             out[k_s] = self._p(k_s, self._read_current_time(k_s), f"{s:02d}:00", reason, conf)
             out[k_e] = self._p(k_e, self._read_current_time(k_e), self._fmt_stop(e), reason, conf)
             sold.update(range(day * 24 + s, day * 24 + e))
         return out
+
+    def _fit_sale_power(self, ctx: dict, soc_s: float, s_abs: int, e_abs: int, sold: set, dawn: int) -> tuple[float, float] | None:
+        """Największa moc sprzedaży (krok 0,1 kW, min. 0,5 kW), przy której bateria nie spadnie poniżej progu nocnego
+        przed świtem — sprzedajemy tylko zapas energii, zamiast odrzucać okno. None = nawet 0,5 kW jest za dużo
+        albo sprzedaż byłaby mniejsza niż 1 kWh."""
+        hours = range(s_abs, e_abs)
+        sh = set(sold) | set(hours)
+        floor_n = ctx["night_floor"]
+
+        def lowest(p: float) -> float:
+            saved = {h: ctx["sale_kw"].get(h) for h in hours}
+            for h in hours:
+                ctx["sale_kw"][h] = p
+            try:
+                return self._run(ctx, soc_s, s_abs, dawn, ctx["grid_hours"], sh, floor=None)[1]
+            finally:
+                for h, v in saved.items():
+                    if v is None:
+                        ctx["sale_kw"].pop(h, None)
+                    else:
+                        ctx["sale_kw"][h] = v
+
+        lo_p, hi_p = 0.5, ctx["max_dis_kw"]
+        if hi_p <= lo_p or lowest(lo_p) < floor_n:
+            return None
+        for _ in range(14):
+            mid = (lo_p + hi_p) / 2
+            if lowest(mid) >= floor_n:
+                lo_p = mid
+            else:
+                hi_p = mid
+        p = math.floor(lo_p * 10 + 1e-9) / 10.0
+        if p < 0.5 or p * (e_abs - s_abs) < 1.0:
+            return None
+        return p, lowest(p)
 
     # -------------------------------------------- BLOKADA PV
     def _suggest_pv_block(self, ctx: dict) -> dict:

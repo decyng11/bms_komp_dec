@@ -12,6 +12,7 @@ from .const import (
     DEFAULT_PRICE_BUY_ENTITY, DEFAULT_PRICE_SELL_ENTITY,
 )
 from .const import DOMAIN, RUNTIME_SENSORS, SENSORS
+from . import accuracy as acc
 from . import inverter_ctl as ictl
 from .entity import BmsBaseEntity
 from .monitor import FAULT_NOTE, fault_text
@@ -126,7 +127,7 @@ class BmsRuntimeSensor(BmsBaseEntity, SensorEntity):
         "prices_sell_today", "prices_sell_tomorrow", "prices_buy_today", "prices_buy_tomorrow",
         "price_sell_entity", "price_buy_entity", "price_sell_source", "price_buy_source", "tariff_mode", "tariff_dynamic",
         "pv_forecast_source", "pv_hourly_today", "pv_hourly_tomorrow", "pv_daily", "assumptions",
-        "devices", "power_total",
+        "devices", "power_total", "accuracy",
     })
 
     def __init__(self, coordinator, key, name, unit, icon):
@@ -332,6 +333,7 @@ class BmsRuntimeSensor(BmsBaseEntity, SensorEntity):
                 "storm_until": st.get("storm_until"),
                 "vacation_since": st.get("vacation_since"),
                 "watches": rt.watch.list(),
+                "accuracy": acc.summary(st.get("accuracy") or []),
                 "recent_notifications": [e for e in rt.log.last(200) if e.get("kind") == "notify"][-10:],
             }
         if self._key == "devices":

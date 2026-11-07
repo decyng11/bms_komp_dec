@@ -538,6 +538,7 @@ async def main():
     check("harm: blokada PV pominięta bez nadwyżki", P["pv_export_start"]["skip"], P["pv_export_start"])
     # 9b) sprzedaż nie może zostawić domu bez energii do świtu (zużycie 8 kWh/dobę, bateria 10 kWh)
     hass, c, sched, rt = mk(soc=90, now=(2026, 10, 28, 16), price=lambda h: 300 + (400 if 18 <= h < 21 else 0))
+    hass.states.set("switch.bms_sale_power_fit", "off")      # bez obniżania mocy: okno odpada, gdy pełna moc zostawiłaby dom bez energii
     P = (await sched.suggest())["proposals"]
     check("harm: noc — sprzedaż pominięta, gdy nie starczy do świtu", P["bateria_sprzedaz_start_2"]["skip"] and "przed świtem" in P["bateria_sprzedaz_start_2"]["reason"], P["bateria_sprzedaz_start_2"]["reason"])
     # 9c) propozycja podaje, do kiedy trwa noc
