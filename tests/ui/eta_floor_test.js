@@ -27,7 +27,7 @@ const { chromium } = require('playwright'); const fs = require('fs');
     el._lastEtaKey = null; el._hass = { states, entities: {}, language: 'pl', callService: async () => ({}), callWS: async () => ({}) };
     el._renderEta();
     const box = el.shadowRoot.getElementById('etaBox');
-    const lab = box.querySelectorAll('.e-l')[1];
+    const lab = box.querySelectorAll('.e-l')[0];
     return { text: box.innerText.replace(/\s+/g, ' '), label: lab ? lab.textContent : '', tip: lab ? lab.getAttribute('title') : '', imgs: box.querySelectorAll('img').length, html: box.innerHTML };
   }, o);
   // dodaj kontener etaBox jeśli karta go nie zbudowała przy samym setConfig

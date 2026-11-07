@@ -3797,6 +3797,28 @@
       return { at, soc, floorAt, floor: flo };
     }
 
+    // zaplanowane ładowanie z sieci z planu 24 h (sensor plan_curve): trwa teraz albo najbliższy start.
+    // null = brak sensora planu / błąd planu, {none:true} = plan jest, ale ładowania z sieci w nim nie ma
+    _plannedGridCharge() {
+      const s = this._hass.states[this._eid('sensor', 'plan_curve')];
+      const a = s && s.attributes;
+      if (!a || a.error || !a.proposals) return null;
+      const hm = (t) => { const m = /^(\d\d):(\d\d)$/.exec(String(t || '')); return m ? +m[1] * 60 + +m[2] : null; };
+      const d0 = new Date(); d0.setHours(0, 0, 0, 0);
+      const nowMin = (Date.now() - d0.getTime()) / 60000;
+      let best = null;
+      [['start_grid_charge', 'stop_grid_charge'], ['start_grid_charge_2', 'stop_grid_charge_2']].forEach(([k1, k2]) => {
+        const ps = a.proposals[k1], pe = a.proposals[k2];
+        if (!ps || !pe || ps.skip || pe.skip) return;
+        const sM = hm(ps.proposed), eM = hm(pe.proposed);
+        if (sM === null || eM === null || sM === eM) return;
+        const active = sM < eM ? (nowMin >= sM && nowMin < eM) : (nowMin >= sM || nowMin < eM);
+        const c = { active, startTxt: ps.proposed, endTxt: pe.proposed, hStart: active ? 0 : ((sM - nowMin + 1440) % 1440) / 60 };
+        if (!best || (c.active && !best.active) || (c.active === best.active && c.hStart < best.hStart)) best = c;
+      });
+      return best || { none: true };
+    }
+
     _renderEta() {
       const box = this._el('etaBox');
       if (!box) return;
@@ -3850,7 +3872,7 @@
           const rate = discharging ? -batt : Math.max(load, 100);
           const hNow = (soc - FLOOR) / 100 * cap / (rate / 1000);
           basis = discharging ? `przy obecnym rozładowaniu ${this._fmtW(rate)}` : `przy obecnym zużyciu domu ${this._fmtW(rate)} (bez PV)`;
-          low = { v: this._fmtDur(hNow), s: `ok. ${this._fmtAt(hNow)} · ${basis}` };
+          low = { v: this._fmtDur(hNow), s: `ok. ${this._fmtAt(hNow)} · ${basis}`, h: hNow };
           // w nocy: ile zostanie, zanim słońce pokryje zużycie domu (prognoza zużycia i PV)
           const sun = this._socAtSun(soc, cap, hl, pvMap, floorFn);
           if (sun) {
@@ -3861,15 +3883,48 @@
           }
         }
       }
-      const key = full.v + full.s + low.v + low.s + (low.s2 || '') + floorTxt + THEME.mode + (needCap ? 'N' : manual ? 'M' + cap : '');
+      // ---- jedna kafelka „Bateria”: treść zależy od stanu (naładowana / ładuje się / zaplanowane ładowanie z sieci / rozładowanie)
+      const plan = this._plannedGridCharge();
+      const socTxt = `${Math.round(soc)}%`;
+      const lowLine = low.v === '—' ? '' : `Do ${floorTxt}: ${low.v} · ${low.s}`;
+      const hCh = cap > 0 && batt > 20 && soc < 99.5 ? (100 - soc) / 100 * cap / (batt / 1000) : null;
+      let st;
+      if (cap > 0 && soc >= 99.5) {
+        st = { l: '🔋 Bateria · naładowana', c: 'var(--green)', v: low.v.startsWith('>') ? 'wystarczy na ponad 2 dni' : `wystarczy na ${low.v}`, s: low.s, s2: low.s2 };
+      } else if (hCh !== null) {
+        st = { l: '⚡ Bateria · ładuje się', c: 'var(--green)', v: `pełna ok. ${this._fmtAt(hCh)}`,
+               s: `${socTxt} → 100% · ładowanie ${this._fmtW(batt)} · jeszcze ${this._fmtDur(hCh)}`, s2: [lowLine, low.s2].filter(Boolean).join('<br>') };
+      } else if (plan && !plan.none) {
+        const warnEarly = !plan.active && low.h != null && low.h < plan.hStart;
+        const parts = [];
+        if (warnEarly) parts.push(`Uwaga: bateria dojdzie do ${floorTxt} ok. ${this._fmtAt(low.h)}, przed startem ładowania.`);
+        else if (lowLine) parts.push(lowLine);
+        if (low.s2) parts.push(low.s2);
+        st = plan.active
+          ? { l: '🔌 Bateria · ładowanie z sieci', c: 'var(--accent)', v: `okno do ${plan.endTxt}`, s: `plan ładowania z sieci trwa ${plan.startTxt}–${plan.endTxt} · bateria ${socTxt}` }
+          : { l: '🔌 Bateria · ładowanie z sieci', c: warnEarly ? 'var(--orange)' : 'var(--accent)', v: `start ${this._fmtAt(plan.hStart)}`,
+              s: `plan ${plan.startTxt}–${plan.endTxt} · za ${this._fmtDur(plan.hStart)} · teraz ${socTxt}` };
+        st.s2 = parts.join('<br>');
+      } else if (cap > 0) {
+        const atFloor = soc <= FLOOR;
+        const parts = [];
+        if (low.s2) parts.push(low.s2);
+        if (plan && plan.none && !atFloor) parts.push('Brak zaplanowanego ładowania z sieci.');
+        st = { l: `⏳ Do rozładowania do ${floorTxt}`, c: atFloor ? 'var(--red)' : 'var(--orange)', v: low.v, s: low.s, s2: parts.join('<br>') };
+      } else {
+        st = { l: '🔋 Bateria', c: 'var(--muted)', v: '—', s: 'brak pojemności baterii', s2: '' };
+      }
+      const key = st.l + st.v + st.s + (st.s2 || '') + soc + st.c + floorTxt + THEME.mode + (needCap ? 'N' : manual ? 'M' + cap : '');
       if (key === this._lastEtaKey) return;
       this._lastEtaKey = key;
       const capUi = (needCap || manual)
         ? `<div class="e-cap" style="grid-column:1/-1;font-size:12px;color:var(--muted);display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
              <span>${needCap ? 'Integracja nie podała pojemności baterii (zaktualizuj sensor.py). Wpisz ją ręcznie:' : 'Pojemność wpisana ręcznie:'}</span>
              <input type="number" id="capInput" min="1" max="200" step="0.1" value="${manual ? cap : ''}" placeholder="kWh" style="width:90px;"> <span>kWh</span></div>` : '';
-      box.innerHTML = capUi + `<div class="eta"><div class="e-l">🔋 Do pełnego naładowania</div><div class="e-v" style="color:var(--green)">${full.v}</div><div class="e-s">${full.s}</div></div>
-        <div class="eta"><div class="e-l" title="${this._esc ? this._esc(floorTip) : floorTip}">⏳ Do rozładowania do ${floorTxt}</div><div class="e-v" style="color:var(--orange)">${low.v}</div><div class="e-s">${low.s}</div>${low.s2 ? `<div class="e-s" style="margin-top:6px;opacity:.75">${low.s2}</div>` : ''}</div>`;
+      const socW = Math.max(0, Math.min(100, Number(soc) || 0));
+      box.innerHTML = capUi + `<div class="eta" style="grid-column:1/-1"><div class="e-l" title="${this._esc(floorTip)}">${st.l}</div><div class="e-v" style="color:${st.c}">${st.v}</div><div class="e-s">${st.s}</div>`
+        + `<div style="height:6px;border-radius:3px;background:var(--line);margin-top:8px;overflow:hidden"><div style="height:100%;width:${socW}%;background:${st.c}"></div></div>`
+        + `${st.s2 ? `<div class="e-s" style="margin-top:6px;opacity:.75">${st.s2}</div>` : ''}</div>`;
       const inp = box.querySelector('#capInput');
       if (inp) inp.addEventListener('change', () => {
         const v = parseFloat(String(inp.value).replace(',', '.'));
