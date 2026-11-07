@@ -16,6 +16,7 @@
 - **Autotest sprawdza podsumowanie dnia:** czy jest włączone, na którą godzinę, kiedy ostatnio poszło oraz czy coś blokuje wysyłkę (wyłączony przełącznik „Powiadomienia BMS”, brak usługi notify, cisza nocna, wyłączony telefon dla tego rodzaju).
 - **Niższe kafelki pogody na telefonie** (ok. 86 px zamiast ok. 135): ikona (nadal animowana), temperatura i kWh w zwartym układzie, bez zawijania „kWh”.
 - **„Aktywne funkcje” tylko włączone i zaplanowane:** wyłączone chipy znikają; włączona funkcja z oknem godzin pokazuje je (np. „Ładowanie (1) 05:00–06:00”), trwająca teraz ma pulsującą kropkę i jest pierwsza, zaplanowana na później — obrys przerywany. Ostrzeżenie „Sprzedaż zablokowana (import)” jest osobnym paskiem i widać je tylko, gdy blokada działa.
+- **„Trwa tanie okno do 03:00” w weekend.** Wyszukiwanie końca taniego okna miało limit 48 godzin, więc w sobotę o 03:41 (cały weekend jest tani) kończyło się w poniedziałek o 03:00. Teraz szuka do 8 dni naprzód, więc poprawnie pokaże poniedziałek 06:00, a przed długim weekendem ze świętem także kilka dób.
 
 # BMS komp-dec — zmiany w 0.8.5 (z 0.8.4)
 

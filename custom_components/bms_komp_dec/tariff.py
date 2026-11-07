@@ -369,7 +369,7 @@ def is_g12w_peak(dt: datetime) -> bool:
 
 
 def next_offpeak_window(now: datetime) -> tuple[datetime, datetime, bool] | None:
-    """(początek, koniec, trwa_teraz) najbliższego okna pozaszczytowego (w ciągu 48 h)."""
+    """(początek, koniec, trwa_teraz) najbliższego okna pozaszczytowego (szukamy do 8 dni naprzód — długi weekend z świętem to kilka dób bez szczytu)."""
     if not _PROFILE.peaks:
         return None                      # taryfa jednostrefowa — nie ma „taniego okna”
     t = now.replace(minute=0, second=0, microsecond=0)
@@ -377,7 +377,7 @@ def next_offpeak_window(now: datetime) -> tuple[datetime, datetime, bool] | None
         start, in_now = t, True
     else:
         start, in_now = None, False
-        for i in range(1, 49):
+        for i in range(1, 193):
             c = t + timedelta(hours=i)
             if not is_g12w_peak(c):
                 start = c
@@ -385,7 +385,7 @@ def next_offpeak_window(now: datetime) -> tuple[datetime, datetime, bool] | None
         if start is None:
             return None
     end = start
-    for _ in range(48):
+    for _ in range(192):
         end = end + timedelta(hours=1)
         if is_g12w_peak(end):
             break

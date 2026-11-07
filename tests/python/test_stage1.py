@@ -64,6 +64,14 @@ async def main():
     check("is_g12w_peak używa ustawionego profilu", tar.is_g12w_peak(sat))
     w = tar.next_offpeak_window(sat.replace(hour=5))
     check("next_offpeak: G12 sobota 05:00 -> trwa teraz do 06:00", w and w[2] and w[1].hour == 6, w)
+    tar.set_profile(tar.TariffProfile())     # G12w: weekend całodobowo tani
+    sat_n = datetime(2026, 11, 7, 3, 41, tzinfo=TZ)
+    w = tar.next_offpeak_window(sat_n)
+    check("next_offpeak: sobota 03:41 (G12w) -> okno trwa do poniedziałku 06:00, nie do 03:00 (limit 48 h)",
+          w and w[2] and (w[1].day, w[1].hour) == (9, 6), w)
+    hol_n = datetime(2026, 11, 10, 22, 30, tzinfo=TZ)   # wtorek wieczór przed świętem (środa 11.11)
+    w = tar.next_offpeak_window(hol_n)
+    check("next_offpeak: wtorek 22:30 przed świętem -> do czwartku 06:00", w and w[2] and (w[1].day, w[1].hour) == (12, 6), w)
     tar.set_profile(tar.TariffProfile(peaks=()))
     check("next_offpeak: taryfa jednostrefowa -> None", tar.next_offpeak_window(wed) is None)
     tar.set_profile(None)
