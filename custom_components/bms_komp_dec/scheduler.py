@@ -533,7 +533,37 @@ class ScheduleOptimizer:
             except (TypeError, ValueError):
                 f = None
             out.append(max(0.0, f) if f is not None and math.isfinite(f) else None)
-        return out if any(v is not None for v in out) else None
+        if not any(v is not None for v in out):
+            return None
+        return self._apply_live_load(out)
+
+    LIVE_WEIGHTS = (1.0, 0.6, 0.3)        # wpływ korekty na bieżącą godzinę i dwie następne
+    LIVE_MIN_KW = 0.3                       # mniejsze odchylenia ignorujemy
+    LIVE_MAX_UP_KW = 4.0
+
+    def _apply_live_load(self, out: list[float | None]) -> list[float | None]:
+        """Korekta najbliższych godzin o różnicę między tym, co dom bierze teraz (średnia z ~15 min), a tym, czego oczekiwano."""
+        self._live_load = None
+        if not switch_on(self.hass, "live_load_correction", True):
+            return out
+        lf = getattr(self.coordinator, "load_forecast", None)
+        now = dt_util.now()
+        live = lf.live_load_kw(now) if lf is not None and hasattr(lf, "live_load_kw") else None
+        h0 = now.hour
+        exp = out[h0] if out[h0] is not None else next((out[h] for h in range(h0 + 1, 24) if out[h] is not None), None)
+        if live is None or exp is None:
+            return out
+        delta = live - exp
+        if abs(delta) < max(self.LIVE_MIN_KW, 0.25 * exp):
+            return out
+        delta = max(-0.5 * exp, min(self.LIVE_MAX_UP_KW, delta))
+        res = list(out)
+        for i, w in enumerate(self.LIVE_WEIGHTS):
+            h = h0 + i
+            if h < 24 and res[h] is not None:
+                res[h] = max(0.0, res[h] + w * delta)
+        self._live_load = {"live_kw": round(live, 2), "expected_kw": round(exp, 2), "delta_kw": round(delta, 2)}
+        return res
 
     @staticmethod
     def _load_abs(ctx: dict, h_abs: int) -> float:
@@ -774,7 +804,8 @@ class ScheduleOptimizer:
         pv_rest = sum(float(pv0[h]) for h in range(h0, 24) if pv0 and isinstance(pv0[h], (int, float))) if pv0 else None
         return {
             "load_rest_today_kwh": round(rest, 1),
-            "load_today_source": "tempo dnia" if lt else "profil",
+            "load_today_source": ("tempo dnia + bieżące zużycie" if getattr(self, "_live_load", None) else "tempo dnia") if lt else "profil",
+            "load_live": getattr(self, "_live_load", None),
             "load_tomorrow_kwh": None if ctx.get("load_tomorrow") is None else round(float(ctx["load_tomorrow"]), 1),
             "pv_rest_today_kwh": None if pv_rest is None else round(pv_rest, 1),
             "pv_tomorrow_kwh": None if ctx["pv_kwh"][1] is None else round(float(ctx["pv_kwh"][1]), 1),

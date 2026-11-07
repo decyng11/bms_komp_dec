@@ -1,3 +1,7 @@
+# EMS komp-dec — zmiany po 0.8.7 (jeszcze niewydane)
+
+- **Plan reaguje na bieżące zużycie domu.** Dotąd planer liczył tylko z profilu godzinowego i tempa dnia. Teraz porównuje zużycie z ostatnich kilkunastu minut (średnia krocząca, więc włączony na chwilę czajnik nic nie zmienia) z tym, czego oczekiwano, i koryguje bieżącą godzinę oraz dwie następne (waga 100%, 60%, 30%). Korekta jest ograniczona (w górę do +4 kW, w dół najwyżej o połowę), działa dopiero po 10 minutach ciągłych pomiarów i pomija odchylenia poniżej 0,3 kW (i 25%). Pod wykresem planu widać, że zużycie zostało skorygowane. Przełącznik „Korekta planu o bieżące zużycie domu” (domyślnie włączony).
+
 # EMS komp-dec — zmiany w 0.8.7 (z 0.8.5; wersja 0.8.6 nie została wydana, jej zmiany są tutaj)
 
 ## Falowniki Sofar (eksperymentalne, na start w trybie próbnym)

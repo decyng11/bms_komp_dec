@@ -18,6 +18,8 @@ v2 — wszystkie ulepszenia:
 """
 from __future__ import annotations
 
+import math
+
 import logging
 import statistics
 from datetime import date, datetime, timedelta, timezone
@@ -115,6 +117,9 @@ class LoadForecaster:
         self._hourly_sample_date: date | None = None
         self._load_power_eid_cache: str | None = None
         self._last_accum_save: float = 0.0
+        self._ewma_kw: float | None = None      # wygładzone bieżące zużycie domu (stała czasowa ~15 min)
+        self._ewma_at: datetime | None = None
+        self._ewma_since: datetime | None = None
 
     # ---------------------------------------------------------------- I/O
     async def async_load(self) -> None:
@@ -422,6 +427,7 @@ class LoadForecaster:
         if self._hourly_last_sample:
             dt_sec = (now - self._hourly_last_sample).total_seconds()
             if 0 < dt_sec < 120:
+                self._update_live(power_w / 1000.0, dt_sec, now)
                 h = now.hour
                 if 0 <= h < 24:
                     self._hourly_accum[h] += power_w * dt_sec / 3600000.0
@@ -431,6 +437,23 @@ class LoadForecaster:
         if (now.timestamp() - self._last_accum_save) > 600:
             self._last_accum_save = now.timestamp()
             self._schedule_save()
+
+    def _update_live(self, kw: float, dt_sec: float, now: datetime) -> None:
+        """Średnia krocząca zużycia (τ ≈ 15 min): pojedynczy skok (czajnik) ledwo ją rusza, dłuższa zmiana tak."""
+        if self._ewma_kw is None or self._ewma_at is None or (now - self._ewma_at).total_seconds() > 300:
+            self._ewma_kw, self._ewma_since = kw, now          # przerwa w danych — zaczynamy od nowa
+        else:
+            a = 1.0 - math.exp(-dt_sec / 900.0)
+            self._ewma_kw += a * (kw - self._ewma_kw)
+        self._ewma_at = now
+
+    def live_load_kw(self, now: datetime) -> float | None:
+        """Bieżące zużycie domu (kW, wygładzone) — tylko gdy mierzymy je ciągle od ≥ 10 min i odczyt jest świeży."""
+        if self._ewma_kw is None or self._ewma_at is None or self._ewma_since is None:
+            return None
+        if (now - self._ewma_at).total_seconds() > 300 or (now - self._ewma_since).total_seconds() < 600:
+            return None
+        return float(self._ewma_kw)
 
     def _save_daily_profile(self) -> None:
         if self._hourly_sample_date is None:

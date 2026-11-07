@@ -177,7 +177,8 @@
         if (as && typeof as === 'object') {
           const kwh = (v) => (exNum(v) === null ? '?' : exFmt(v, 1)) + ' kWh';
           const pvSrc = as.pv_source ? ` (${exEsc(as.pv_source)})` : '';
-          const parts = [`zużycie do północy ~<b>${kwh(as.load_rest_today_kwh)}</b> (${as.load_today_source === 'tempo dnia' ? 'z dzisiejszego zużycia' : 'z profilu'})`];
+          const parts = [`zużycie do północy ~<b>${kwh(as.load_rest_today_kwh)}</b> (${/^tempo dnia/.test(String(as.load_today_source || '')) ? 'z dzisiejszego zużycia' : 'z profilu'})`];
+          if (as.load_live && exNum(as.load_live.live_kw) !== null) parts.push(`teraz dom bierze <b>${exFmt(as.load_live.live_kw, 1)} kW</b> (oczekiwano ${exFmt(as.load_live.expected_kw, 1)}) — najbliższe godziny skorygowane`);
           if (exNum(as.load_tomorrow_kwh) !== null) parts.push(`jutro <b>${kwh(as.load_tomorrow_kwh)}</b>`);
           if (exNum(as.pv_tomorrow_kwh) !== null) parts.push(`PV jutro <b>${kwh(as.pv_tomorrow_kwh)}</b>${pvSrc}`);
           const pf = exNum(as.pv_factor);

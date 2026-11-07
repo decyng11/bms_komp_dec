@@ -188,6 +188,7 @@ SWITCHES = [
     ("vacation_mode", "Tryb urlopowy (minimalne zużycie)", "mdi:palm-tree", False),
     ("auto_apply_dry_run", "Auto-stosowanie: tylko podgląd (bez zapisu)", "mdi:eye-check", False),
     ("pv_forecast_correction", "Korekta prognozy PV z historii (planer)", "mdi:solar-power-variant", True),
+    ("live_load_correction", "Korekta planu o bieżące zużycie domu", "mdi:home-lightning-bolt", True),
     ("device_control", "Sterowanie urządzeniami (włączanie przełączników)", "mdi:power-socket-eu", False),
     ("brand_test_mode", "Sofar: tryb próbny (komendy tylko w dzienniku)", "mdi:flask-outline", True),
 ]
