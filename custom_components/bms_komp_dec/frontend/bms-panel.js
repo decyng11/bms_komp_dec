@@ -385,6 +385,8 @@
     .header { display: flex; align-items: center; justify-content: space-between; text-align: left; gap: 12px; margin-bottom: 16px; }
     .header .title { font-size: clamp(22px, 5vw, 30px); font-weight: 700; letter-spacing: -0.6px; }
     .header .date { margin-top: 2px; }
+    .header .title .logo { display: block; height: 40px; width: auto; }
+    @media (max-width: 700px) { .header .title .logo { height: 34px; } }
     .theme-seg { display: inline-flex; padding: 3px; background: var(--seg-bg); border-radius: 999px; flex: none; }
     .theme-seg button { border: none; background: transparent; color: var(--muted); width: 34px; height: 30px; border-radius: 999px; cursor: pointer; font-size: 15px; line-height: 1; padding: 0; }
     .theme-seg button.active { background: var(--seg-active); color: var(--text); box-shadow: 0 1px 4px rgba(0,0,0,0.18); }
@@ -2447,7 +2449,7 @@
       wrap.innerHTML = `
         <div class="header">
           <div>
-            <div class="title">Centrum Energii</div>
+            <div class="title" role="img" aria-label="Komp-Dec – Centrum Energii" title="Komp-Dec – Centrum Energii"><svg class="logo" viewBox="0 0 300 64" aria-hidden="true"><g transform="translate(0 2) scale(.6)"><path d="M50 10 L84 30 V70 L50 90 L16 70 V30 Z" fill="#0F6E56"/><path d="M36 36 V64 M36 36 L58 36 M36 50 L54 50 M36 64 L58 64" fill="none" stroke="#9FE1CB" stroke-width="7" stroke-linecap="round"/><path d="M70 40 L62 52 H68 L65 62 L76 49 H70 Z" fill="#EF9F27"/></g><text x="70" y="42" font-size="32" font-weight="500" fill="var(--text)">Komp-Dec</text></svg></div>
             <div class="date" id="date"></div>
           </div>
           <div class="theme-seg" role="group" aria-label="Motyw">
