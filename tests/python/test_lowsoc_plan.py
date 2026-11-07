@@ -51,6 +51,15 @@ async def main():
     check("SOC 25% / próg 20%: ładowanie startuje od bieżącej godziny (03:00), nie 05:00", s == "03:00" and not skip, (s, e, skip, why[:160]))
     check("uzasadnienie mówi o pilności", "startuje od razu" in why, why[:200])
 
+    # --- zrzut użytkownika: sobota 05:18, SOC 25% — ostatnia godzina okna; plan nie może „planować następnej nocy” (SOC 66%)
+    for lbl, when in (("sobota", (2026, 11, 7, 5, 18)), ("dzień roboczy", (2026, 11, 9, 5, 18))):
+        hass, c, sched, rt = await env(when, 25, floor=20)
+        sx, ex, skx, whyx = charge(await sched.suggest())
+        check(f"{lbl} 05:18, SOC 25% / próg 20%: ładowanie 05:00–06:00, bez „bateria wystarczy do rana”", sx == "05:00" and ex == "06:00" and not skx and "wystarczy" not in whyx, (sx, ex, skx, whyx[:160]))
+        hass, c, sched, rt = await env(when, 60, floor=20)
+        sx, ex, skx, whyx = charge(await sched.suggest())
+        check(f"{lbl} 05:18, SOC 60%: bez pilnego ładowania (jak dotąd)", "startuje od razu" not in whyx, (sx, whyx[:100]))
+
     # --- ten sam SOC, ale próg z encji 10% → nie pilnie (26 > 10+5), zwykła logika (nie od 03:00)
     hass, c, sched, rt = await env((2026, 11, 7, 3, 25), 26, floor=10)
     s2, e2, skip2, why2 = charge(await sched.suggest())

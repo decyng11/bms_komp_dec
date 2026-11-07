@@ -897,12 +897,19 @@ class ScheduleOptimizer:
                             f"Pomiń — taryfa ({prof.label()}) nie ma taniego okna nocnego, więc ładowanie z sieci nie ma uzasadnienia cenowego.")
             return out
         ns, ne_today, ne_next = nb
+        # Pilnie: SOC tuż nad progiem falownika (≤ próg + 5 pkt) w taniej porze → ładujemy od bieżącej godziny, bez czekania na „najlepszą”.
+        floor_now = max(float(ctx.get("inv_now") or 0.0), float(HARD_FLOOR_SOC))
+        urgent = bool(ctx["soc"] is not None and ctx["soc"] <= floor_now + URGENT_MARGIN_PCT and not prof.is_peak(ctx["now"]))
         if now_h >= ns or ne_today is None:
             earliest, end_h = now_h + 1, ne_next
             nxt = True
-        elif now_h >= ne_today - 1:     # tuż przed końcem okna nocnego — planujemy nadchodzącą noc
-            earliest, end_h = ns, ne_next
-            nxt = True
+        elif now_h >= ne_today - 1:
+            if urgent and now_h < ne_today:     # ostatnia godzina taniego okna, a bateria przy progu: ładujemy teraz, nie planujemy dopiero następnej nocy
+                earliest, end_h = now_h + 1, ne_today
+                nxt = False
+            else:                               # tuż przed końcem okna nocnego — planujemy nadchodzącą noc
+                earliest, end_h = ns, ne_next
+                nxt = True
         else:
             earliest, end_h = now_h + 1, ne_today
             nxt = False
@@ -910,10 +917,7 @@ class ScheduleOptimizer:
             self._skip_pair(out, set1 + set2,
                             "Pomiń — jutro taryfa nie ma drogich godzin, więc ładowanie z sieci nie ma uzasadnienia cenowego.")
             return out
-        # Pilnie: SOC tuż nad progiem falownika (≤ próg + 5 pkt) w taniej porze → ładujemy od bieżącej godziny, bez czekania na „najlepszą”.
-        floor_now = max(float(ctx.get("inv_now") or 0.0), float(HARD_FLOOR_SOC))
-        urgent = bool(ctx["soc"] is not None and ctx["soc"] <= floor_now + URGENT_MARGIN_PCT and not prof.is_peak(ctx["now"])
-                      and earliest == now_h + 1)
+        urgent = urgent and earliest == now_h + 1
         ctx["urgent_charge"] = urgent
         if urgent:
             earliest = now_h
@@ -971,7 +975,7 @@ class ScheduleOptimizer:
         # po nocy bez ładowania — a nie z SOC z początku nocy (przez noc dom zużywa energię z baterii).
         soc_dawn = self._simulate(ctx, soc_start, earliest, end)
         if soc_dawn >= target - 2.0:
-            reason = (f"Pomiń — bateria wystarczy do rana (przewidywany SOC {soc_dawn:.0f}% o {end % 24:02d}:00 bez ładowania, "
+            reason = (f"Pomiń — bateria wystarczy do rana (przewidywany SOC {soc_dawn:.0f}% {'jutro ' if end >= 24 else ''}o {end % 24:02d}:00 bez ładowania, "
                       f"potrzeba ok. {target:.0f}% do czasu aż PV pokryje zużycie).{floor_note}")
             self._skip_pair(out, set1 + set2, reason)
             return out
