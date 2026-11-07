@@ -535,12 +535,22 @@ class Monitor:
         if ncfg.kind(cfg, "summary_daily").get("on") and hm >= sch["daily"]["time"] and sent.get("daily") != today.isoformat():
             sent["daily"] = today.isoformat()
             self.rt._save_state()  # noqa: SLF001
-            await self.notifier.send("summary_daily", f"📅 BMS: podsumowanie dnia {today:%d.%m}", self.rt.summary_text("day", today), level="info")
+            await self.notifier.send("summary_daily", f"📅 BMS: podsumowanie dnia {today:%d.%m}", self._summary_body("day", today), level="info")
         if (ncfg.kind(cfg, "summary_weekly").get("on") and loc.weekday() == sch["weekly"]["weekday"]
                 and hm >= sch["weekly"]["time"] and sent.get("weekly") != today.isoformat()):
             sent["weekly"] = today.isoformat()
             self.rt._save_state()  # noqa: SLF001
-            await self.notifier.send("summary_weekly", "🗓 BMS: podsumowanie tygodnia", self.rt.summary_text("week", today), level="info")
+            await self.notifier.send("summary_weekly", "🗓 BMS: podsumowanie tygodnia", self._summary_body("week", today), level="info")
+
+    def _summary_body(self, kind: str, day) -> str:
+        """Treść podsumowania; błąd w liczeniu nie może zgubić całej wiadomości (znacznik „wysłano” jest już ustawiony)."""
+        try:
+            text = self.rt.summary_text(kind, day)
+        except Exception as err:  # noqa: BLE001
+            _LOGGER.error("BMS: podsumowanie (%s) — błąd liczenia: %s", kind, err, exc_info=True)
+            self.rt.log.add("notify", f"Podsumowanie ({kind}): nie udało się policzyć szczegółów — {err}", "error")
+            return f"Nie udało się policzyć szczegółów podsumowania ({err}). Sprawdź dziennik BMS."
+        return text or "Brak danych do podsumowania za ten okres."
 
 
 def _spans(hours: list[int]) -> str:

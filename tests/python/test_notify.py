@@ -189,6 +189,16 @@ async def main():
     check("tygodniowe: w niedzielę po 20:00, raz", len(wsum) == 1, wsum)
     w = wsum[0][2]["message"] if wsum else ""
     check("tygodniowe: sumy 7 dni i porównanie z poprzednim tygodniem", "02.11–08.11" in w and "+9,10 zł" in w and "Względem poprzedniego tygodnia: -4,90 zł" in w, w)
+    # 0.8.6: błąd w liczeniu treści nie gubi podsumowania (wiadomość i tak wychodzi, błąd w dzienniku)
+    hass, c, opt, rt = env()
+    setcfg(rt, {"summary_daily": {"on": True}}, {"daily": {"time": "21:00"}})
+    def boom(kind, day): raise ValueError("zepsute dane")
+    rt.summary_text = boom
+    await rt.monitor._summaries(at(2026, 11, 8, 21, 0)); await settle(hass)
+    ds = pn(hass, "bms_summary_daily")
+    check("dzienne: wyjątek w treści → wiadomość i tak wychodzi", len(ds) == 1 and "zepsute dane" in ds[0][2]["message"], ds)
+    check("dzienne: błąd trafia do dziennika", any("nie udało się policzyć" in e["msg"] for e in rt.log.last(10)), rt.log.last(4))
+    check("dzienne: po błędzie nie ponawia co 10 s", (await rt.monitor._summaries(at(2026, 11, 8, 21, 1))) is None and len(pn(hass, "bms_summary_daily")) == 1)
     hass, c, opt, rt = env()
     await rt.monitor._summaries(at(2026, 11, 8, 21, 30))
     check("dzienne/tygodniowe domyślnie wyłączone", not pn(hass, "bms_summary_daily") and not pn(hass, "bms_summary_weekly"))

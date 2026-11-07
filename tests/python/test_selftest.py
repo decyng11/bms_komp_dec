@@ -86,8 +86,36 @@ async def main():
     check("naprawy: tryb podglądu (bez zapisu) → bez zgłoszenia", (C.DOMAIN, "auto_apply_no_write") not in IR.ISSUES)
     H._direct_write_blocked = old
 
+    # ---------- 0.8.6: linia o podsumowaniu dnia
+    from custom_components.bms_komp_dec import notify_cfg as NC
+    async def sl():
+        return {ch["id"]: ch for g in (await ST.run(rt))["groups"] for ch in g["checks"]}["summary_daily"]
+    at(2026, 11, 6, 12, 0)
+    rt.state["notify_cfg"] = NC.effective({"kinds": {"summary_daily": {"on": False}}})
+    r = await sl()
+    check("podsumowanie w autotestcie: wyłączone → ok z informacją", r["status"] == "ok" and "wyłączone" in r["detail"], r)
+    rt.state["notify_cfg"] = NC.effective({"kinds": {"summary_daily": {"on": True}}, "sched": {"daily": {"time": "21:00"}}})
+    rt.cfg["notify_service"] = "notify.mobile_app_tel"; rt.state["summary_sent"] = {}
+    hass.states.set("switch.bms_notifications_enabled", "on")
+    r = await sl()
+    check("podsumowanie w autotestcie: włączone przed godziną → ok", r["status"] == "ok" and "o 21:00" in r["detail"] and "nigdy" in r["detail"], r)
+    at(2026, 11, 6, 22, 0)
+    r = await sl()
+    check("podsumowanie w autotestcie: po godzinie i niewysłane → ostrzeżenie", r["status"] == "warn" and "jeszcze nie wysłano" in r["detail"], r)
+    rt.state["summary_sent"] = {"daily": "2026-11-06"}
+    check("podsumowanie w autotestcie: wysłane dziś → ok", (await sl())["status"] == "ok")
+    rt.cfg["notify_service"] = ""
+    r = await sl()
+    check("podsumowanie w autotestcie: brak usługi notify → ostrzeżenie", r["status"] == "warn" and "nie na telefon" in r["detail"], r)
+    rt.cfg["notify_service"] = "notify.mobile_app_tel"
+    hass.states.set("switch.bms_notifications_enabled", "off")
+    check("podsumowanie w autotestcie: wyłączony przełącznik → ostrzeżenie", "Powiadomienia BMS" in (await sl())["detail"])
+    hass.states.set("switch.bms_notifications_enabled", "on")
+    rt.state["notify_cfg"] = NC.effective({"kinds": {"summary_daily": {"on": True}}, "sched": {"daily": {"time": "21:00"}, "quiet": {"on": True, "start": "20:00", "end": "07:00"}}})
+    check("podsumowanie w autotestcie: godzina w ciszy nocnej → ostrzeżenie", "ciszy nocnej" in (await sl())["detail"])
+
     # ---------- plik diagnostyczny
-    entry = types.SimpleNamespace(entry_id="e1", title="BMS", version=1, domain=C.DOMAIN,
+    entry =types.SimpleNamespace(entry_id="e1", title="BMS", version=1, domain=C.DOMAIN,
                                   data={"host": "192.168.1.50", "serial": 2712345678, "soc": "sensor.x"},
                                   options={"notify_service": "notify.mobile_app_jan", "battery_capacity_kwh": 15})
     hass.data = getattr(hass, "data", {}) or {}

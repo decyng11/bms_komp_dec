@@ -213,6 +213,38 @@ async def _devices_group(rt) -> list[dict[str, str]]:
     return out
 
 
+def _summary_checks(rt) -> list[dict[str, str]]:
+    """Podsumowanie dnia: czy włączone, na którą godzinę, czy dziś poszło i czy dotrze na telefon."""
+    try:
+        from . import notify_cfg as ncfg
+        from .helpers import switch_on
+        cfg = rt.monitor.notifier.cfg()
+        if not ncfg.kind(cfg, "summary_daily").get("on"):
+            return [_c("summary_daily", "Podsumowanie dnia", "ok", "wyłączone w konfiguratorze powiadomień")]
+        t = cfg["sched"]["daily"]["time"]
+        loc = dt_util.as_local(dt_util.now())
+        today = loc.date().isoformat()
+        last = (rt.state.get("summary_sent") or {}).get("daily")
+        probs = []
+        if not switch_on(rt.hass, "notifications_enabled", True):
+            probs.append("przełącznik „Powiadomienia BMS” jest wyłączony — nic nie zostanie wysłane")
+        if not str(rt.cfg.get("notify_service") or "").strip():
+            probs.append("nie wskazano usługi notify — podsumowanie trafi tylko do powiadomień w HA, nie na telefon")
+        qh, qm = (int(x) for x in t.split(":"))
+        kc = ncfg.kind(cfg, "summary_daily")
+        if not kc.get("phone", True):
+            probs.append("w konfiguratorze wyłączono wysyłkę na telefon dla tego rodzaju")
+        elif not kc.get("quiet_ok") and ncfg.in_quiet(cfg, qh, qm):
+            probs.append(f"godzina {t} wypada w ciszy nocnej — na telefon nie pójdzie")
+        if last != today and loc.strftime("%H:%M") >= t:
+            probs.append(f"dziś po {t} jeszcze nie wysłano (ostatnio: {last or 'nigdy'})")
+        detail = f"włączone, o {t}, ostatnio wysłane: {last or 'nigdy'}"
+        return [_c("summary_daily", "Podsumowanie dnia", "warn" if probs else "ok", "; ".join([detail] + probs),
+                   "Popraw w Diagnostyka → Powiadomienia i sprawdź dziennik (rodzaj „notify”)." if probs else "")]
+    except Exception as err:  # noqa: BLE001
+        return [_c("summary_daily", "Podsumowanie dnia", "warn", f"nie udało się sprawdzić: {err}")]
+
+
 def _work_group(rt) -> list[dict[str, str]]:
     out = []
     plan = rt.plan()
@@ -225,6 +257,7 @@ def _work_group(rt) -> list[dict[str, str]]:
     st = rt.state
     out.append(_c("notify_saved", "Ustawienia powiadomień", "ok",
                   "zapisane w integracji" if isinstance(st.get("notify_cfg"), dict) else "domyślne (nie zmieniano)"))
+    out.extend(_summary_checks(rt))
     try:
         rep = rt.repairs.status()
         out.append(_c("repairs", "Zgłoszenia w Naprawach HA", "ok" if not rep["active"] else "warn",

@@ -12,6 +12,8 @@
 ## Poprawki
 - **Ceny RCE przesunięte o 15 minut i „cena na jutro”, której nie było.** Integracja RCE PSE podaje w `dtime` koniec kwadransu. BMS brał go za początek, więc ostatni kwadrans doby (23:45–24:00) trafiał do jutra jako godzina 00–01, a każda godzina była liczona z kwadransem poprzedniej. Teraz początek jest brany z `start_dtime` (albo z `business_date` i `period`) — dotyczy tabeli cen i planera.
 - **Kafelek „Do rozładowania”:** zamiast niejasnego „wg prognozy z PV: nie w 2 dni” w nocy druga linia mówi, ile zostanie do słońca: „Do słońca (ok. 08:00) zostanie ok. 24%”, a gdy bateria dojdzie do progu wcześniej — „Przed słońcem (ok. 08:00) dojdzie do 20% ok. 05:30”. Słońce = pierwsza godzina, w której prognoza PV pokrywa prognozę zużycia. W dzień linii nie ma.
+- **Podsumowanie dnia mogło zniknąć bez śladu.** Znacznik „wysłano dziś” był ustawiany przed policzeniem treści, więc błąd w liczeniu (np. brak jednej wartości w danych) kasował całą wiadomość i nic nie wracało do końca doby. Teraz wiadomość zawsze wychodzi — w razie błędu z krótkim opisem i wpisem w dzienniku.
+- **Autotest sprawdza podsumowanie dnia:** czy jest włączone, na którą godzinę, kiedy ostatnio poszło oraz czy coś blokuje wysyłkę (wyłączony przełącznik „Powiadomienia BMS”, brak usługi notify, cisza nocna, wyłączony telefon dla tego rodzaju).
 
 # BMS komp-dec — zmiany w 0.8.5 (z 0.8.4)
 
