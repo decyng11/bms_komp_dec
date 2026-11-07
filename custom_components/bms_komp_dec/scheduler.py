@@ -242,9 +242,20 @@ class ScheduleOptimizer:
             return None
 
         def _ts_of(item):
+            """Początek okresu ceny. RCE PSE: `dtime` to KONIEC kwadransu (00:15 dla 00:00–00:15), początek jest
+            w `start_dtime` albo w `business_date` + `period` — inaczej ostatni kwadrans doby trafiał do jutra,
+            a każda godzina była przesunięta o 15 minut."""
             if not isinstance(item, dict):
                 return None
-            for k in ("start", "datetime", "dtime", "period_start", "time"):
+            for k in ("start_dtime", "start", "datetime", "period_start"):
+                if item.get(k):
+                    return item[k]
+            bd, per = item.get("business_date"), item.get("period")
+            if bd and isinstance(per, str):
+                m = re.match(r"\s*(\d{1,2}):(\d{2})", per)
+                if m:
+                    return f"{str(bd)[:10]} {int(m.group(1)):02d}:{m.group(2)}:00"
+            for k in ("dtime", "time"):
                 if item.get(k):
                     return item[k]
             return None

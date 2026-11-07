@@ -31,6 +31,28 @@ async def main():
     hass.states.set("sensor.rce_pse_cena", 0.6, {"prices": hourly(d0, price, 15, "dtime", "naive", extra={"period": "x"}) + hourly(d1, price2, 15, "dtime", "naive")})
     check("A: 15-min, dtime, dziś i jutro w jednej liście", n(s, d0) == 24 and n(s, d1) == 24, (n(s, d0), n(s, d1)))
 
+    # A2. RCE PSE (prawdziwy format): dtime = KONIEC kwadransu, start_dtime / business_date + period = początek.
+    #     Lista tylko na dziś: ostatni kwadrans ma dtime „jutro 00:00” — nie może stać się ceną jutra.
+    def rce_items(d, f, with_start=True):
+        out = []
+        for q in range(96):
+            st = datetime(d.year, d.month, d.day) + timedelta(minutes=15 * q)
+            en = st + timedelta(minutes=15)
+            it = {"dtime": en.strftime("%Y-%m-%d %H:%M:%S"), "period": f"{st:%H:%M} - {en:%H:%M}", "rce_pln": f(q), "business_date": d.isoformat()}
+            if with_start:
+                it["start_dtime"] = st.strftime("%Y-%m-%d %H:%M:%S")
+            out.append(it)
+        return out
+    qprice = lambda q: 400 + q                       # każdy kwadrans inny: godzina h = średnia z q = 4h..4h+3
+    for ws in (True, False):
+        hass, s, d0, d1 = fresh()
+        hass.states.set("sensor.rce_pse_cena", 0.6, {"prices": rce_items(d0, qprice, ws)})
+        r = s._read_rce_arrays()
+        tag = "start_dtime" if ws else "business_date + period"
+        check(f"A2 ({tag}): ostatni kwadrans dnia nie jest ceną jutra", not r.get(d1.isoformat()), r.get(d1.isoformat()))
+        check(f"A2 ({tag}): godzina 00 = średnia kwadransów 00:00–01:00", abs(r[d0.isoformat()][0] - normalize(401.5)) < 1e-9, r[d0.isoformat()][:2])
+        check(f"A2 ({tag}): godzina 23 = średnia 23:00–24:00 (4 kwadranse)", abs(r[d0.isoformat()][23] - normalize(400 + 93.5)) < 1e-9, r[d0.isoformat()][23])
+
     # B. styl Nord Pool: raw_today / raw_tomorrow ze znacznikami start + value
     hass, s, d0, d1 = fresh()
     hass.states.set("sensor.rce_pse_cena", 0.6, {"raw_today": hourly(d0, price, 60, "start", valkey="value"), "raw_tomorrow": hourly(d1, price2, 60, "start", valkey="value")})
