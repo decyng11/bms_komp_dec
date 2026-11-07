@@ -1428,7 +1428,15 @@
       ctx.clearRect(0, 0, w, h);
 
       const light = THEME.mode === 'light';
-      const padL = 46, padR = 12, padT = 18, padB = 22;     // padL/padR takie same jak w tabeli pod wykresem
+      const padL = 46, padR = 12, padB = 22;     // padL/padR takie same jak w tabeli pod wykresem
+      // wartości (Wh, jak w tabeli) nad słupkami, jak na wykresie 7-dniowym: poziomo, gdy mieszczą się w kolumnie, inaczej pionowo
+      const whOf = (v) => Math.round(v * 100) * 10;
+      const LBL_FONT = 'bold 10px -apple-system, sans-serif';
+      const lblDigits = Math.max(3, ...tomorrow.filter(v => v !== null).map(v => String(whOf(v)).length));
+      ctx.font = LBL_FONT;
+      const lblW = ctx.measureText('0'.repeat(lblDigits)).width;
+      const lblHoriz = lblW + 3 <= (w - padL - padR) / 24;
+      const padT = 18 + (lblHoriz ? 14 : Math.ceil(lblW) + 6);   // miejsce na napisy nad najwyższym słupkiem i na „teraz”
       const plotW = w - padL - padR;
       const plotH = h - padT - padB;
       const baseY = padT + plotH;
@@ -1476,6 +1484,34 @@
         ctx.fillStyle = grad;
         this._roundRect(ctx, cx - barW / 2, baseY - bh, barW, bh, 3);
         ctx.fill();
+      }
+
+      // wartości nad słupkami (pod linią „dziś”, żeby kropki rzeczywistego zużycia zawsze były w pełni widoczne; obwódka w kolorze tła)
+      {
+        const hl = light ? 'rgba(255,255,255,0.9)' : 'rgba(0,0,0,0.6)';
+        ctx.font = LBL_FONT;
+        ctx.lineJoin = 'round';
+        ctx.lineWidth = 3;
+        for (let i = 0; i < 24; i++) {
+          const v = tomorrow[i];
+          if (v === null) continue;
+          const cx = padL + (i + 0.5) * groupW;
+          const topY = baseY - Math.max(2, baseY - yOf(v)) - 3;
+          const isPeak = v >= realMax * 0.7;
+          ctx.fillStyle = isPeak ? (light ? '#b45309' : COLORS.tomorrow) : TC('text');
+          ctx.strokeStyle = hl;
+          const txt = String(whOf(v));
+          if (lblHoriz) {
+            ctx.textAlign = 'center'; ctx.textBaseline = 'bottom';
+            ctx.strokeText(txt, cx, topY); ctx.fillText(txt, cx, topY);
+          } else {
+            ctx.save();
+            ctx.translate(cx, topY); ctx.rotate(-Math.PI / 2);
+            ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+            ctx.strokeText(txt, 0, 0); ctx.fillText(txt, 0, 0);
+            ctx.restore();
+          }
+        }
       }
 
       // linia „dziś” — rzeczywiste zużycie zakończonych godzin; przerwa tam, gdzie brak pomiaru
@@ -1774,15 +1810,16 @@
     }
 
     // tabela 2 × 12 godzin (dziś / jutro); wartości w zł/kWh, null = brak ceny
-    _priceTableHtml(today, tomorrow, title, src) {
+    _priceTableHtml(today, tomorrow, title, src, cheapIsGood = false) {
       const vals = (a) => (a || []).filter(v => v !== null);
       const mm = (a) => { const v = vals(a); return v.length ? [Math.max(...v), Math.min(...v)] : [null, null]; };
       const [maxD, minD] = mm(today), [maxJ, minJ] = mm(tomorrow);
       const fmt = (val, max, min) => {
         if (val === null || val === undefined) return '--';
         const str = val.toFixed(2);
-        if (val === max) return `<span class="price-max">${str}</span>`;
-        if (val === min) return `<span class="price-min">${str}</span>`;
+        // sprzedaż: najwyższa cena = zielona (dobrze); zakup (cheapIsGood): najniższa = zielona, najwyższa = czerwona
+        if (val === max) return `<span class="${cheapIsGood ? 'price-min' : 'price-max'}">${str}</span>`;
+        if (val === min) return `<span class="${cheapIsGood ? 'price-max' : 'price-min'}">${str}</span>`;
         return str;
       };
       const at = (a, i) => (a && i < a.length) ? a[i] : null;
@@ -1823,7 +1860,7 @@
         if (this._lastPriceTableKey === key) return;
         this._lastPriceTableKey = key;
         let html = this._priceTableHtml(sT, sJ, '', '');
-        if (bT || bJ) html += this._priceTableHtml(bT, bJ, 'Ceny zakupu (taryfa dynamiczna)', a.price_buy_source || a.price_buy_entity || '');
+        if (bT || bJ) html += this._priceTableHtml(bT, bJ, 'Ceny zakupu (taryfa dynamiczna)', a.price_buy_source || a.price_buy_entity || '', true);
         container.innerHTML = html;
         return;
       }

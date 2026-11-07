@@ -56,15 +56,23 @@ const info = (page, kind = 'today') => page.evaluate((ids) => {
 }, IDS[kind]);
 // kolor piksela na canvasie (px CSS)
 const px = (page, x, y, kind = 'today') => page.evaluate(([x, y, id]) => { const c = window.__el.shadowRoot.getElementById(id); const d = window.devicePixelRatio || 1; const g = c.getContext('2d').getImageData(Math.round(x * d), Math.round(y * d), 1, 1).data; return [g[0], g[1], g[2], g[3]]; }, [x, y, IDS[kind][0]]);
+// etykiety Wh nad słupkami rysują się na wierzchu i bywają nad środkiem kropki → szukamy koloru kropki w jej otoczeniu (±4 px)
+const mint = (page, x, y, kind = 'today', col = [110, 231, 183]) => page.evaluate(([x, y, id, col]) => {
+  const c = window.__el.shadowRoot.getElementById(id); const d = window.devicePixelRatio || 1; const R = 4;
+  const g = c.getContext('2d').getImageData(Math.round((x - R) * d), Math.round((y - R) * d), Math.round(2 * R * d) + 1, Math.round(2 * R * d) + 1).data;
+  for (let i = 0; i < g.length; i += 4) if (Math.abs(g[i] - col[0]) <= 26 && Math.abs(g[i + 1] - col[1]) <= 26 && Math.abs(g[i + 2] - col[2]) <= 26 && g[i + 3] > 200) return true;
+  return false; }, [x, y, IDS[kind][0], col]);
 const near = (a, b, t = 26) => Math.abs(a[0] - b[0]) <= t && Math.abs(a[1] - b[1]) <= t && Math.abs(a[2] - b[2]) <= t;
 // geometria taka jak w kodzie rysującym
-const geo = (w, h, vals) => { const padL = 46, padR = 12, padT = 18, padB = 22; const plotW = w - padL - padR, plotH = h - padT - padB, baseY = padT + plotH, gW = plotW / 24;
+let LBL_W = 17;   // szerokość „000” czcionką napisów nad słupkami — mierzona w przeglądarce na starcie
+const geo = (w, h, vals) => { const padL = 46, padR = 12, padB = 22; const padT = 18 + (LBL_W + 3 <= (w - padL - padR) / 24 ? 14 : Math.ceil(LBL_W) + 6); const plotW = w - padL - padR, plotH = h - padT - padB, baseY = padT + plotH, gW = plotW / 24;
   const raw = Math.max(...vals, 0.01); const x = raw * 1.06 / 4; const p = Math.pow(10, Math.floor(Math.log10(x))); const f = x / p; const step = (f <= 1 ? 1 : f <= 2 ? 2 : f <= 5 ? 5 : 10) * p;
   const nT = Math.max(1, Math.ceil(raw * 1.02 / step - 1e-9)); const ax = step * nT;
   return { cx: (i) => padL + (i + 0.5) * gW, y: (v) => baseY - Math.min(1, v / ax) * plotH, gW, baseY, step, ax, nT }; };
 
 (async () => {
   const browser = await chromium.launch();
+  { const mp = await browser.newPage(); LBL_W = await mp.evaluate(() => { const c = document.createElement('canvas').getContext('2d'); c.font = 'bold 10px -apple-system, sans-serif'; return c.measureText('000').width; }); await mp.close(); }
 
   // ===== A. szeroki, ciemny, pełne dane =====
   { const { page, errs } = await open(browser, 880);
@@ -87,7 +95,7 @@ const geo = (w, h, vals) => { const padL = 46, padR = 12, padT = 18, padB = 22; 
     check('A: kolumna 23 w tabeli pod słupkiem 23 (±1.5 px)', Math.abs((I.cell23.x - I.cl) - g.cx(23)) <= 1.5, [I.cell23.x - I.cl, g.cx(23)]);
     // piksele: kropki linii „dziś” w kolorze mięty w środku każdej godziny 0–14
     let ok = 0; const bad = [];
-    for (let i = 0; i < 15; i++) { const c = await px(page, g.cx(i) + I.cl * 0, g.y(A15[i])); if (near(c, [110, 231, 183])) ok++; else bad.push([i, c]); }
+    for (let i = 0; i < 15; i++) { if (await mint(page, g.cx(i) + I.cl * 0, g.y(A15[i]))) ok++; else bad.push([i, await px(page, g.cx(i), g.y(A15[i]))]); }
     check('A: 15 kropek „dziś” w kolorze mięty', ok === 15, bad);
     // brak kropek dla przyszłych godzin: piksel w miejscu hipotetycznej kropki nie jest miętowy
     const futureBad = []; for (let i = 15; i < 24; i++) { const c = await px(page, g.cx(i), g.y(0.45)); if (near(c, [110, 231, 183])) futureBad.push(i); }
@@ -127,7 +135,7 @@ const geo = (w, h, vals) => { const padL = 46, padR = 12, padT = 18, padB = 22; 
     check('B: brak poziomego przewijania strony', await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1));
     check('B: komórki nie są ucinane (scrollWidth ≤ szerokość+1)', await page.evaluate(() => [...window.__el.shadowRoot.querySelectorAll('.hfc-tbl > div:not(.l)')].every(d => d.scrollWidth <= d.clientWidth + 1)));
     const g = geo(I.cw, I.ch, F.concat(A15)); let ok = 0;
-    for (let i = 0; i < 15; i++) { const c = await px(page, g.cx(i), g.y(A15[i])); if (near(c, [110, 231, 183])) ok++; }
+    for (let i = 0; i < 15; i++) { if (await mint(page, g.cx(i), g.y(A15[i]))) ok++; }
     check('B: kropki „dziś” widoczne na wąskim ekranie', ok === 15, ok);
     await page.locator('bms-panel-card >> #chartHourlyToday').locator('xpath=..').screenshot({ path: SC + 'hfc_phone_dark.png' });
     check('B: bez błędów JS', errs.length === 0, errs);
@@ -190,13 +198,13 @@ const geo = (w, h, vals) => { const padL = 46, padR = 12, padT = 18, padB = 22; 
     check('D2: przy lukach nagłówek liczy godziny z pomiarem', /Dziś \(13 godz\. z pomiarem\): 4\.4 kWh \(prognoza /.test(I.sub), I.sub);
     const mx = (g.cx(7) + g.cx(8)) / 2, my = (g.y(A15[6]) + g.y(A15[9])) / 2; const mc = await px(page, mx, my);
     check('D2: w luce linia nie jest rysowana', !near(mc, [110, 231, 183], 30), mc);
-    check('D2: kropka przed luką (godz. 6) i po (godz. 9) jest', near(await px(page, g.cx(6), g.y(A15[6])), [110, 231, 183]) && near(await px(page, g.cx(9), g.y(A15[9])), [110, 231, 183]));
+    check('D2: kropka przed luką (godz. 6) i po (godz. 9) jest', await mint(page, g.cx(6), g.y(A15[6])) && await mint(page, g.cx(9), g.y(A15[9])));
     check('D2: tabela — luka pokazana kropką „·”', I.rowsTxt[0][50 + 1 + 7] === '·' && I.rowsTxt[0][50 + 1 + 8] === '·', I.rowsTxt[0].slice(50, 62));
     // D3: pojedynczy punkt (bez odcinka) też widoczny
     const one = Array(24).fill(null); one[3] = 0.4;
     await setFc(page, { hourly_forecast_today: F, hourly_forecast: G, hourly_today: one, hourly_today_hour: 4 });
     I = await info(page);
-    check('D3: pojedynczy punkt rysowany', near(await px(page, g.cx(3), g.y(0.4)), [110, 231, 183]));
+    check('D3: pojedynczy punkt rysowany', await mint(page, g.cx(3), g.y(0.4)));
     check('D3: nagłówek „dziś do 04:00” gdy brak luk? (1 z 4 → z pomiarem)', /Dziś \(1 godz\. z pomiarem\): 0\.4 kWh \(prognoza 0\.3\)/.test(I.sub), I.sub);
     // D4: śmieci w danych (tekst, NaN, ujemne, Infinity, HTML) → traktowane jak brak, bez wyjątku i bez wstrzyknięcia
     const junk = ['<img src=x onerror=alert(1)>', NaN, -5, Infinity, null, undefined, '0.3', {}, [], true].concat(Array(14).fill(0.3));

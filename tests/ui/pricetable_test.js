@@ -31,8 +31,13 @@ const { chromium } = require('playwright'); const fs = require('fs');
                          price_buy_source: 'sensor.pstryk_json_buy.prices_today', tariff_dynamic: true, tariff_peaks: '6-11,15-23' });
   ok('dynamiczna: dwie tabele', r.tables === 2, r.tables);
   ok('dynamiczna: nagłówek z bieżącą ceną sprzedaży', r.header.includes('0.47'), r.header);
-  ok('dynamiczna: cena zakupu 18–19 = 1.55 (maks. dnia wyróżnione)', /price-max">1\.55</.test(r.html), r.html.slice(0, 200));
-  ok('dynamiczna: najtańszy zakup jutro 0.41', /price-min">0\.41</.test(r.html));
+  // zakup: kolory odwrócone względem sprzedaży — najdroższa godzina czerwona, najtańsza zielona
+  const buyHtml = r.html.slice(r.html.indexOf('Ceny zakupu'));
+  const sellHtml = r.html.slice(0, r.html.indexOf('Ceny zakupu'));
+  ok('dynamiczna: najdroższy zakup 1.55 = czerwony', /price-min">1\.55</.test(buyHtml), buyHtml.slice(0, 200));
+  ok('dynamiczna: najtańszy zakup jutro 0.41 = zielony', /price-max">0\.41</.test(buyHtml));
+  ok('dynamiczna: sprzedaż bez zmian (najwyższa zielona)', /price-max">0\.53</.test(sellHtml) && /price-min">0\.30</.test(sellHtml), sellHtml.slice(0, 300));
+  ok('dynamiczna: w zakupie nie ma zielonej 1.55 ani czerwonej 0.41', !/price-max">1\.55</.test(buyHtml) && !/price-min">0\.41</.test(buyHtml));
   ok('dynamiczna: podpis źródła cen zakupu', r.text.includes('Ceny zakupu') && r.text.includes('pstryk_json_buy'), r.text.slice(0, 200));
   ok('dynamiczna: opis zasad wspomina taryfę dynamiczną', r.rules.includes('taryfie dynamicznej'));
 
