@@ -201,7 +201,14 @@ async def main():
     check("dzienne: po błędzie nie ponawia co 10 s", (await rt.monitor._summaries(at(2026, 11, 8, 21, 1))) is None and len(pn(hass, "bms_summary_daily")) == 1)
     hass, c, opt, rt = env()
     await rt.monitor._summaries(at(2026, 11, 8, 21, 30))
-    check("dzienne/tygodniowe domyślnie wyłączone", not pn(hass, "bms_summary_daily") and not pn(hass, "bms_summary_weekly"))
+    check("dzienne domyślnie WŁĄCZONE: przychodzi po 21:00 bez ruszania konfiguratora", len(pn(hass, "bms_summary_daily")) == 1)
+    check("tygodniowe domyślnie włączone: niedziela po 20:00", len(pn(hass, "bms_summary_weekly")) == 1)
+    hass, c, opt, rt = env()
+    await rt.monitor._summaries(at(2026, 11, 7, 21, 30))     # sobota
+    check("domyślnie: sobota — dzienne tak, tygodniowego jeszcze nie", len(pn(hass, "bms_summary_daily")) == 1 and not pn(hass, "bms_summary_weekly"))
+    hass, c, opt, rt = env()
+    await rt.monitor._summaries(at(2026, 11, 8, 20, 59))
+    check("domyślnie: przed 21:00 dzienne nie wychodzi", not pn(hass, "bms_summary_daily"))
     # miesięczne: dzień i godzina z konfiguratora
     setcfg(rt, {}, {"monthly": {"day": 3, "time": "10:00"}})
     rt.ledger.days["2026-10-15"] = {"export_kwh": 5.0, "import_kwh": 3.0, "revenue": 2.0, "cost": 1.0, "neg_export_kwh": 0.0}

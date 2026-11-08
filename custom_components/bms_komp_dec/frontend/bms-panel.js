@@ -4062,6 +4062,20 @@
       const td = (c, st2) => `<td style="text-align:right;padding:7px 0;border-top:0.5px solid rgba(128,128,128,.3);${st2 || ''}">${c}</td>`;
       const lab = (t, st2) => `<td style="text-align:left;padding:7px 0;border-top:0.5px solid rgba(128,128,128,.3);${st2 || ''}">${t}</td>`;
       const mut = 'color:var(--muted);';
+      const ex = (st.attributes && st.attributes.extras) || {};
+      const keys = ['day', 'month', 'total'];
+      const sv = (k) => ex[k] && ex[k].savings;
+      const hasSv = keys.some(k => sv(k) && sv(k).saving != null);
+      const pc = (v) => String(Math.round(Number(v) || 0));
+      const sp = ex.day && ex.day.split;
+      const splitHtml = sp ? `<div data-role="split" style="margin-top:12px;"><div style="font-size:12px;${mut}">Skąd energia dla domu dziś (szac.) · ${Number(sp.load_kwh).toFixed(1).replace('.', ',')} kWh</div>
+          <div style="display:flex;height:14px;border-radius:7px;overflow:hidden;margin-top:5px;background:var(--line);">
+            <div title="PV bezpośrednio" style="width:${pc(sp.pv_pct)}%;background:#ffcc00;"></div>
+            <div title="bateria" style="width:${pc(sp.battery_pct)}%;background:#34c759;"></div>
+            <div title="sieć" style="width:${pc(sp.grid_pct)}%;background:#af52de;"></div></div>
+          <div style="font-size:12px;margin-top:4px;display:flex;gap:12px;flex-wrap:wrap;"><span><span style="color:#ffcc00;">■</span> PV ${pc(sp.pv_pct)}%</span><span><span style="color:#34c759;">■</span> bateria ${pc(sp.battery_pct)}%</span><span><span style="color:#af52de;">■</span> sieć ${pc(sp.grid_pct)}%</span></div></div>` : '';
+      const tf = ex.month && ex.month.tariff;
+      const tariffHtml = tf ? `<div data-role="tariff" style="font-size:12px;margin-top:10px;${mut}">Pobór z sieci w tym miesiącu: drogie godziny ${Number(tf.peak_kwh).toFixed(1).replace('.', ',')} kWh (${pc(tf.peak_pct)}%) · tanie ${Number(tf.offpeak_kwh).toFixed(1).replace('.', ',')} kWh (${pc(tf.offpeak_pct)}%)</div>` : '';
       return `<div class="pl-row" data-role="money-table"><div class="pl-h"><span>💰 Sprzedaż i zakup energii</span></div>
         <table style="width:100%;border-collapse:collapse;font-size:13px;margin-top:6px;">
           <tr><th style="text-align:left;font-weight:400;${mut}"></th>${cols.map(([n]) => `<th style="text-align:right;font-weight:400;${mut}">${n}</th>`).join('')}</tr>
@@ -4069,7 +4083,9 @@
           <tr>${lab('Kupiłem')}${cols.map(([, d]) => td(money(d.cost), 'color:#ff9f0a;')).join('')}</tr>
           <tr>${lab('<b style="font-weight:500;">Saldo</b>')}${cols.map(([, d]) => td(money(d.net, true), `font-weight:500;color:${Number(d.net) < 0 ? '#ff453a' : '#34c759'};`)).join('')}</tr>
           <tr>${lab('Śr. cena sprz. / zakup', mut)}${cols.map(([, d]) => td(`${avg(d.export_kwh, d.revenue)} / ${avg(d.import_kwh, d.cost)}`, mut)).join('')}</tr>
-        </table></div>`;
+          ${hasSv ? `<tr>${lab('Bez PV i baterii (szac.)', mut)}${keys.map(k => td(sv(k) && sv(k).without_cost != null ? money(sv(k).without_cost) : '—', mut)).join('')}</tr>
+          <tr>${lab('Oszczędzam (szac.)')}${keys.map(k => td(sv(k) && sv(k).saving != null ? money(sv(k).saving, true) : '—', 'font-weight:500;color:#34c759;')).join('')}</tr>` : ''}
+        </table>${splitHtml}${tariffHtml}</div>`;
     }
   }
 
@@ -4084,7 +4100,7 @@
   // =====================================================================
   // Wersja tego pliku (ustawiana skryptem pakującym z manifest.json). Każdy moduł niesie tę samą w install.version:
   // gdy się różnią, przeglądarka podała starą kopię modułu z pamięci podręcznej.
-  const CARD_VERSION = '0.8.8';
+  const CARD_VERSION = '0.9.0';
   const MOD_TIMEOUT_MS = 20000;
   const MODULES = {
     diag:   { file: 'bms-diag.js',   global: '__bmsDiagInstall',   contract: 1, label: 'Diagnostyki', p: null, ready: false, err: '', got: '' },

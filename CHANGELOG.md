@@ -1,4 +1,9 @@
-# EMS komp-dec — zmiany po 0.8.8 (jeszcze niewydane)
+# EMS komp-dec — zmiany w 0.9.0 (z 0.8.8)
+
+## Powiadomienia
+- **Podsumowanie dnia nie przychodziło, bo było domyślnie wyłączone.** Teraz podsumowanie dnia (21:00) i tygodnia (niedziela 20:00) są domyślnie włączone. Kto je wcześniej świadomie ustawił w konfiguratorze, zachowuje swoje ustawienie. Gdy podsumowanie jest wyłączone, w dzienniku EMS pojawia się wpis z przyczyną zamiast ciszy. Telefon dostaje je tylko przy ustawionej usłudze `notify` w konfiguracji EMS, w przeciwnym razie powiadomienie jest tylko w HA.
+- **Nowe powiadomienie „Okno arbitrażu jutro”** (domyślnie włączone, raz na dobę): gdy jutro da się kupić tanio i sprzedać drożej po stracie cyklu z zyskiem powyżej progu (domyślnie 0,30 zł/kWh), podaje godziny, ceny i zysk z 1 kWh. Sprzedaż musi wypadać po zakupie.
+- **Podsumowanie dnia i tygodnia są bogatsze:** ile kosztowałby prąd bez PV i baterii i ile zaoszczędzono, skąd energia dla domu (PV / bateria / sieć) oraz ile energii pobrano w drogich godzinach.
 
 ## Prognoza zużycia: sumy dzienne z licznika falownika
 - **Naprawa przepisywania wyniku poprzedniego dnia.** Licznik dzienny falownika resetuje się o godzinie jego zegara, nie zawsze równo o północy. Do resetu pokazuje jeszcze wynik wczorajszy i dalej rośnie, a integracja zapisywała ten odczyt jako dzisiejszy. Realne zużycie rzadko przebijało wczorajszy wynik, więc dzień zostawał z cudzą wartością (w tabeli dwa dni z rzędu z tą samą sumą, np. 32,9). Teraz odczyty sprzed resetu (do 6:00) dopisują się do poprzedniego dnia, a nowy dzień zaczyna się od resetu licznika. Zachowanie przy resecie równo o północy się nie zmienia.
@@ -9,7 +14,8 @@
 - **Świeża instalacja zbiera dane od zera.** Integracja nie importuje już historii zużycia z rekordera HA (wcześniej dociągała do 365 dni, co przy dziwnych licznikach dawało nierealne dni). Pierwsza prognoza zużycia pojawia się po 5 pełnych dniach, profil godzinowy po 3. Do tego czasu planer działa bez prognozy zużycia. Import można przywrócić stałą `BACKFILL_FROM_RECORDER` w `load_forecast.py`. Już zapisane dane zostają bez zmian — można je skasować w karcie: **Diagnostyka → Zaawansowane → „Wyczyść historię zużycia”** (z oknem potwierdzenia; encja `button.bms_wyczysc_historie_zuzycia`: dni, profile godzinowe, historia prognoz i sezonowość; zbieranie startuje od zera).
 
 ## Karta
-- **Tabelka „Sprzedaż i zakup energii”** pod paskiem „Sieć”: ile sprzedałem i kupiłem w zł (dziś / miesiąc / razem), saldo i średnie ceny sprzedaży i zakupu. Dane z księgi rozliczeń (nowy atrybut `sums` sensora „EMS Bilans dziś”); ze starszą integracją tabelka się nie pokazuje.
+- **Pod tabelką sprzedaży i zakupu:** wiersze „Bez PV i baterii” i „Oszczędzam” (szacunek: zużycie × średnia cena zakupu), pasek „Skąd energia dla domu dziś” (PV bezpośrednio / bateria / sieć) i udział poboru z sieci w drogich godzinach w tym miesiącu. Wszystko to szacunki z dziennych liczników; import ładujący baterię zawyża udział sieci.
+- **Tabelka** „Sprzedaż i zakup energii”** pod paskiem „Sieć”: ile sprzedałem i kupiłem w zł (dziś / miesiąc / razem), saldo i średnie ceny sprzedaży i zakupu. Dane z księgi rozliczeń (nowy atrybut `sums` sensora „EMS Bilans dziś”); ze starszą integracją tabelka się nie pokazuje.
 - **Logo Komp-Dec** w nagłówku karty zamiast napisu „Centrum Energii” (pliki w `assets/`).
 - **Tabela cen zakupu:** kolory odwrócone względem sprzedaży (najtańsza godzina zielona, najdroższa czerwona).
 - **Wykresy godzinowe dziś i jutro:** wartości w Wh nad słupkami (poziomo na szerokim ekranie, pionowo na wąskim).

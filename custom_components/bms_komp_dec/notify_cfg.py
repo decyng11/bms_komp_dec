@@ -37,6 +37,8 @@ CATALOG: dict[str, tuple] = {
     "rce_missing": ("Ceny i plan", "Brak cen RCE na jutro", "Po 18:00 nadal brak pełnych cen RCE na jutro.", True, True, 1200, False, None),
     "rce_negative": ("Ceny i plan", "Niskie / ujemne ceny RCE jutro", "Jutro są godziny z ceną sprzedaży ≤ progu — lepiej ładować baterię niż eksportować.", True, True, 1440, False,
                      ("próg", "zł/kWh", 0.0, -1.0, 1.0, 0.01)),
+    "arbitrage_window": ("Ceny i plan", "Okno arbitrażu jutro", "Jutro opłaca się kupić tanio i sprzedać drogo: zysk z 1 kWh po stracie cyklu przekracza próg.", True, True, 1440, False,
+                         ("min. zysk", "zł/kWh", 0.30, 0.0, 3.0, 0.05)),
     "rce_high": ("Ceny i plan", "Wysoka cena sprzedaży jutro", "Jutro cena RCE przekracza próg; podaje godzinę i plan sprzedaży.", True, True, 1440, False,
                  ("próg", "zł/kWh", 1.0, 0.1, 5.0, 0.05)),
     "buy_prices_missing": ("Ceny i plan", "Brak cen zakupu (taryfa dynamiczna)", "Taryfa dynamiczna, a encja zakupu nie podaje cen godzinowych na dziś.", True, True, 1440, False, None),
@@ -64,8 +66,8 @@ CATALOG: dict[str, tuple] = {
     "island_overload": ("Urządzenia", "Duży pobór przy zaniku sieci", "W czasie zaniku sieci pobór domu przekracza próg — lista urządzeń, które obciążają baterię.", True, True, 15, True,
                         ("próg", "kW", 5.0, 0.5, 30.0, 0.5)),
     # --- podsumowania (godziny w części „Harmonogram podsumowań”)
-    "summary_daily": ("Podsumowania", "Podsumowanie dnia", "Bilans zł, energia, SOC min/max, co zrobił harmonogram, jutro: PV i plan.", False, True, 0, False, None),
-    "summary_weekly": ("Podsumowania", "Podsumowanie tygodnia", "Sumy tygodnia, porównanie z poprzednim, najlepszy/najgorszy dzień, sprawność.", False, True, 0, False, None),
+    "summary_daily": ("Podsumowania", "Podsumowanie dnia", "Bilans zł, energia, SOC min/max, co zrobił harmonogram, jutro: PV i plan.", True, True, 0, False, None),
+    "summary_weekly": ("Podsumowania", "Podsumowanie tygodnia", "Sumy tygodnia, porównanie z poprzednim, najlepszy/najgorszy dzień, sprawność.", True, True, 0, False, None),
     "summary_monthly": ("Podsumowania", "Raport miesięczny", "Raport za poprzedni miesiąc z porównaniem do wcześniejszego.", True, True, 0, False, None),
 }
 GROUPS = ("Bateria", "Falownik", "Ceny i plan", "Działanie", "Urządzenia", "Podsumowania")

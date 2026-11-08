@@ -18,7 +18,7 @@ from . import accuracy as acc
 from . import inverter_ctl as ictl
 from . import notify_cfg as ncfg
 from .const import CONF_BATTERY_TEMPERATURE, CONF_GRID_POWER, CONF_GRID_VOLTAGE_L1
-from .helpers import switch_on
+from .helpers import number_value, switch_on
 from .tariff import get_profile, next_offpeak_window
 
 _LOGGER = logging.getLogger(__name__)
@@ -448,6 +448,43 @@ class Monitor:
             await self.notifier.send("rce_high", "📈 EMS: wysoka cena sprzedaży jutro",
                                      f"Jutro o {top_h:02d}:00 cena RCE {top_v:.2f} zł/kWh (próg {hi:.2f}).{plan_txt}", key=f"rce_high:{key}", level="info")
 
+        await self._arbitrage_window(now, tomorrow, key, vals)
+
+    async def _arbitrage_window(self, now: datetime, tomorrow, key: str, vals: list[tuple[int, float]]) -> None:
+        """Jutro: najlepsza para „kup tanio (godzina h1) → sprzedaj drogo (godzina h2 > h1)” po stracie cyklu."""
+        thr = self._thr("arbitrage_window")
+        if thr is None:
+            return
+        try:
+            buy = self.rt.optimizer.buy_hourly_for(tomorrow)
+        except Exception:  # noqa: BLE001
+            buy = None
+        if not buy:
+            return
+        eff = 0.9
+        try:
+            eff = min(1.0, max(0.5, number_value(self.rt.hass, "cycle_efficiency", 90.0) / 100.0))
+        except Exception:  # noqa: BLE001
+            pass
+        sell = dict(vals)
+        best = None
+        for h1, b in enumerate(buy):
+            if not isinstance(b, (int, float)):
+                continue
+            for h2, sv in sell.items():
+                if h2 > h1:
+                    gain = sv * eff - float(b)
+                    if best is None or gain > best[0]:
+                        best = (gain, h1, float(b), h2, sv)
+        if best is None or best[0] < thr or not self._once("arbitrage_window", key):
+            return
+        gain, h1, b, h2, sv = best
+        await self.notifier.send(
+            "arbitrage_window", "🔁 EMS: jutro opłaca się arbitraż",
+            f"Jutro kup około {h1:02d}:00 po {_pl(b)} zł/kWh i sprzedaj około {h2:02d}:00 po {_pl(sv)} zł/kWh. "
+            f"Po stracie cyklu ({eff:.0%}) zostaje około {_pl(gain)} zł na każdej kWh (próg {_pl(thr)}).",
+            key=f"arb:{key}", level="info")
+
     async def _sources(self, now: datetime) -> None:
         opt = self.rt.optimizer
         today = dt_util.as_local(now).date()
@@ -596,6 +633,10 @@ class Monitor:
         hm = loc.strftime("%H:%M")
         sent = self.rt.state.setdefault("summary_sent", {})
         today = loc.date()
+        if (not ncfg.kind(cfg, "summary_daily").get("on") and hm >= sch["daily"]["time"]
+                and sent.get("daily_off_logged") != today.isoformat()):
+            sent["daily_off_logged"] = today.isoformat()
+            self.rt.log.add("notify", "Podsumowanie dnia jest wyłączone w konfiguratorze powiadomień (Diagnostyka → Powiadomienia) — nie wysłano.", "info")
         if ncfg.kind(cfg, "summary_daily").get("on") and hm >= sch["daily"]["time"] and sent.get("daily") != today.isoformat():
             sent["daily"] = today.isoformat()
             self.rt._save_state()  # noqa: SLF001
@@ -615,6 +656,10 @@ class Monitor:
             self.rt.log.add("notify", f"Podsumowanie ({kind}): nie udało się policzyć szczegółów — {err}", "error")
             return f"Nie udało się policzyć szczegółów podsumowania ({err}). Sprawdź dziennik EMS."
         return text or "Brak danych do podsumowania za ten okres."
+
+
+def _pl(x: float) -> str:
+    return f"{x:.2f}".replace(".", ",")
 
 
 def _spans(hours: list[int]) -> str:

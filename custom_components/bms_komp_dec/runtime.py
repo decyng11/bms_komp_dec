@@ -34,6 +34,8 @@ from .device_ctl import DeviceController
 from .insights import Insights
 from .repairs_bms import Repairs
 from .ledger import Ledger
+from . import money as money_mod
+from .tariff import get_profile
 from .monitor import Monitor
 from . import report as report_mod
 from .reserve import compute_reserve
@@ -1257,6 +1259,10 @@ class BmsRuntime:
             if t.get("best"):
                 lines.append(f"Najlepszy dzień: {t['best'][0]} ({t['best'][1]:+.2f} zł), najsłabszy: {t['worst'][0]} ({t['worst'][1]:+.2f} zł)".replace(".", ","))
             try:
+                lines.extend(money_mod.lines(self.ledger, self.stats, day, "week", start))
+            except Exception:  # noqa: BLE001
+                pass
+            try:
                 cap = float(self.optimizer.config.get(CONF_BATTERY_CAPACITY_KWH, DEFAULT_BATTERY_CAPACITY_KWH))
                 s7 = self.stats.summary(cap)
                 if s7.get("eff_7d") is not None:
@@ -1266,6 +1272,10 @@ class BmsRuntime:
             return "\n".join(lines)
         t = report_mod.period_totals(self.ledger, self.stats, day, day)
         lines = report_mod.totals_lines(t)
+        try:
+            lines.extend(money_mod.lines(self.ledger, self.stats, day, "day"))
+        except Exception:  # noqa: BLE001
+            pass
         sd = self.state.get("soc_day") or {}
         if sd.get("date") == day.isoformat():
             lines.append(f"SOC: min {float(sd['min']):.0f}%, max {float(sd['max']):.0f}%")
@@ -1371,7 +1381,11 @@ class BmsRuntime:
         """Wywoływane co 10 s: całkowanie bilansu PLN i statystyk baterii."""
         now = dt_util.now()
         try:
-            self.ledger.update(now, self.grid_power(), self.sell_price(), self.buy_price())
+            try:
+                peak = bool(get_profile().is_peak(dt_util.as_local(now)))
+            except Exception:  # noqa: BLE001
+                peak = None
+            self.ledger.update(now, self.grid_power(), self.sell_price(), self.buy_price(), peak)
         except Exception as err:  # noqa: BLE001
             _LOGGER.debug("EMS ledger: %s", err)
         try:

@@ -13,6 +13,7 @@ from .const import (
 )
 from .const import DOMAIN, RUNTIME_SENSORS, SENSORS
 from . import accuracy as acc
+from . import money as money_mod
 from . import inverter_ctl as ictl
 from .entity import BmsBaseEntity
 from .monitor import FAULT_NOTE, fault_text
@@ -309,6 +310,7 @@ class BmsRuntimeSensor(BmsBaseEntity, SensorEntity):
                 "cost": round(day.get("cost", 0.0), 2),
                 "neg_export_kwh": round(day.get("neg_export_kwh", 0.0), 2),
                 "sums": {sc: rt.ledger.sums(dt_util.now().date(), sc) for sc in ("day", "month", "total")},
+                "extras": money_mod.bundle(rt.ledger, rt.stats, dt_util.now().date()),
             }
         if self._key == "reserve_soc":
             res = rt.reserve()

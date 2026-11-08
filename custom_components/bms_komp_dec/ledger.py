@@ -19,7 +19,7 @@ MAX_POWER_W = 100000
 
 
 def _empty_day() -> dict[str, float]:
-    return {"export_kwh": 0.0, "import_kwh": 0.0, "revenue": 0.0, "cost": 0.0, "neg_export_kwh": 0.0}
+    return {"export_kwh": 0.0, "import_kwh": 0.0, "revenue": 0.0, "cost": 0.0, "neg_export_kwh": 0.0, "peak_import_kwh": 0.0}
 
 
 class Ledger:
@@ -48,7 +48,7 @@ class Ledger:
                 self.days[str(k)] = day
 
     def update(self, now: datetime, grid_power_w: float | None,
-               sell_price: float | None, buy_price: float | None) -> None:
+               sell_price: float | None, buy_price: float | None, peak: bool | None = None) -> None:
         """grid_power_w > 0 = import z sieci, < 0 = eksport do sieci (jak w całej integracji)."""
         prev = self._last_ts
         self._last_ts = now
@@ -70,6 +70,8 @@ class Ledger:
                     day["neg_export_kwh"] += kwh
         elif grid_power_w > 0:
             day["import_kwh"] += kwh
+            if peak:
+                day["peak_import_kwh"] += kwh
             if buy_price is not None:
                 day["cost"] += kwh * buy_price
         self._store.request_save(self._data)
