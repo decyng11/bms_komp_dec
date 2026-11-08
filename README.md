@@ -133,11 +133,3 @@ Integracja steruje falownikiem i magazynem energii. Używasz jej na własną odp
 Wszelkie prawa zastrzeżone. Możesz zainstalować integrację u siebie do użytku osobistego, ale bez zgody autora nie wolno jej kopiować, przerabiać na dalsze udostępnianie ani używać komercyjnie.
 
 Kod w `custom_components/bms_komp_dec/direct/` pochodzi z projektów ha-solarman i pysolarman (MIT) oraz umodbus (MPL-2.0) i ma własne licencje, które leżą obok w plikach `LICENSE-*.txt`. Biblioteki Chart.js 4.4.1 i chartjs-adapter-date-fns 3.0.0 (MIT) są dołączone w `frontend/vendor/`, dzięki czemu wykresy działają bez dostępu przeglądarki do internetu.
-
-## Testy
-
-W folderze `tests/` są testy logiki (Python, z atrapami Home Assistanta) i testy karty w przeglądarce (Playwright). Na GitHubie uruchamiają się same przy każdej zmianie. Lokalnie: `python tests/run_python.py` oraz `node tests/run_ui.js` (wymaga pakietu `playwright` i przeglądarki Chromium).
-
-## Wydanie nowej wersji
-
-Numer wersji musi być taki sam w `manifest.json`, `const.py`, w `CARD_VERSION` w `frontend/bms-panel.js` i w `install.version` w plikach `frontend/bms-*.js`. Potem wystarczy utworzyć na GitHubie wydanie z tagiem `vX.Y.Z` (albo `X.Y.Z`), a akcja sprawdzi zgodność numerów i doda do niego `bms_komp_dec.zip`.
