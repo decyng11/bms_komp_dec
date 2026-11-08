@@ -37,6 +37,17 @@ async def main():
     check("lowsoc: treść zawiera próg i tanie okno", cr and "25%" in cr[0][2]["message"] and "tanie okno" in cr[0][2]["message"].lower(), cr and cr[0][2]["message"])
     t = at(2026, 10, 28, 12, 5); await rt.monitor.tick(t)
     check("lowsoc: cooldown — bez powtórki", len(pn(hass, nid="bms_low_soc")) == 1)
+    # weekend: okno taniej taryfy kończy się w poniedziałek o 6:00 — komunikat musi to powiedzieć, nie samo „do 06:00”
+    hass3, c3, opt3, rt3 = mk2(); S3 = hass3.states
+    S3.set("number.bms_inverter_floor_soc", 20); S3.set(c3.config["soc"], 21)
+    await rt3.monitor.tick(at(2026, 11, 8, 7, 53))        # niedziela
+    cr3 = pn(hass3, nid="bms_low_soc")
+    check("lowsoc: niedziela 07:53 — „tanie okno trwa do jutra 06:00”, nie „do 06:00”", cr3 and "do jutra 06:00" in cr3[0][2]["message"], cr3 and cr3[0][2]["message"])
+    hass3, c3, opt3, rt3 = mk2(); S3 = hass3.states
+    S3.set("number.bms_inverter_floor_soc", 20); S3.set(c3.config["soc"], 21)
+    await rt3.monitor.tick(at(2026, 11, 7, 9, 0))         # sobota
+    cr3 = pn(hass3, nid="bms_low_soc")
+    check("lowsoc: sobota — „do poniedziałku 06:00”", cr3 and "do poniedziałku 06:00" in cr3[0][2]["message"], cr3 and cr3[0][2]["message"])
     t = at(2026, 10, 28, 18, 5); await rt.monitor.tick(t)
     check("lowsoc: po 6 h przypomnienie", len(pn(hass, nid="bms_low_soc")) == 2, len(pn(hass, nid="bms_low_soc")))
     S.set(c.config["soc"], 40)

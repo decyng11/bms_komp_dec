@@ -1,5 +1,8 @@
 # EMS komp-dec — zmiany po 0.9.0 (jeszcze niewydane)
 
+## Poprawki
+- **„Trwa tanie okno do 06:00” w niedzielę o 7:53.** Weekendowa tania taryfa trwa od soboty do poniedziałku do 6:00, a komunikat podawał samą godzinę, więc czytała się jak godzina z przeszłości. Teraz koniec okna ma nazwę dnia („do jutra 06:00”, „do poniedziałku 06:00”) — na karcie i w powiadomieniu o niskim SOC; okno, które zaczyna się i kończy w różne dni, jest opisane jako „od … do …”.
+
 ## Zabezpieczenia sprzedaży
 - **Blokada sprzedaży według energii z całego dnia.** Dotychczasowa blokada patrzyła tylko na chwilową moc importu (domyślnie 2000 W w momencie startu sprzedaży). Nowe ustawienie „Blokada sprzedaży — import z sieci dziś” (domyślnie 3 kWh, 0 = wyłączone): gdy dziś z sieci pobrano więcej, sprzedaż z baterii jest wstrzymana do końca dnia — zarówno start z harmonogramu, jak i przycisk „Sprzedaż 6000W”. Liczy się licznik falownika, a gdy go brak — księga rozliczeń. Plan 24 h oznacza wtedy propozycje sprzedaży jako pominięte z powodem, zamiast obiecywać sprzedaż, której blokada i tak nie wykona. Czujnik „sprzedaż zablokowana importem” zapala się także od tej blokady. Blokada chwilowa (W) zostaje bez zmian i można ją wyłączyć ustawieniem 0.
 

@@ -197,8 +197,10 @@ class Monitor:
             try:
                 w = next_offpeak_window(now)
                 if w:
-                    cheap = (f" Tanie okno trwa do {w[1]:%H}:00." if w[2]
-                             else f" Najbliższe tanie okno: {w[0]:%H}:00–{w[1]:%H}:00.")
+                    cheap = (f" Tanie okno trwa do {_day_phrase(w[1], now)}{w[1]:%H}:00." if w[2]
+                             else (f" Najbliższe tanie okno: {_day_phrase(w[0], now, 'dziś ', nom=True)}{w[0]:%H}:00–{w[1]:%H}:00."
+                                   if w[0].date() == w[1].date()
+                                   else f" Najbliższe tanie okno: od {_day_phrase(w[0], now, 'dziś ', nom=True)}{w[0]:%H}:00 do {_day_phrase(w[1], now)}{w[1]:%H}:00."))
             except Exception:  # noqa: BLE001
                 pass
             floor_txt = f"próg odcięcia falownika {fl:.0f}%" if fl > 0 else "bardzo niski poziom"
@@ -656,6 +658,21 @@ class Monitor:
             self.rt.log.add("notify", f"Podsumowanie ({kind}): nie udało się policzyć szczegółów — {err}", "error")
             return f"Nie udało się policzyć szczegółów podsumowania ({err}). Sprawdź dziennik EMS."
         return text or "Brak danych do podsumowania za ten okres."
+
+
+_DNI_DOP = ("poniedziałku", "wtorku", "środy", "czwartku", "piątku", "soboty", "niedzieli")
+_DNI_MIA = ("poniedziałek", "wtorek", "środa", "czwartek", "piątek", "sobota", "niedziela")
+
+
+def _day_phrase(t: datetime, now: datetime, today: str = "", nom: bool = False) -> str:
+    """„” dla dzisiaj (albo today), „jutra ” / „jutro ”, a dalej nazwa dnia — żeby „do 06:00” nie wyglądało jak godzina z przeszłości."""
+    off = (dt_util.as_local(t).date() - dt_util.as_local(now).date()).days
+    if off <= 0:
+        return today
+    if off == 1:
+        return "jutro " if nom else "jutra "
+    d = dt_util.as_local(t).weekday()
+    return (_DNI_MIA[d] if nom else _DNI_DOP[d]) + " "
 
 
 def _pl(x: float) -> str:

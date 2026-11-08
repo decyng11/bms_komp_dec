@@ -3116,7 +3116,13 @@
       if (a.cheap_start && a.cheap_end) {
         const st = new Date(a.cheap_start), en = new Date(a.cheap_end), now = new Date();
         const day = st.toDateString() === now.toDateString() ? 'dziś' : (st.getDate() === now.getDate() + 1 ? 'jutro' : st.toLocaleDateString('pl-PL', { weekday: 'long' }));
-        cheap = a.cheap_now ? ` Trwa tanie okno do ${hm(a.cheap_end)}:00.` : ` Najbliższe tanie okno: ${day} ${hm(a.cheap_start)}–${hm(a.cheap_end)}.`;
+        // Koniec okna bywa w kolejnych dobach (weekend G12w kończy się w poniedziałek o 6:00) — samo „06:00” czytało się jak godzina z przeszłości.
+        const GEN = ['niedzieli', 'poniedziałku', 'wtorku', 'środy', 'czwartku', 'piątku', 'soboty'];
+        const dayOff = (d) => Math.round((new Date(d.getFullYear(), d.getMonth(), d.getDate()) - new Date(now.getFullYear(), now.getMonth(), now.getDate())) / 86400000);
+        const endDay = (d) => { const o = dayOff(d); return o <= 0 ? '' : (o === 1 ? 'jutra ' : GEN[d.getDay()] + ' '); };
+        cheap = a.cheap_now ? ` Trwa tanie okno do ${endDay(en)}${hm(a.cheap_end)}:00.`
+          : (dayOff(en) === dayOff(st) ? ` Najbliższe tanie okno: ${day} ${hm(a.cheap_start)}–${hm(a.cheap_end)}.`
+            : ` Najbliższe tanie okno: od ${day} ${hm(a.cheap_start)}:00 do ${endDay(en)}${hm(a.cheap_end)}:00.`);
       }
       const kwh = a.usable_kwh != null ? ` Do progu zostało ~${Number(a.usable_kwh).toFixed(1)} kWh.` : '';
       const atFloor = soc <= fl + 1;
