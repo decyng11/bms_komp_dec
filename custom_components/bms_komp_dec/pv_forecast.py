@@ -51,7 +51,7 @@ def state_kwh(hass: HomeAssistant, eid: str | None) -> float | None:
     return val if math.isfinite(val) and val >= 0 else None
 
 
-def solcast_hourly(hass: HomeAssistant, eid: str | None, target: date) -> list[float | None] | None:
+def solcast_hourly(hass: HomeAssistant, eid: str | None, target: date, key: str | None = None) -> list[float | None] | None:
     """24 wartości kWh/h dla dnia target z atrybutów Solcast (moc średnia w okresie; okresy 30-min uśredniane)."""
     st = hass.states.get(eid) if eid else None
     if not st:
@@ -75,11 +75,14 @@ def solcast_hourly(hass: HomeAssistant, eid: str | None, target: date) -> list[f
             dt = dt_util.as_local(dt)
             if dt.date() != target:
                 continue
-            v = item.get("pv_estimate")
-            if v is None:
-                v = item.get("estimate")
-            if v is None:
-                v = item.get("power")
+            if key:
+                v = item.get(key)
+            else:
+                v = item.get("pv_estimate")
+                if v is None:
+                    v = item.get("estimate")
+                if v is None:
+                    v = item.get("power")
             if v is None:
                 continue
             fv = float(v)
@@ -201,6 +204,14 @@ class PvForecast:
             v = self.fs_daily(d)
         return v
 
+    def day_range(self, eid: str | None, d: date) -> tuple[float, float] | None:
+        """Pesymistyczna i optymistyczna suma dnia (kWh) z prognozy Solcast (pv_estimate10 / pv_estimate90), jeśli ją ma."""
+        lo = solcast_hourly(self.hass, eid, d, "pv_estimate10")
+        hi = solcast_hourly(self.hass, eid, d, "pv_estimate90")
+        if not lo or not hi:
+            return None
+        return round(sum(v or 0.0 for v in lo), 2), round(sum(v or 0.0 for v in hi), 2)
+
     def source(self, eid: str | None) -> str | None:
         today = dt_util.now().date()
         return self.hourly(eid, today)[1] or self.hourly(eid, today + timedelta(days=1))[1] or (
@@ -228,6 +239,13 @@ class PvForecast:
                         break
                 if v is None:
                     v = self.fs_daily(d)
-            daily.append({"date": d.isoformat(), "kwh": None if v is None else round(v, 2)})
+            row: dict[str, Any] = {"date": d.isoformat(), "kwh": None if v is None else round(v, 2)}
+            eids = [eid_today] if i == 0 else [eid_tomorrow] if i == 1 else list(SOLCAST_DAY_ENTITIES[i])
+            for cand in eids:
+                rng = self.day_range(cand, d)
+                if rng:
+                    row["lo"], row["hi"] = rng
+                    break
+            daily.append(row)
         out["pv_daily"] = daily
         return out

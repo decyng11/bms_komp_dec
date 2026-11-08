@@ -1397,6 +1397,7 @@ class BmsRuntime:
         """Co minutę: parametry baterii do symulacji i (raz dziennie od 6:00) zapis porannej prognozy PV i planu SOC."""
         self.insights.set_params(**self.battery_params())
         loc = dt_util.as_local(now)
+        self._pv_horizon_snapshot(now)
         if loc.hour < 6 or "pv_fc" in (self.insights.fc.get(loc.date().isoformat()) or {}):
             return
         plan = self.plan()
@@ -1406,6 +1407,26 @@ class BmsRuntime:
         if hasattr(self.optimizer, "pv_raw_today"):
             kwh, hourly = self.optimizer.pv_raw_today()
         self.insights.snapshot(now, kwh, hourly, plan)
+
+    def _pv_horizon_snapshot(self, now: datetime) -> None:
+        """Od 6:00 raz dziennie: prognoza PV (surowa i po korekcie) na 7 dni do przodu — materiał do uczenia korekty."""
+        loc = dt_util.as_local(now)
+        if loc.hour < 6:
+            return
+        today = loc.date().isoformat()
+        by_h = (self.insights.fc.get(today) or {}).get("pv_fc_by_h") or {}
+        if "6" in by_h and "0" in by_h:
+            return
+        opt = self.optimizer
+        if not hasattr(opt, "pv_card_payload_raw"):
+            return
+        try:
+            raw = [r.get("kwh") for r in (opt.pv_card_payload_raw().get("pv_daily") or [])]
+            adj = [r.get("kwh") for r in (opt.pv_card_payload().get("pv_daily") or [])]
+        except Exception as err:  # noqa: BLE001
+            _LOGGER.debug("EMS: zapis prognoz PV na 7 dni: %s", err)
+            return
+        self.insights.snapshot_horizons(now, raw, adj)
 
     def on_coordinator_update(self) -> None:
         """Wywoływane co 10 s: całkowanie bilansu PLN i statystyk baterii."""

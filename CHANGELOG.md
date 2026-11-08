@@ -3,6 +3,16 @@
 ## Poprawki
 - **„Trwa tanie okno do 06:00” w niedzielę o 7:53.** Weekendowa tania taryfa trwa od soboty do poniedziałku do 6:00, a komunikat podawał samą godzinę, więc czytała się jak godzina z przeszłości. Teraz koniec okna ma nazwę dnia („do jutra 06:00”, „do poniedziałku 06:00”) — na karcie i w powiadomieniu o niskim SOC; okno, które zaczyna się i kończy w różne dni, jest opisane jako „od … do …”.
 
+## Prognoza PV: korekta na wszystkie dni
+- **Osobny współczynnik dla każdego dnia do przodu (dziś, jutro, za 2…6 dni).** Rano EMS zapisuje prognozę PV na 7 dni i po fakcie porównuje ją z wykonaniem, więc „jutro” i „za 5 dni” mają własne poprawki. Dla horyzontu bez własnych danych używa najbliższego krótszego. Korekta to mediana (odporna na pojedynczy zepsuty dzień) z 30 dni, w granicach 0,5–1,4; pełną wagę ma od 10 dni z danymi, minimum 5 dni.
+- **Kształt godzinowy.** Stały wzorzec błędu (zacienienie, kąt paneli, horyzont — np. rano za dużo, po południu za mało) jest uczony osobno dla każdej godziny; suma dnia zostaje zgodna ze współczynnikiem dnia.
+- **Poprawka „na żywo” dla dzisiejszego dnia.** Po kilku godzinach produkcji EMS porównuje wykonanie z prognozą z ostatnich 3 godzin i koryguje resztę dnia; wpływ słabnie z odległością godziny.
+- **Dni z ucięciem produkcji nie uczą modelu.** Gdy bateria jest pełna i nie ma eksportu, falownik ogranicza PV do zużycia, więc „wykonanie” nie mówi nic o prognozie. Takie godziny i dni są pomijane.
+- **Karta pokazuje prognozę po korekcie** (kafelki pogody, paski planu, wykresy godzinowe), z zakresem (Solcast p10–p90 albo typowy błąd z historii) i podpowiedzią z wartością surową.
+- **Nowe ustawienie „Ostrożność prognozy PV w planie”** (0–100%, domyślnie 0): planer może liczyć z wartością bliższą wersji pesymistycznej.
+- **Zakładka „Zysk i log” → Trafność prognoz:** błąd osobno dla każdego dnia do przodu, także po korekcie (z prognoz faktycznie wydanych po korekcie, więc pokazuje, czy korekta pomaga).
+- Model uczy się od zera dla dni +1…+6, bo wcześniej nie zapisywano prognoz na dni przyszłe. Pełna korekta pojawi się po kilkunastu dniach. Prognozy nie da się zrobić „idealną”: błąd pogody rośnie z horyzontem, a zakres na karcie to pokazuje.
+
 ## Zabezpieczenia sprzedaży
 - **Blokada sprzedaży według energii z całego dnia.** Dotychczasowa blokada patrzyła tylko na chwilową moc importu (domyślnie 2000 W w momencie startu sprzedaży). Nowe ustawienie „Blokada sprzedaży — import z sieci dziś” (domyślnie 3 kWh, 0 = wyłączone): gdy dziś z sieci pobrano więcej, sprzedaż z baterii jest wstrzymana do końca dnia — zarówno start z harmonogramu, jak i przycisk „Sprzedaż 6000W”. Liczy się licznik falownika, a gdy go brak — księga rozliczeń. Plan 24 h oznacza wtedy propozycje sprzedaży jako pominięte z powodem, zamiast obiecywać sprzedaż, której blokada i tak nie wykona. Czujnik „sprzedaż zablokowana importem” zapala się także od tej blokady. Blokada chwilowa (W) zostaje bez zmian i można ją wyłączyć ustawieniem 0.
 

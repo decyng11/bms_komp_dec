@@ -48,6 +48,7 @@
     bateria_sprzedaz_start_2: 'Godzina, od której bateria sprzedaje energię do sieci (okno 2, dodatkowe).',
     bateria_sprzedaz_stop_2: 'Godzina, o której sprzedaż z baterii się kończy (okno 2, dodatkowe).',
     grid_import_sell_block_w: 'Gdy z sieci pobierasz więcej niż tyle watów, sprzedaż jest wstrzymywana. 0 = zabezpieczenie wyłączone.',
+    pv_plan_pessimism_pct: 'Jak ostrożnie planer traktuje prognozę PV. 0 = środkowa wartość po korekcie, 100 = wersja pesymistyczna (Solcast p10 albo typowy błąd z historii). Wyższa wartość to mniej sprzedaży i więcej ładowania z sieci.',
     grid_import_sell_block_kwh: 'Gdy dziś z sieci pobrano więcej niż tyle kWh, sprzedaż z baterii jest wstrzymana do końca dnia. 0 = zabezpieczenie wyłączone.',
     minimalny_soc_dla_wylaczenia_sprzedazy: 'Gdy bateria spadnie poniżej tego poziomu, sprzedaż się wyłącza i falownik wraca do trybu automatycznego.',
     min_soc_for_sell: 'Tryb „Sprzedaż 6000W” włączy się tylko wtedy, gdy bateria ma co najmniej tyle procent.',
@@ -129,6 +130,7 @@
     .weather-scroll { display: flex; gap: 8px; overflow-x: auto; padding: 4px 6px 8px 6px; scrollbar-width: none; width: 100%; box-sizing: border-box; }
     .weather-scroll::-webkit-scrollbar { display: none; }
     .weather-tile { flex: 1 1 0; min-width: 76px; display: flex; flex-direction: column; align-items: center; justify-content: center; background: var(--surface); border-radius: 14px; padding: 7px 4px; border: 1px solid var(--line); text-align: center; }
+    .weather-tile .pv-rng { font-size: 9.5px; color: var(--muted); margin-top: -1px; }
     .weather-tile .day { font-size: 10px; font-weight: 700; text-transform: uppercase; color: var(--muted); margin-bottom: 1px; letter-spacing: 0.5px; }
     .weather-tile .wt-row { display: flex; align-items: center; justify-content: center; gap: 3px; }
     .weather-tile .wt-row .icon { margin: 0; font-size: 20px; }
@@ -779,7 +781,7 @@
       const fc = this._weatherForecast;
       const todayKey = this._todayKey();
       const tmrKey = this._tomorrowKey();
-      const pvSig = PV_FORECAST_DAYS.map((_l, i) => String(this._pvDayKwh(i))).join('|');
+      const pvSig = PV_FORECAST_DAYS.map((_l, i) => { const di = this._pvDayInfo(i); return String(this._pvDayKwh(i)) + (di ? ':' + di.lo + ':' + di.hi + ':' + di.factor : ''); }).join('|');
       const cacheKey = todayKey + '#' + JSON.stringify(fc.slice(0, 7)) + '#' + pvSig;
       if (this._lastWeatherKey === cacheKey) return;
       this._lastWeatherKey = cacheKey;
@@ -802,7 +804,7 @@
             <div class="day">${label}</div>
             <div class="wt-row"><div class="icon">${icon}</div><div class="temp-max">${maxT}</div></div>
             <div class="temp-min">min ${minT}</div>
-            ${pvVal !== null ? `<div class="pv">${pvVal.toFixed(1)} kWh</div>` : ''}
+            ${pvVal !== null ? `<div class="pv"${this._pvTip(pvOffset)}>${pvVal.toFixed(1)} kWh</div>${this._pvRange(pvOffset)}` : ''}
           </div>
         `;
       }
@@ -2689,6 +2691,16 @@
                 <span style="color:var(--muted);">kWh</span>
               </div>
             </div>
+            <div class="row">
+              <div class="field-info">
+                <div class="name">Ostrożność prognozy PV w planie</div>
+                <div class="eid-hint" id="eid-pv_plan_pessimism_pct"></div>
+              </div>
+              <div class="field-controls">
+                <input type="number" min="0" max="100" step="5" data-num-key="pv_plan_pessimism_pct">
+                <span style="color:var(--muted);">%</span>
+              </div>
+            </div>
           </div>
 
           <div class="section">
@@ -3767,6 +3779,29 @@
       return null;
     }
 
+    // wiersz prognozy dnia z integracji (kwh po korekcie, raw, factor, lo, hi); null = starsza integracja
+    _pvDayInfo(offset) {
+      const a = this._pvInt();
+      const d = a && a.pv_daily[offset];
+      return d && typeof d === 'object' ? d : null;
+    }
+
+    _pvRange(offset) {
+      const d = this._pvDayInfo(offset);
+      if (!d || typeof d.lo !== 'number' || typeof d.hi !== 'number') return '';
+      const f = (x) => x.toFixed(1).replace('.', ',');
+      return `<div class="pv-rng">${f(d.lo)}–${f(d.hi)}</div>`;
+    }
+
+    _pvTip(offset) {
+      const d = this._pvDayInfo(offset);
+      if (!d || typeof d.raw !== 'number' || typeof d.factor !== 'number') return '';
+      const f = (x, n) => x.toFixed(n).replace('.', ',');
+      const src = d.range === 'solcast' ? 'zakres z Solcast' : d.range === 'historia' ? 'zakres z historii błędów' : 'zakres szacunkowy (za mało historii)';
+      const t = `surowa prognoza ${f(d.raw, 1)} kWh · korekta ×${f(d.factor, 2)} z ${d.n || 0} dni · ${src}`;
+      return ` title="${t}"`;
+    }
+
     _pvSourceLabel() {
       const a = this._pvInt();
       return a && a.pv_forecast_source ? String(a.pv_forecast_source) : '';
@@ -3778,7 +3813,7 @@
       const a = this._pvInt();
       if (a) {
         [['pv_hourly_today', 0], ['pv_hourly_tomorrow', 1]].forEach(([k, off]) => {
-          const arr = a[k], day = a.pv_daily[off];
+          const arr = Array.isArray(a[k + '_adj']) ? a[k + '_adj'] : a[k], day = a.pv_daily[off];
           if (!Array.isArray(arr) || !day || !day.date) return;
           arr.forEach((v, h) => { if (typeof v === 'number' && isFinite(v)) map[`${day.date}|${h}`] = v; });
         });

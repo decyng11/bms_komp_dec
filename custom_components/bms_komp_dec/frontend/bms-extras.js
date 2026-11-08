@@ -585,16 +585,28 @@
           exTile('Prognoza PV — błąd', `<span style="color:${errCol(pv.mape)}">${exPct(pv.mape, 1)}</span>`, pv.n ? `${bias(pv.bias)} · ${pv.n} dni` : 'zbiera dane (prognoza z rana vs wykonanie)'),
           exTile('Prognoza zużycia — błąd', `<span style="color:${errCol(ld.mape)}">${exPct(ld.mape, 1)}</span>`, ld.n ? `${bias(ld.bias)} · ${ld.n} dni` : 'brak historii'),
           exTile('Plan SOC — błąd', exNum(so.mae) === null ? '—' : exFmt(so.mae, 1, ' pp'), so.n ? `średnio na godzinę · ${so.n} dni` : 'zbiera dane (plan z rana vs SOC)'),
-          exTile('Korekta PV w planerze', s.data.pv_correction_on && fac !== null ? '× ' + exFmt(fac, 2) : '—', corrTxt),
+          exTile('Korekta PV dziś', s.data.pv_correction_on && fac !== null ? '× ' + exFmt(fac, 2) : '—', corrTxt),
         ];
         const rows = (ac.days || []).slice(-30);
         const pvRows = rows.filter((r) => r.pv_fc !== null || r.pv_act !== null);
         const ldRows = rows.filter((r) => r.load_fc !== null || r.load_act !== null);
         const charts = (pvRows.length > 1 ? `<div style="font-size:11px;color:var(--muted);margin-top:12px;">Produkcja PV: prognoza (szary) i wykonanie, kWh/dzień</div>${exPairBars(pvRows, 'pv_fc', 'pv_act', 'kWh', 'var(--orange,#ff9f0a)')}` : '')
           + (ldRows.length > 1 ? `<div style="font-size:11px;color:var(--muted);margin-top:12px;">Zużycie domu: prognoza (szary) i wykonanie, kWh/dzień</div>${exPairBars(ldRows, 'load_fc', 'load_act', 'kWh', 'var(--accent,#0a84ff)')}` : '');
-        return `<div class="ex-tiles">${tiles.join('')}</div>${charts}
-          <div class="ex-note">Błąd to średnia różnica prognozy i wykonania w procentach (dni z co najmniej 0,5 kWh), z ostatnich 30 dni. Prognoza PV jest zapisywana rano (od 6:00), prognoza zużycia — dzień wcześniej.
-            Korekta PV mnoży prognozę w planerze przez stosunek wykonania do prognozy z 14 dni (w granicach 0,7–1,2); karta nadal pokazuje surową prognozę.</div>`;
+        const hz = Array.isArray(ac.pv_by_horizon) ? ac.pv_by_horizon : [];
+        const hzName = (h) => h === 0 ? 'dziś' : h === 1 ? 'jutro' : `za ${h} dni`;
+        const hzRows = hz.map((r) => `<tr><td>${hzName(r.h)}</td><td style="text-align:right;">${r.n || 0}</td>
+            <td style="text-align:right;color:${errCol(r.mape)}">${exPct(r.mape, 1)}</td>
+            <td style="text-align:right;color:${errCol(r.mape_adj)}">${r.n_adj >= 3 ? exPct(r.mape_adj, 1) : '—'}</td>
+            <td style="text-align:right;">${s.data.pv_correction_on ? '× ' + exFmt(r.factor, 2) : '—'}</td>
+            <td style="text-align:right;">± ${exPct((exNum(r.spread) || 0) * 100)}</td></tr>`).join('');
+        const hzTable = hz.length ? `<div style="font-size:11px;color:var(--muted);margin-top:12px;">Prognoza PV: błąd osobno dla każdego dnia do przodu</div>
+          <div style="overflow-x:auto;"><table data-role="pv-horizon" style="width:100%;border-collapse:collapse;font-size:12px;margin-top:4px;">
+            <thead><tr style="color:var(--muted);text-align:right;"><th style="text-align:left;font-weight:600;">Dzień</th><th style="font-weight:600;">Dni danych</th><th style="font-weight:600;">Błąd surowej</th><th style="font-weight:600;">Błąd po korekcie</th><th style="font-weight:600;">Korekta</th><th style="font-weight:600;">Zakres</th></tr></thead>
+            <tbody>${hzRows}</tbody></table></div>` : '';
+        return `<div class="ex-tiles">${tiles.join('')}</div>${hzTable}${charts}
+          <div class="ex-note">Błąd to średnia różnica prognozy i wykonania w procentach (dni z co najmniej 0,5 kWh), z ostatnich 30 dni. Prognoza PV jest zapisywana rano (od 6:00) dla każdego z 7 dni do przodu, prognoza zużycia — dzień wcześniej.
+            Korekta PV jest liczona osobno dla każdego dnia do przodu (mediana wykonania do prognozy z 30 dni, w granicach 0,5–1,4), uwzględnia stały wzorzec godzinowy i poprawia dzisiejszy dzień na podstawie godzin, które już minęły.
+            Dni, w których bateria była pełna i falownik ucinał produkcję, nie uczą modelu. „Błąd po korekcie” liczony jest z prognoz faktycznie wydanych po korekcie, więc pokazuje, czy korekta pomaga. Zakres to typowy błąd tego dnia.</div>`;
       },
     });
 

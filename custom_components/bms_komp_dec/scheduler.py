@@ -28,7 +28,7 @@ from .reserve import compute_reserve
 from .helpers import find_eid, normalize_price, number_value, state_str, switch_on, wear_cost_per_kwh
 from .tariff import G12wTariff, get_profile, is_g12w_peak
 from .inverter_floor import floor_profile
-from .pv_forecast import PvForecast
+from .pv_forecast import PvForecast, SOLCAST_DAY_ENTITIES
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -128,9 +128,56 @@ class ScheduleOptimizer:
             eid = self.config.get(CONF_PV_FORECAST_TOMORROW, DEFAULT_PV_FORECAST_TOMORROW)
         return self.pv_fc.hourly(eid, dt_util.now().date() + timedelta(days=offset))[0]
 
-    def pv_card_payload(self) -> dict[str, Any]:
+    def pv_card_payload_raw(self) -> dict[str, Any]:
+        """Prognoza PV bez korekty (do zapisu „prognoza vs wykonanie” i do oceny, czy korekta pomaga)."""
         return self.pv_fc.card_payload(self.config.get(CONF_PV_FORECAST_TODAY, DEFAULT_PV_FORECAST_TODAY),
                                        self.config.get(CONF_PV_FORECAST_TOMORROW, DEFAULT_PV_FORECAST_TOMORROW))
+
+    def pv_card_payload(self) -> dict[str, Any]:
+        """Prognoza PV dla karty: sumy dzienne na 7 dni po korekcie (z surową wartością, współczynnikiem i zakresem)."""
+        out = self.pv_card_payload_raw()
+        try:
+            self._pv_adjust_payload(out)
+        except Exception as err:  # noqa: BLE001
+            _LOGGER.debug("EMS: korekta prognozy PV dla karty: %s", err)
+        return out
+
+    def _pv_adjust_payload(self, out: dict[str, Any]) -> None:
+        on = switch_on(self.hass, "pv_forecast_correction", True)
+        ins = self._insights()
+        daily = out.get("pv_daily") or []
+        hourly_raw = {0: out.get("pv_hourly_today"), 1: out.get("pv_hourly_tomorrow")}
+        for off, key in ((0, "pv_hourly_today_adj"), (1, "pv_hourly_tomorrow_adj")):
+            raw = hourly_raw[off]
+            if raw and on and ins is not None and hasattr(ins, "pv_multipliers"):
+                m = ins.pv_multipliers(off, raw)["mult"]
+                out[key] = [None if v is None else round(float(v) * m[h], 3) for h, v in enumerate(raw)]
+            else:
+                out[key] = raw
+        for i, row in enumerate(daily):
+            raw_kwh = row.get("kwh")
+            row["raw"] = raw_kwh
+            if raw_kwh is None or not on or ins is None or not hasattr(ins, "pv_horizon_factor"):
+                continue
+            fac, n, _med = ins.pv_horizon_factor(i)
+            adj = raw_kwh * fac
+            adj_h = out.get("pv_hourly_today_adj") if i == 0 else None
+            if adj_h and i == 0 and out.get("pv_hourly_today"):
+                # dziś: prognoza po korekcie „na żywo” (godziny, które minęły, też liczone mnożnikiem dnia)
+                tot_h = sum(v or 0.0 for v in out["pv_hourly_today"])
+                if tot_h > 0:
+                    adj = raw_kwh * sum(v or 0.0 for v in adj_h) / tot_h
+            row["kwh"] = round(adj, 2)
+            row["factor"] = round(adj / raw_kwh, 3) if raw_kwh > 0 else fac
+            row["n"] = n
+            spread, learned = ins.pv_spread_info(i)
+            if row.get("lo") is not None and row.get("hi") is not None and raw_kwh > 0:
+                k = adj / raw_kwh
+                row["lo"], row["hi"] = round(row["lo"] * k, 2), round(row["hi"] * k, 2)
+                row["range"] = "solcast"
+            else:
+                row["lo"], row["hi"] = round(adj * (1 - spread), 2), round(adj * (1 + spread), 2)
+                row["range"] = "historia" if learned else "szac."
 
     def pv_source(self) -> str | None:
         return self.pv_fc.source(self.config.get(CONF_PV_FORECAST_TODAY, DEFAULT_PV_FORECAST_TODAY))
@@ -408,26 +455,83 @@ class ScheduleOptimizer:
         if not pv:
             return None, sun
         rise, sset = sun
-        k = self.pv_factor()
+        mult = self.pv_mults(offset, pv)
         out: list[float | None] = []
         for h in range(24):
             v = pv[h]
-            if isinstance(v, (int, float)) and k != 1.0:
-                v = v * k
+            if isinstance(v, (int, float)) and mult[h] != 1.0:
+                v = v * mult[h]
             out.append(0.0 if (h + 1 <= rise or h >= sset) else v)
         return out, sun
 
-    def pv_factor(self) -> float:
-        """Korekta prognozy PV z historii (prognoza vs wykonanie z 14 dni), gdy włączona; inaczej 1,0."""
+    def _insights(self):
+        return getattr(getattr(self.coordinator, "runtime", None), "insights", None)
+
+    def pv_factor(self, offset: int = 0) -> float:
+        """Współczynnik korekty prognozy PV dla dnia +offset (z historii prognoza vs wykonanie), gdy włączona; inaczej 1,0."""
         if not switch_on(self.hass, "pv_forecast_correction", True):
             return 1.0
-        ins = getattr(getattr(self.coordinator, "runtime", None), "insights", None)
+        ins = self._insights()
         if ins is None:
             return 1.0
         try:
+            if hasattr(ins, "pv_horizon_factor"):
+                return float(ins.pv_horizon_factor(offset)[0])
             return float(ins.pv_correction()["factor"])
         except Exception:  # noqa: BLE001
             return 1.0
+
+    def _pv_eid(self, offset: int) -> str | None:
+        if offset == 0:
+            return self.config.get(CONF_PV_FORECAST_TODAY, DEFAULT_PV_FORECAST_TODAY)
+        if offset == 1:
+            return self.config.get(CONF_PV_FORECAST_TOMORROW, DEFAULT_PV_FORECAST_TOMORROW)
+        for cand in SOLCAST_DAY_ENTITIES[min(offset, 6)]:
+            if self.hass.states.get(cand) is not None:
+                return cand
+        return None
+
+    def pv_lo_ratio(self, offset: int, raw: list | None) -> float:
+        """Stosunek wersji pesymistycznej do mediany prognozy dnia (Solcast p10, a bez niego typowy błąd z historii)."""
+        ins = self._insights()
+        spread = 0.2
+        try:
+            if ins is not None and hasattr(ins, "pv_spread"):
+                spread = float(ins.pv_spread(offset))
+        except Exception:  # noqa: BLE001
+            pass
+        tot = sum(v for v in (raw or []) if isinstance(v, (int, float)))
+        try:
+            rng = self.pv_fc.day_range(self._pv_eid(offset), dt_util.now().date() + timedelta(days=offset))
+        except Exception:  # noqa: BLE001
+            rng = None
+        if rng and tot > 0.5:
+            return min(1.0, max(0.3, rng[0] / tot))
+        return min(1.0, max(0.3, 1.0 - spread))
+
+    def pv_mults(self, offset: int, raw: list | None) -> list[float]:
+        """24 mnożniki prognozy PV dla dnia +offset: korekta z historii (horyzont, kształt godzinowy, „na żywo”)
+        oraz opcjonalna ostrożność (część drogi do wersji pesymistycznej)."""
+        ones = [1.0] * 24
+        if not switch_on(self.hass, "pv_forecast_correction", True):
+            return ones
+        ins = self._insights()
+        if ins is None or not raw:
+            return ones
+        try:
+            if hasattr(ins, "pv_multipliers"):
+                mult = list(ins.pv_multipliers(offset, raw)["mult"])
+            else:
+                k = float(ins.pv_correction()["factor"])
+                mult = [k] * 24
+            pes = max(0.0, min(100.0, number_value(self.hass, "pv_plan_pessimism_pct", 0.0))) / 100.0
+            if pes > 0:
+                lo = self.pv_lo_ratio(offset, raw)
+                mult = [m * (1.0 - pes * (1.0 - lo)) for m in mult]
+            return mult
+        except Exception as err:  # noqa: BLE001
+            _LOGGER.debug("EMS: korekta PV: %s", err)
+            return ones
 
     def wear_cost(self) -> float:
         """Koszt zużycia baterii w zł na kWh przechodzącą przez baterię (0 = nie liczymy)."""
@@ -595,7 +699,7 @@ class ScheduleOptimizer:
     def _build_context(self, now: datetime, soc: float) -> dict[str, Any]:
         today = now.date()
         tomorrow = today + timedelta(days=1)
-        pv_k = self.pv_factor()
+        pv_k = self.pv_factor(0)
         rce = self._read_rce_arrays()
         rce_days = [rce.get(today.isoformat(), []), rce.get(tomorrow.isoformat(), [])]
         (pv0, sun0), (pv1, sun1) = self._pv_day(0), self._pv_day(1)

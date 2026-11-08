@@ -41,6 +41,18 @@ PV_CORR_MIN_DAYS = 5
 PV_CORR_MIN_FC = 1.0          # dni z prognozą < 1 kWh nie liczą się do korekty (za duży szum)
 PV_CORR_LO, PV_CORR_HI = 0.7, 1.2
 
+# model korekty prognozy PV (0.9.1): osobny współczynnik dla każdego dnia do przodu, kształt godzinowy, korekta „na żywo”
+PV_HORIZONS = 7
+PV_MODEL_DAYS = 30            # ile ostatnich dni uczy model
+PV_MODEL_MIN_DAYS = 5
+PV_MODEL_LO, PV_MODEL_HI = 0.5, 1.4
+PV_SHAPE_LO, PV_SHAPE_HI = 0.6, 1.5
+PV_LIVE_LO, PV_LIVE_HI = 0.5, 1.6
+PV_LIMIT_SOC = 97.0           # bateria pełna i brak eksportu → PV było ucięte, „wykonanie” nie mówi nic o prognozie
+PV_LIMIT_EXP_KWH = 0.1
+PV_DAY_LIMITED_SHARE = 0.25   # dzień, w którym tyle prognozowanej energii przypada na godziny z ucięciem, nie uczy modelu
+PV_SPREAD_DEFAULT = (0.12, 0.18, 0.25, 0.30, 0.35, 0.40, 0.45)
+
 # indeksy w koszyku godzinowym
 LOAD, PV, IMP, EXP, BCH, BDIS, BUY_S, BUY_T, SELL_S, SELL_T, SOC = range(11)
 _BUCKET_LEN = 11
@@ -52,6 +64,14 @@ def _f(v: Any) -> float | None:
     except (TypeError, ValueError):
         return None
     return x if math.isfinite(x) else None
+
+
+def _median(xs: list[float]) -> float | None:
+    if not xs:
+        return None
+    v = sorted(xs)
+    n = len(v)
+    return v[n // 2] if n % 2 else (v[n // 2 - 1] + v[n // 2]) / 2.0
 
 
 def _blank_bucket() -> list:
@@ -293,6 +313,7 @@ class Insights:
             pv_sum = sum(b[PV] for b in buckets if b is not None)
             rec["pv_act"] = round(cnt["pv"], 2) if "pv" in cnt else (round(pv_sum, 2) if pv_sum > 0 else None)
             rec["soc_act"] = [None if b is None else b[SOC] for b in buckets]
+            rec["pv_lim"] = self._limited_share(d, rec)
         self.save()
 
     def _prune(self, today: date) -> None:
@@ -337,6 +358,191 @@ class Insights:
     # ------------------------------------------------------------ korekta PV
     def pv_correction(self, today: date | None = None) -> dict[str, Any]:
         return pv_correction(self.fc, today or dt_util.now().date())
+
+
+    # ------------------------------------------------------------ model korekty PV (0.9.1)
+    def _limited_hours(self, d: str) -> set[int]:
+        """Godziny doby, w których PV było ucięte: bateria pełna i brak eksportu (falownik ogranicza produkcję do zużycia)."""
+        out: set[int] = set()
+        for h, b in enumerate(self._buckets(d)):
+            if b is None or b[SOC] is None:
+                continue
+            if b[SOC] >= PV_LIMIT_SOC and b[EXP] < PV_LIMIT_EXP_KWH and b[PV] > 0:
+                out.add(h)
+        return out
+
+    def _limited_share(self, d: str, rec: dict[str, Any]) -> float | None:
+        fh = rec.get("pv_fc_h")
+        if not isinstance(fh, list):
+            return None
+        tot = sum(x for x in (_f(v) for v in fh) if x is not None and x > 0)
+        if tot <= 0:
+            return None
+        lim = self._limited_hours(d)
+        return round(sum(x for h, v in enumerate(fh) if h in lim and (x := _f(v)) is not None and x > 0) / tot, 3)
+
+    def _pv_pairs(self, h: int, today: date, key: str = "raw") -> list[tuple[float, float]]:
+        """Pary (prognoza wydana h dni wcześniej, wykonanie) z ostatnich dni; dni z ucięciem PV pomijane."""
+        out = []
+        for i in range(1, PV_MODEL_DAYS + 1):
+            d = (today - timedelta(days=i)).isoformat()
+            rec = self.fc.get(d) or {}
+            a_ = _f(rec.get("pv_act"))
+            if key == "adj":
+                f_ = _f((rec.get("pv_adj_by_h") or {}).get(str(h)))
+            else:
+                f_ = _f((rec.get("pv_fc_by_h") or {}).get(str(h)))
+                if f_ is None and h == 0:
+                    f_ = _f(rec.get("pv_fc"))
+            if f_ is None or a_ is None or f_ < PV_CORR_MIN_FC or a_ < 0:
+                continue
+            lim = _f(rec.get("pv_lim"))
+            if lim is not None and lim > PV_DAY_LIMITED_SHARE:
+                continue
+            out.append((f_, a_))
+        return out
+
+    def pv_horizon_factor(self, h: int, today: date | None = None) -> tuple[float, int, float | None]:
+        """(współczynnik, liczba dni, mediana wykonanie/prognoza) dla prognozy na h dni do przodu. Brak danych dla h → h−1."""
+        today = today or dt_util.now().date()
+        h = max(0, min(PV_HORIZONS - 1, int(h)))
+        for hh in range(h, -1, -1):
+            pairs = self._pv_pairs(hh, today)
+            if len(pairs) >= PV_MODEL_MIN_DAYS:
+                med = _median([a / f_ for f_, a in pairs])
+                w = min(1.0, len(pairs) / 10.0)
+                fac = min(PV_MODEL_HI, max(PV_MODEL_LO, 1.0 + (med - 1.0) * w))
+                return round(fac, 3), len(pairs), round(med, 3)
+        return 1.0, 0, None
+
+    def pv_shape(self, today: date | None = None) -> tuple[list[float], int]:
+        """Mnożniki kształtu godzinowego (średnio 1,0): stały wzorzec błędu prognozy (zacienienie, kąt paneli)."""
+        today = today or dt_util.now().date()
+        sf = [0.0] * 24
+        sa = [0.0] * 24
+        cnt = [0] * 24
+        days = 0
+        for i in range(1, PV_MODEL_DAYS + 1):
+            d = (today - timedelta(days=i)).isoformat()
+            fh = (self.fc.get(d) or {}).get("pv_fc_h")
+            if not isinstance(fh, list) or len(fh) != 24:
+                continue
+            lim = self._limited_hours(d)
+            bs = self._buckets(d)
+            used = False
+            for h in range(24):
+                f_ = _f(fh[h])
+                b = bs[h]
+                if f_ is None or f_ < 0.05 or b is None or h in lim:
+                    continue
+                sf[h] += f_
+                sa[h] += b[PV]
+                cnt[h] += 1
+                used = True
+            days += 1 if used else 0
+        hours = [h for h in range(24) if cnt[h] >= PV_MODEL_MIN_DAYS and sf[h] > 0]
+        if not hours:
+            return [1.0] * 24, days
+        r_all = sum(sa[h] for h in hours) / max(1e-9, sum(sf[h] for h in hours))
+        if r_all <= 0:
+            return [1.0] * 24, days
+        shape = [1.0] * 24
+        for h in hours:
+            r = (sa[h] / sf[h]) / r_all
+            w = min(1.0, cnt[h] / 10.0)
+            shape[h] = min(PV_SHAPE_HI, max(PV_SHAPE_LO, 1.0 + (r - 1.0) * w))
+        return shape, days
+
+    def pv_spread_info(self, h: int, today: date | None = None) -> tuple[float, bool]:
+        """(typowy względny błąd prognozy po korekcie dla h dni do przodu, czy policzony z historii)."""
+        today = today or dt_util.now().date()
+        h = max(0, min(PV_HORIZONS - 1, int(h)))
+        pairs = self._pv_pairs(h, today, "adj")
+        if len(pairs) >= PV_MODEL_MIN_DAYS:
+            e = _median([abs(f_ - a) / a for f_, a in pairs if a > 0.5] or [PV_SPREAD_DEFAULT[h]])
+            return round(min(0.6, max(0.08, e)), 3), True
+        return PV_SPREAD_DEFAULT[h], False
+
+    def pv_spread(self, h: int, today: date | None = None) -> float:
+        return self.pv_spread_info(h, today)[0]
+
+    def pv_multipliers(self, offset: int, raw: list | None, now: datetime | None = None) -> dict[str, Any]:
+        """24 mnożniki dla godzinowej prognozy PV na dzień +offset: współczynnik horyzontu × kształt godzinowy
+        (przeskalowany tak, by suma dnia zgadzała się ze współczynnikiem) × korekta „na żywo” dla dzisiejszych godzin."""
+        now = now or dt_util.now()
+        today = dt_util.as_local(now).date()
+        fac, n, _med = self.pv_horizon_factor(offset, today)
+        shape, shape_days = self.pv_shape(today)
+        vals = [(_f(v) or 0.0) if isinstance(raw, list) and h < len(raw) else 0.0 for h, v in enumerate(raw or [None] * 24)]
+        vals = (vals + [0.0] * 24)[:24]
+        base = [fac * shape[h] for h in range(24)]
+        tot = sum(vals)
+        wshape = sum(v * shape[h] for h, v in enumerate(vals))
+        if tot > 0 and wshape > 0:
+            k = fac * tot / wshape                     # suma dnia po kształcie = fac × suma surowa
+            base = [shape[h] * k for h in range(24)]
+        live = 1.0
+        mult = list(base)
+        loc = dt_util.as_local(now)
+        if offset == 0 and tot > 0:
+            live, mult = self._pv_live(loc, vals, base)
+        return {"mult": mult, "factor": fac, "days": n, "shape_days": shape_days, "live": round(live, 3)}
+
+    def _pv_live(self, loc: datetime, vals: list[float], base: list[float]) -> tuple[float, list[float]]:
+        d = loc.date().isoformat()
+        lim = self._limited_hours(d)
+        bs = self._buckets(d)
+        pts = []
+        for h in range(0, loc.hour):
+            f_ = vals[h] * base[h]
+            b = bs[h]
+            if f_ < 0.05 or b is None or h in lim:
+                continue
+            pts.append((f_, b[PV]))
+        pts = pts[-3:]
+        sf = sum(p[0] for p in pts)
+        if len(pts) < 2 or sf < 0.4:
+            return 1.0, list(base)
+        ratio = sum(p[1] for p in pts) / sf
+        w = 0.7 if len(pts) >= 3 else 0.5
+        live = min(PV_LIVE_HI, max(PV_LIVE_LO, 1.0 + (ratio - 1.0) * w))
+        out = list(base)
+        for h in range(loc.hour, 24):
+            decay = max(0.35, 1.0 - 0.1 * (h - loc.hour))
+            out[h] = base[h] * (1.0 + (live - 1.0) * decay)
+        return live, out
+
+    def snapshot_horizons(self, now: datetime, raw_days: list, adj_days: list) -> bool:
+        """Raz dziennie (od 6:00): prognoza (surowa i skorygowana) na każdy z 7 dni do przodu — do uczenia korekty
+        osobno dla każdego horyzontu i do uczciwej oceny, czy korekta pomaga."""
+        loc = dt_util.as_local(now)
+        if loc.hour < SNAPSHOT_HOUR:
+            return False
+        changed = False
+        for i in range(min(PV_HORIZONS, len(raw_days))):
+            tgt = (loc.date() + timedelta(days=i)).isoformat()
+            rec = self.fc.setdefault(tgt, {})
+            for key, arr in (("pv_fc_by_h", raw_days), ("pv_adj_by_h", adj_days)):
+                v = _f(arr[i]) if i < len(arr) else None
+                slot = rec.setdefault(key, {})
+                if v is not None and str(i) not in slot:
+                    slot[str(i)] = round(v, 2)
+                    changed = True
+        if changed:
+            self.save()
+        return changed
+
+    def pv_horizon_stats(self, today: date | None = None) -> list[dict[str, Any]]:
+        today = today or dt_util.now().date()
+        out = []
+        for h in range(PV_HORIZONS):
+            raw = self._pv_pairs(h, today)
+            adj = self._pv_pairs(h, today, "adj")
+            fac, n, med = self.pv_horizon_factor(h, today)
+            out.append({"h": h, "n": len(raw), "mape": _mape(raw, 0.5), "bias": _bias(raw),
+                        "n_adj": len(adj), "mape_adj": _mape(adj, 0.5), "factor": fac, "ratio": med,
+                        "spread": self.pv_spread(h, today)})
+        return out
 
     # ------------------------------------------------------------ dane dla karty / sensorów
     def savings(self, today: date | None = None) -> dict[str, Any]:
@@ -407,5 +613,6 @@ class Insights:
             "load": {"mape": _mape(load_pairs, 0.5), "bias": _bias(load_pairs), "n": len(load_pairs)},
             "soc": {"mae": round(sum(soc_err) / len(soc_err), 1) if soc_err else None, "n": len(soc_err)},
             "pv_correction": corr,
+            "pv_by_horizon": self.pv_horizon_stats(today),
             "today": self.fc.get(today.isoformat()),
         }
