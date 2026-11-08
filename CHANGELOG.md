@@ -1,4 +1,4 @@
-# EMS komp-dec — zmiany po 0.9.0 (jeszcze niewydane)
+# EMS komp-dec — zmiany w 0.9.1 (z 0.9.0)
 
 ## Dzwonek: propozycje i powiadomienia w panelu
 - W nagłówku karty jest dzwonek 🔔 z licznikiem (propozycje do decyzji + nieprzeczytane powiadomienia). Otwiera arkusz „Do decyzji (N)”.
