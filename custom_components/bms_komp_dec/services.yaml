@@ -171,6 +171,37 @@ notify_test:
   name: Powiadomienie testowe
   description: Wysyła powiadomienie testowe (z pominięciem ciszy nocnej i odstępów) — administrator.
 
+inbox_action:
+  name: Skrzynka powiadomień panelu
+  description: "Operacje dzwonka w panelu: oznacz przeczytane, usuń, wyczyść albo odrzuć / przywróć propozycję harmonogramu."
+  fields:
+    action:
+      name: Akcja
+      description: read, read_all, delete, clear, reject lub unreject.
+      required: true
+      example: read
+      selector:
+        select:
+          options: [read, read_all, delete, clear, reject, unreject]
+    id:
+      name: Numer wpisu
+      description: Dla read i delete.
+      required: false
+      selector:
+        number: {min: 0, max: 100000000, mode: box}
+    key:
+      name: Klucz propozycji
+      description: Dla reject i unreject (np. bateria_sprzedaz_start).
+      required: false
+      selector:
+        text:
+    proposed:
+      name: Proponowana godzina
+      description: Dla reject (HH:MM).
+      required: false
+      selector:
+        text:
+
 devices_get:
   name: Urządzenia — odczyt
   description: Lista dodatkowych urządzeń, ich zużycie, koszty, cykle, plan dla elastycznych i (opcjonalnie) historia do wykresów.

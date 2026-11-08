@@ -124,7 +124,7 @@ class BmsRuntimeSensor(BmsBaseEntity, SensorEntity):
         "entries", "history", "cheap_start", "cheap_end", "usable_kwh", "inverter_floor_source", "inverter_floor_hourly",
         "tariff_peaks", "tariff_label", "tariff_night", "tariff_midday", "battery_sign_source",
         "ctl_work_mode", "ctl_charge_current", "ctl_export_surplus", "ctl_tou", "inverter_prefix",
-        "curve", "proposals", "days", "watches", "alarms", "recent_notifications",
+        "curve", "proposals", "days", "watches", "alarms", "recent_notifications", "inbox", "inbox_rejected",
         "prices_sell_today", "prices_sell_tomorrow", "prices_buy_today", "prices_buy_tomorrow",
         "price_sell_entity", "price_buy_entity", "price_sell_source", "price_buy_source", "tariff_mode", "tariff_dynamic",
         "pv_forecast_source", "pv_hourly_today", "pv_hourly_tomorrow", "pv_daily", "assumptions",
@@ -337,6 +337,8 @@ class BmsRuntimeSensor(BmsBaseEntity, SensorEntity):
                 "vacation_since": st.get("vacation_since"),
                 "watches": rt.watch.list(),
                 "accuracy": acc.summary(st.get("accuracy") or []),
+                "inbox": list(reversed(st.get("inbox") or []))[:60],
+                "inbox_rejected": dict(st.get("rejected_props") or {}),
                 "recent_notifications": [e for e in rt.log.last(200) if e.get("kind") == "notify"][-10:],
             }
         if self._key == "devices":

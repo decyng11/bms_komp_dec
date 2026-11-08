@@ -16,6 +16,7 @@ from homeassistant.util import dt as dt_util
 
 from . import accuracy as acc
 from . import inverter_ctl as ictl
+from . import inbox
 from . import notify_cfg as ncfg
 from .const import CONF_BATTERY_TEMPERATURE, CONF_GRID_POWER, CONF_GRID_VOLTAGE_L1
 from .helpers import number_value, switch_on
@@ -131,6 +132,7 @@ class Notifier:
                 sent.pop(k, None)
         rt._save_state()  # noqa: SLF001
         rt.log.add("notify", f"{title}: {message}", level)
+        inbox.add(rt.state, kind, title, message, level)
         if not switch_on(rt.hass, "notifications_enabled", True):
             return False
         try:

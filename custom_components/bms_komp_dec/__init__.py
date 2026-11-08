@@ -22,6 +22,7 @@ from .coordinator import BmsCoordinator
 from .direct import async_setup_inverter_entry, async_unload_inverter_entry, is_inverter_entry
 from .health import health_check
 from .helpers import UID_PREFIX, entry_settings, number_value, switch_on
+from . import inbox
 from . import notify_cfg as ncfg
 from . import devices as devmod
 from .runtime import SCHEDULE_RULES, BmsRuntime
@@ -39,7 +40,7 @@ _SERVICES = (
     "test_schedule", "suggest_schedule", "apply_schedule_times", "undo_auto_apply", "auto_apply_now",
     "watch_write", "watch_status", "watch_clear", "health_check", "monthly_report", "get_plan",
     "diag_store_get_all", "diag_store_set", "diag_store_delete",
-    "notify_settings_get", "notify_settings_set", "notify_test", "devices_get", "devices_set", "devices_discover", "insights_get", "self_test",
+    "notify_settings_get", "notify_settings_set", "notify_test", "inbox_action", "devices_get", "devices_set", "devices_discover", "insights_get", "self_test",
 )
 _SUGGEST_HOUR = 16   # RCE na jutro jest publikowane po południu — wcześniej propozycja bazowała na starych danych
 
@@ -350,6 +351,19 @@ def _register_services(hass: HomeAssistant) -> None:
         rt.log.add("notify", f"Zmieniono ustawienia powiadomień (włączone: {on} z {len(eff['kinds'])})", "ok")
         return {"settings": eff}
 
+    async def handle_inbox(call):
+        rt = _need_runtime(hass)
+        try:
+            res = inbox.act(rt.state, str(call.data.get("action") or ""), ident=call.data.get("id"),
+                            key=call.data.get("key"), proposed=call.data.get("proposed"))
+        except ValueError as err:
+            raise HomeAssistantError(str(err)) from err
+        act = call.data.get("action")
+        if act == "reject":
+            rt.log.add("schedule", f"Odrzucono propozycję {call.data.get('key')} → {call.data.get('proposed')}", "info")
+        rt._save_state()  # noqa: SLF001
+        return res
+
     async def handle_notify_test(call):
         await _require_admin(hass, call)
         rt = _need_runtime(hass)
@@ -417,6 +431,7 @@ def _register_services(hass: HomeAssistant) -> None:
         ("notify_settings_get", handle_notify_get, SupportsResponse.ONLY),
         ("notify_settings_set", handle_notify_set, SupportsResponse.OPTIONAL),
         ("notify_test", handle_notify_test, SupportsResponse.OPTIONAL),
+        ("inbox_action", handle_inbox, SupportsResponse.OPTIONAL),
         ("test_schedule", handle_test, SupportsResponse.OPTIONAL),
         ("suggest_schedule", handle_suggest, SupportsResponse.ONLY),
         ("apply_schedule_times", handle_apply, SupportsResponse.OPTIONAL),

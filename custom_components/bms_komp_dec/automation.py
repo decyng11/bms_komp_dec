@@ -7,6 +7,7 @@ from typing import Any
 
 from homeassistant.core import HomeAssistant
 
+from . import inbox
 from .const import TIMES
 from .helpers import find_eid, number_value, state_str, switch_on
 
@@ -100,6 +101,9 @@ async def async_auto_apply(runtime, hass: HomeAssistant, result: dict[str, Any],
         cur = _current(hass, key)
         if cur == proposed:
             continue
+        if inbox.is_rejected(runtime.state, key, proposed):
+            skipped.append(f"{key}: propozycja odrzucona w panelu")
+            continue
         if p.get("confidence") == "low":
             skipped.append(f"{key}: niska pewność propozycji")
             continue
@@ -176,8 +180,9 @@ async def async_daily_suggest(runtime, hass: HomeAssistant, optimizer) -> None:
         return
     proposals = result.get("proposals") or {}
     worthwhile = [
-        p for p in proposals.values()
+        p for k, p in proposals.items()
         if not p.get("skip") and p.get("proposed") and p.get("proposed") != p.get("current")
+        and not inbox.is_rejected(runtime.state, k, p.get("proposed"))
     ]
     if not worthwhile:
         runtime.log.add("auto", "Propozycja harmonogramu: bez zmian")
@@ -199,7 +204,7 @@ async def async_daily_suggest(runtime, hass: HomeAssistant, optimizer) -> None:
         lines += ["", "Cofnięcie: usługa bms_komp_dec.undo_auto_apply lub zakładka EMS."]
     else:
         runtime.log.add("auto", f"Nowa propozycja harmonogramu ({len(worthwhile)} zmian) — czeka na zatwierdzenie")
-        lines += ["", "Otwórz panel → zakładka EMS → 'Zaproponuj' → 'Zastosuj zaznaczone'."]
+        lines += ["", "Otwórz panel i dzwonek 🔔 → „Do decyzji”: Potwierdź albo Odrzuć."]
 
     await runtime.monitor.notifier.send("proposal", "🤖 EMS: propozycja harmonogramu", "\n".join(lines),
                                         key="proposal", level="info")

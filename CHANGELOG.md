@@ -1,5 +1,11 @@
 # EMS komp-dec — zmiany po 0.9.0 (jeszcze niewydane)
 
+## Dzwonek: propozycje i powiadomienia w panelu
+- W nagłówku karty jest dzwonek 🔔 z licznikiem (propozycje do decyzji + nieprzeczytane powiadomienia). Otwiera arkusz „Do decyzji (N)”.
+- Każda propozycja planu (pary START/STOP razem) ma znacznik ZMIENIAM / POMIJAM, zmianę „było → będzie” i rozwijane „Dlaczego”. Przyciski **Potwierdź** (zapisuje godziny) i **Odrzuć** działają osobno dla każdej propozycji — nie ma przycisków zbiorczych.
+- Odrzucona propozycja jest zapamiętana po stronie integracji (do czasu, aż plan zaproponuje inną godzinę) — nie wróci w panelu, nie zastosuje jej auto-stosowanie i nie będzie liczona w powiadomieniu o nowej propozycji.
+- Pod propozycjami skrzynka powiadomień: podsumowania, alarmy/błędy i informacje (zapamiętywane 14 dni, max 60), z oznaczaniem jako przeczytane, usuwaniem i czyszczeniem. Nowa usługa `bms_komp_dec.inbox_action`.
+
 ## Poprawki
 - **„Trwa tanie okno do 06:00” w niedzielę o 7:53.** Weekendowa tania taryfa trwa od soboty do poniedziałku do 6:00, a komunikat podawał samą godzinę, więc czytała się jak godzina z przeszłości. Teraz koniec okna ma nazwę dnia („do jutra 06:00”, „do poniedziałku 06:00”) — na karcie i w powiadomieniu o niskim SOC; okno, które zaczyna się i kończy w różne dni, jest opisane jako „od … do …”.
 

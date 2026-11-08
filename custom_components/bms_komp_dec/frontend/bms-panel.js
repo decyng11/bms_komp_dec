@@ -390,6 +390,37 @@
     .header .date { margin-top: 2px; }
     .header .title .logo { display: block; height: 40px; width: auto; }
     @media (max-width: 700px) { .header .title .logo { height: 34px; } }
+    .hdr-r { display: flex; align-items: center; gap: 8px; flex: none; }
+    .bell { position: relative; border: none; background: var(--seg-bg); color: var(--text); width: 40px; height: 36px; border-radius: 999px; cursor: pointer; font-size: 17px; line-height: 1; padding: 0; }
+    .bell-n { position: absolute; top: -3px; right: -3px; min-width: 18px; height: 18px; padding: 0 5px; box-sizing: border-box; border-radius: 9px; background: #f43f5e; color: #fff; font-size: 11px; font-weight: 700; line-height: 18px; text-align: center; }
+    .bell-n.calm { background: var(--accent); }
+    .inb-ov { position: fixed; inset: 0; z-index: 60; background: rgba(0,0,0,0.45); display: flex; align-items: flex-end; justify-content: center; }
+    .inb-ov[hidden] { display: none; }
+    .inb { width: 100%; max-width: 560px; max-height: 88vh; display: flex; flex-direction: column; background: var(--card); color: var(--text); border-radius: 20px 20px 0 0; box-shadow: 0 -8px 30px rgba(0,0,0,0.35); }
+    @media (min-width: 700px) { .inb-ov { align-items: center; } .inb { border-radius: 20px; max-height: 80vh; } }
+    .inb-grip { width: 40px; height: 4px; border-radius: 2px; background: var(--line); margin: 8px auto 0; }
+    .inb-h { display: flex; align-items: center; gap: 8px; padding: 10px 16px 6px; }
+    .inb-h b { font-size: 17px; flex: 1; }
+    .inb-x { border: none; background: var(--surface); color: var(--text); width: 30px; height: 30px; border-radius: 50%; cursor: pointer; font-size: 14px; }
+    .inb-body { overflow-y: auto; padding: 4px 16px 16px; }
+    .inb-pill { display: inline-block; font-size: 11px; padding: 2px 8px; border-radius: 999px; background: rgba(251,191,36,0.18); color: #fbbf24; margin: 0 16px 6px; }
+    .inb-sec { display: flex; align-items: center; justify-content: space-between; margin: 14px 0 6px; font-size: 12px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: var(--muted); }
+    .inb-sec button { border: none; background: none; color: var(--accent); font-size: 12px; cursor: pointer; padding: 2px 4px; }
+    .inb-card { background: var(--surface); border-radius: 14px; padding: 10px 12px; margin-bottom: 8px; border-left: 3px solid transparent; }
+    .inb-card.p-change { border-left-color: #10b981; } .inb-card.p-skip { border-left-color: #f43f5e; opacity: .85; }
+    .inb-card.n-error { border-left-color: #f43f5e; } .inb-card.n-warn { border-left-color: #fbbf24; } .inb-card.n-ok { border-left-color: #10b981; } .inb-card.n-info { border-left-color: var(--accent); }
+    .inb-card.unread .inb-t { font-weight: 700; }
+    .inb-r { display: flex; align-items: center; gap: 8px; justify-content: space-between; }
+    .inb-t { font-size: 14px; } .inb-time { font-size: 11px; color: var(--muted); flex: none; }
+    .inb-tag { font-size: 10.5px; font-weight: 700; padding: 2px 7px; border-radius: 999px; flex: none; }
+    .inb-v { margin: 6px 0 2px; font-size: 14px; display: flex; flex-wrap: wrap; gap: 4px 14px; } .inb-v i { color: var(--muted); font-style: normal; }
+    .inb-card details { margin-top: 4px; } .inb-card summary { cursor: pointer; font-size: 12px; color: var(--muted); }
+    .inb-why, .inb-msg { font-size: 12.5px; color: var(--text2); margin-top: 4px; white-space: pre-line; }
+    .inb-btns { display: flex; gap: 8px; margin-top: 8px; }
+    .inb-btns button { flex: 1; padding: 9px; border-radius: 10px; border: 1px solid var(--line); background: var(--surface); color: var(--text); font-size: 14px; cursor: pointer; }
+    .inb-btns button.ok { background: rgba(16,185,129,0.2); border-color: #10b981; font-weight: 700; }
+    .inb-act { display: flex; gap: 12px; margin-top: 4px; } .inb-act button { border: none; background: none; color: var(--accent); font-size: 12px; cursor: pointer; padding: 2px 0; }
+    .inb-empty { color: var(--muted); font-size: 13px; padding: 10px 2px; }
     .theme-seg { display: inline-flex; padding: 3px; background: var(--seg-bg); border-radius: 999px; flex: none; }
     .theme-seg button { border: none; background: transparent; color: var(--muted); width: 34px; height: 30px; border-radius: 999px; cursor: pointer; font-size: 15px; line-height: 1; padding: 0; }
     .theme-seg button.active { background: var(--seg-active); color: var(--text); box-shadow: 0 1px 4px rgba(0,0,0,0.18); }
@@ -2497,9 +2528,12 @@
             <div class="title" role="img" aria-label="Komp-Dec – Centrum Energii" title="Komp-Dec – Centrum Energii"><svg class="logo" viewBox="0 0 300 64" aria-hidden="true"><g transform="translate(0 2) scale(.6)"><path d="M50 10 L84 30 V70 L50 90 L16 70 V30 Z" fill="#0F6E56"/><path d="M36 36 V64 M36 36 L58 36 M36 50 L54 50 M36 64 L58 64" fill="none" stroke="#9FE1CB" stroke-width="7" stroke-linecap="round"/><path d="M70 40 L62 52 H68 L65 62 L76 49 H70 Z" fill="#EF9F27"/></g><text x="70" y="42" font-size="32" font-weight="500" fill="var(--text)">Komp-Dec</text></svg></div>
             <div class="date" id="date"></div>
           </div>
+          <div class="hdr-r">
+          <button type="button" class="bell" id="bell" aria-label="Powiadomienia i propozycje" title="Powiadomienia i propozycje">🔔<span class="bell-n" id="bellN" hidden></span></button>
           <div class="theme-seg" role="group" aria-label="Motyw">
             <button type="button" data-theme-set="light" title="Jasny" aria-label="Motyw jasny">☀️</button>
             <button type="button" data-theme-set="dark" title="Ciemny" aria-label="Motyw ciemny">🌙</button>
+          </div>
           </div>
         </div>
         <nav class="tabs">
@@ -2986,6 +3020,118 @@
         </ul></details>`;
     }
 
+    // ---------------------------------------------------------------- dzwonek: propozycje + skrzynka powiadomień
+    _inbData() {
+      const st = this._hass.states;
+      const pa = (st[this._eid('sensor', 'plan_curve')] || {}).attributes || {};
+      const ma = (st[this._eid('sensor', 'monitor_status')] || {}).attributes || {};
+      const rej = Object.assign({}, ma.inbox_rejected || {}, this._inbRej || {});
+      const proposals = pa.proposals && typeof pa.proposals === 'object' ? pa.proposals : {};
+      const GROUPS = [
+        ['🔌', 'Ładowanie z sieci (noc)', ['start_grid_charge', 'stop_grid_charge']],
+        ['🔌', 'Ładowanie z sieci (zestaw 2)', ['start_grid_charge_2', 'stop_grid_charge_2']],
+        ['💰', 'Sprzedaż z baterii — poranny szczyt', ['bateria_sprzedaz_start', 'bateria_sprzedaz_stop']],
+        ['💰', 'Sprzedaż z baterii — wieczorny szczyt', ['bateria_sprzedaz_start_2', 'bateria_sprzedaz_stop_2']],
+        ['☀️', 'Blokada ładowania z PV', ['pv_export_start', 'pv_export_stop']],
+      ];
+      const used = new Set(), groups = [];
+      const mk = (icon, title, keys) => {
+        const items = keys.filter(k => proposals[k] && typeof proposals[k] === 'object').map(k => { used.add(k); return [k, proposals[k]]; });
+        if (!items.length) return;
+        const chg = items.filter(([k, p]) => !p.skip && p.proposed && p.proposed !== p.current && rej[k] !== p.proposed);
+        const skip = items.every(([, p]) => p.skip);
+        if (chg.length) groups.push({ icon, title, items, chg, kind: 'change' });
+        else if (skip) groups.push({ icon, title, items, chg: [], kind: 'skip' });
+      };
+      GROUPS.forEach(g => mk(...g));
+      Object.keys(proposals).filter(k => !used.has(k)).forEach(k => mk('⚙️', proposals[k].label || k, [k]));
+      const gone = this._inbGone || new Set(), read = this._inbRead || new Set();
+      const notes = (Array.isArray(ma.inbox) ? ma.inbox : []).filter(e => !gone.has(e.id)).map(e => ({ ...e, read: e.read || read.has(e.id) }));
+      const auto = (st[this._eid('switch', 'auto_apply')] || {}).state === 'on';
+      return { groups, notes, auto, pending: groups.filter(g => g.kind === 'change').length, unread: notes.filter(e => !e.read).length };
+    }
+
+    _renderInbox() {
+      const d = this._inbData();
+      const bell = this._el('bell'), badge = this._el('bellN');
+      if (bell && !bell._wired) { bell._wired = true; bell.addEventListener('click', () => { this._inbOpen = !this._inbOpen; this._renderInbox(); }); }
+      const n = d.pending + d.unread;
+      if (badge) { badge.hidden = !n; badge.textContent = n > 99 ? '99+' : String(n); badge.classList.toggle('calm', !d.pending); }
+      let ov = this.shadowRoot.getElementById('inbOv');
+      if (!ov) {
+        ov = document.createElement('div'); ov.id = 'inbOv'; ov.className = 'inb-ov'; ov.hidden = true;
+        ov.innerHTML = '<div class="inb" role="dialog" aria-label="Do decyzji i powiadomienia"></div>';
+        ov.addEventListener('click', ev => {
+          if (ev.target === ov) { this._inbOpen = false; this._renderInbox(); return; }
+          const b = ev.target.closest('[data-inb]'); if (b) this._inbClick(b);
+        });
+        ov.addEventListener('toggle', ev => {
+          const id = ev.target && ev.target.dataset && ev.target.dataset.exp; if (!id) return;
+          this._inbExp = this._inbExp || new Set(); ev.target.open ? this._inbExp.add(id) : this._inbExp.delete(id);
+        }, true);
+        this.shadowRoot.appendChild(ov);
+      }
+      ov.hidden = !this._inbOpen;
+      if (!this._inbOpen) return;
+      const sig = JSON.stringify([d.groups.map(g => [g.title, g.kind, g.chg.map(([k, p]) => k + p.proposed + p.current)]), d.notes.map(e => [e.id, e.read]), d.auto]);
+      if (sig === this._inbSig) return;
+      this._inbSig = sig;
+      const esc = t => String(t == null ? '' : t).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+      const exp = this._inbExp || new Set();
+      const det = (id, label, body) => body ? `<details data-exp="${id}" ${exp.has(id) ? 'open' : ''}><summary>${label}</summary><div class="inb-why">${body}</div></details>` : '';
+      const clean = r => { let t = String(r || '').replace(/^Pomiń\s*[—-]\s*/, '').trim(); return t ? t.charAt(0).toUpperCase() + t.slice(1) : ''; };
+      const ago = ts => {
+        const m = Math.max(0, Math.round((Date.now() / 1000 - ts) / 60));
+        if (m < 1) return 'teraz'; if (m < 60) return m + ' min temu'; if (m < 1440) return Math.round(m / 60) + ' h temu';
+        return new Date(ts * 1000).toLocaleDateString('pl-PL', { day: 'numeric', month: 'short' });
+      };
+      const prop = d.groups.map((g, i) => {
+        const why = [...new Set(g.items.map(([, p]) => clean(p.reason)).filter(Boolean))].map(esc).join('<br>');
+        if (g.kind === 'skip') return `<div class="inb-card p-skip"><div class="inb-r"><span class="inb-t">${g.icon} ${esc(g.title)}</span><span class="inb-tag" style="background:#f43f5e22;color:#f43f5e">POMIJAM</span></div>${det('p' + i, 'Dlaczego', why)}</div>`;
+        const vals = g.items.map(([k, p]) => {
+          const nm = /stop/.test(k) ? 'STOP' : 'START';
+          return g.chg.some(([kk]) => kk === k) ? `<span>${nm} <b>${esc(p.current || '—')} → ${esc(p.proposed)}</b></span>` : `<span>${nm} <b>${esc(p.current)}</b> <i>(bez zmian)</i></span>`;
+        }).join('');
+        const dat = g.chg.map(([k, p]) => `${k}=${esc(p.proposed)}`).join(',');
+        return `<div class="inb-card p-change"><div class="inb-r"><span class="inb-t">${g.icon} ${esc(g.title)}</span><span class="inb-tag" style="background:#10b98122;color:#10b981">ZMIENIAM</span></div>
+          <div class="inb-v">${vals}</div>${det('p' + i, 'Dlaczego', why)}
+          <div class="inb-btns"><button type="button" data-inb="reject" data-p="${dat}">Odrzuć</button><button type="button" class="ok" data-inb="apply" data-p="${dat}">Potwierdź</button></div></div>`;
+      }).join('');
+      const ic = { error: '🚨', warn: '⚠️', ok: '✅', info: 'ℹ️' };
+      const notes = d.notes.map(e => `<div class="inb-card n-${esc(e.level)} ${e.read ? '' : 'unread'}"><div class="inb-r"><span class="inb-t">${ic[e.level] || 'ℹ️'} ${esc(e.title)}</span><span class="inb-time">${esc(ago(e.ts))}</span></div>
+        <div class="inb-msg">${esc(e.message)}</div><div class="inb-act">${e.read ? '' : `<button type="button" data-inb="read" data-id="${e.id}">Przeczytane</button>`}<button type="button" data-inb="del" data-id="${e.id}">Usuń</button></div></div>`).join('');
+      const nP = d.pending;
+      ov.firstChild.innerHTML = `<div class="inb-grip"></div><div class="inb-h"><b>${nP ? `Do decyzji (${nP})` : 'Powiadomienia'}</b><button type="button" class="inb-x" data-inb="close" aria-label="Zamknij">✕</button></div>
+        ${d.auto ? '' : '<span class="inb-pill">auto-stosowanie wył.</span>'}
+        <div class="inb-body">${prop ? `<div class="inb-sec"><span>Propozycje planu</span></div>${prop}` : ''}
+        <div class="inb-sec"><span>Powiadomienia</span>${d.notes.length ? `<span>${d.unread ? '<button type="button" data-inb="readall">Przeczytane wszystkie</button>' : ''}<button type="button" data-inb="clear">Wyczyść</button></span>` : ''}</div>
+        ${notes || '<div class="inb-empty">Brak powiadomień — podsumowania, alarmy i informacje pojawią się tutaj.</div>'}
+        ${prop || nP ? '' : '<div class="inb-empty">Brak propozycji planu do zatwierdzenia.</div>'}</div>`;
+    }
+
+    async _inbClick(b) {
+      const act = b.dataset.inb;
+      const call = (svc, data) => this._hass.callService('bms_komp_dec', svc, data);
+      const pairs = String(b.dataset.p || '').split(',').filter(Boolean).map(x => x.split('='));
+      this._inbGone = this._inbGone || new Set(); this._inbRead = this._inbRead || new Set(); this._inbRej = this._inbRej || {};
+      try {
+        if (act === 'close') { this._inbOpen = false; }
+        else if (act === 'apply') {
+          const times = {}; pairs.forEach(([k, v]) => { if (k && /^\d{2}:\d{2}$/.test(v)) times[k] = v; });
+          if (!Object.keys(times).length) return;
+          await call('apply_schedule_times', { times });
+          this._showToast('✅ Zapisano ' + Object.keys(times).length + ' ustawień');
+        } else if (act === 'reject') {
+          for (const [k, v] of pairs) { await call('inbox_action', { action: 'reject', key: k, proposed: v }); this._inbRej[k] = v; }
+          this._showToast('Odrzucono propozycję');
+        } else if (act === 'read') { this._inbRead.add(Number(b.dataset.id)); await call('inbox_action', { action: 'read', id: Number(b.dataset.id) }); }
+        else if (act === 'del') { this._inbGone.add(Number(b.dataset.id)); await call('inbox_action', { action: 'delete', id: Number(b.dataset.id) }); }
+        else if (act === 'readall') { this._inbData().notes.forEach(e => this._inbRead.add(e.id)); await call('inbox_action', { action: 'read_all' }); }
+        else if (act === 'clear') { this._inbData().notes.forEach(e => this._inbGone.add(e.id)); await call('inbox_action', { action: 'clear' }); }
+      } catch (e) { this._showToast('❌ ' + (e.message || e), true); }
+      this._inbSig = null; this._renderInbox();
+    }
+
     _renderSuggestions(data) {
       const el = this._el('suggestResults');
       if (!el) return;
@@ -3201,6 +3347,7 @@
       this._safe(() => this._renderPvProductionChart());
       this._safe(() => this._renderPriceTable());
       this._safe(() => this._renderPlan());
+      this._safe(() => this._renderInbox());
       this._safe(() => this._renderEta());
       this._safe(() => this._dgSyncTab());
       if (this._activeTab === 'diag') this._safe(() => this._dgTick());
