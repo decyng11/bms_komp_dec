@@ -398,9 +398,33 @@ class BmsRuntime:
                     return "brak odczytu mocy z sieci — nie można potwierdzić braku importu"
             elif grid > limit:
                 return f"import z sieci {grid:.0f} W > limit {limit:.0f} W"
+        day_block = self.daily_import_block()
+        if day_block:
+            return day_block
         blocked, reason = self.arbitrage_status()
         if blocked:
             return f"arbitraż: {reason}"
+        return None
+
+    def import_today_kwh(self) -> float | None:
+        """Ile kWh pobrano dziś z sieci: licznik falownika, a gdy go brak — z księgi rozliczeń."""
+        raw = (self.coordinator.data or {}).get("energy_grid_import_today")
+        try:
+            if raw is not None:
+                return float(raw)
+        except (TypeError, ValueError):
+            pass
+        day = self.ledger.days.get(dt_util.now().date().isoformat())
+        return float(day["import_kwh"]) if day else None
+
+    def daily_import_block(self) -> str | None:
+        """Blokada sprzedaży według energii z całego dnia: pobrano z sieci więcej niż limit (0 = wyłączona)."""
+        limit = number_value(self.hass, "grid_import_sell_block_kwh", 3.0)
+        if limit <= 0:
+            return None
+        imported = self.import_today_kwh()
+        if imported is not None and imported > limit:
+            return f"dziś pobrano z sieci {imported:.1f} kWh > limit {limit:.1f} kWh"
         return None
 
     # --------------------------------------------- opłacalność (funkcja 2)
@@ -1185,6 +1209,12 @@ class BmsRuntime:
                                   "label": p.get("label"), "reason": str(p.get("reason") or "")[:600]}
                               for k, p in (res.get("proposals") or {}).items()},
             }
+            blk = self.daily_import_block()
+            if blk:       # dziś pobrano z sieci za dużo — plan nie obiecuje sprzedaży, której zabezpieczenie i tak nie wykona
+                for k, p in self._plan["proposals"].items():
+                    if k.startswith("bateria_sprzedaz_") and p.get("proposed") and not p.get("skip"):
+                        p["skip"] = True
+                        p["reason"] = f"Blokada sprzedaży: {blk}. " + p["reason"]
             if res.get("error"):
                 self._spawn(self.monitor.notifier.send("plan_error", "📉 EMS: plan niedostępny", str(res["error"]), key="plan_error"))
             else:

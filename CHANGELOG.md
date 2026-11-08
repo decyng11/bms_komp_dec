@@ -1,3 +1,8 @@
+# EMS komp-dec — zmiany po 0.9.0 (jeszcze niewydane)
+
+## Zabezpieczenia sprzedaży
+- **Blokada sprzedaży według energii z całego dnia.** Dotychczasowa blokada patrzyła tylko na chwilową moc importu (domyślnie 2000 W w momencie startu sprzedaży). Nowe ustawienie „Blokada sprzedaży — import z sieci dziś” (domyślnie 3 kWh, 0 = wyłączone): gdy dziś z sieci pobrano więcej, sprzedaż z baterii jest wstrzymana do końca dnia — zarówno start z harmonogramu, jak i przycisk „Sprzedaż 6000W”. Liczy się licznik falownika, a gdy go brak — księga rozliczeń. Plan 24 h oznacza wtedy propozycje sprzedaży jako pominięte z powodem, zamiast obiecywać sprzedaż, której blokada i tak nie wykona. Czujnik „sprzedaż zablokowana importem” zapala się także od tej blokady. Blokada chwilowa (W) zostaje bez zmian i można ją wyłączyć ustawieniem 0.
+
 # EMS komp-dec — zmiany w 0.9.0 (z 0.8.8)
 
 ## Powiadomienia

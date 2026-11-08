@@ -48,6 +48,7 @@
     bateria_sprzedaz_start_2: 'Godzina, od której bateria sprzedaje energię do sieci (okno 2, dodatkowe).',
     bateria_sprzedaz_stop_2: 'Godzina, o której sprzedaż z baterii się kończy (okno 2, dodatkowe).',
     grid_import_sell_block_w: 'Gdy z sieci pobierasz więcej niż tyle watów, sprzedaż jest wstrzymywana. 0 = zabezpieczenie wyłączone.',
+    grid_import_sell_block_kwh: 'Gdy dziś z sieci pobrano więcej niż tyle kWh, sprzedaż z baterii jest wstrzymana do końca dnia. 0 = zabezpieczenie wyłączone.',
     minimalny_soc_dla_wylaczenia_sprzedazy: 'Gdy bateria spadnie poniżej tego poziomu, sprzedaż się wyłącza i falownik wraca do trybu automatycznego.',
     min_soc_for_sell: 'Tryb „Sprzedaż 6000W” włączy się tylko wtedy, gdy bateria ma co najmniej tyle procent.',
     min_soc_for_pv_export: 'Eksport nadwyżki z PV włączy się tylko wtedy, gdy bateria ma co najmniej tyle procent.',
@@ -2676,6 +2677,16 @@
               <div class="field-controls">
                 <input type="number" min="0" max="50000" step="100" data-num-key="grid_import_sell_block_w">
                 <span style="color:var(--muted);">W</span>
+              </div>
+            </div>
+            <div class="row">
+              <div class="field-info">
+                <div class="name">Blokada sprzedaży — import z sieci dziś</div>
+                <div class="eid-hint" id="eid-grid_import_sell_block_kwh"></div>
+              </div>
+              <div class="field-controls">
+                <input type="number" min="0" max="100" step="0.1" data-num-key="grid_import_sell_block_kwh">
+                <span style="color:var(--muted);">kWh</span>
               </div>
             </div>
           </div>

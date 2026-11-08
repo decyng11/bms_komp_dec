@@ -67,6 +67,7 @@ def main():
     check("ledger: sums zawiera peak_import_kwh", "peak_import_kwh" in LL.sums(date(2026, 11, 7), "day"))
 
     asyncio.run(notify_part())
+    asyncio.run(daily_block_part())
     print(f"MONEY PASS={common.PASS} FAIL={common.FAIL}")
 
 def mkenv():
@@ -123,5 +124,39 @@ async def notify_part():
     opt.buy_hourly_for = lambda d: None
     await rt.monitor._prices_tomorrow(at(2026, 11, 7, 15, 0))
     check("arbitraż: brak cen zakupu — bez powiadomienia i bez błędu", not [x for x in push(hass) if "arbitraż" in x[2]["title"]])
+
+async def daily_block_part():
+    # ---- blokada sprzedaży według energii pobranej z sieci w ciągu dnia
+    from homeassistant.util import dt as dt_util
+    hass, c, opt, rt = mkenv()
+    c.data = dict(c.data or {}); c.data["energy_grid_import_today"] = 3.4
+    check("domyślnie: 3,4 kWh dziś > limit 3,0 → sprzedaż zablokowana", (rt.sell_block_reason() or "").startswith("dziś pobrano z sieci 3.4 kWh"), rt.sell_block_reason())
+    c.data["energy_grid_import_today"] = 2.9
+    check("2,9 kWh < 3,0 → brak blokady", rt.sell_block_reason() is None, rt.sell_block_reason())
+    hass.states.set("number.bms_grid_import_sell_block_kwh", "2.5")
+    check("limit z ustawień (2,5): 2,9 kWh blokuje", "limit 2.5" in (rt.sell_block_reason() or ""), rt.sell_block_reason())
+    hass.states.set("number.bms_grid_import_sell_block_kwh", "0")
+    check("limit 0 = wyłączone", rt.sell_block_reason() is None)
+    hass.states.set("number.bms_grid_import_sell_block_kwh", "3")
+    c.data["energy_grid_import_today"] = None
+    rt.ledger.days[dt_util.now().date().isoformat()] = {"export_kwh": 0.0, "import_kwh": 4.0, "revenue": 0.0, "cost": 1.0, "neg_export_kwh": 0.0, "peak_import_kwh": 0.0}
+    check("brak licznika falownika: liczy się z księgi rozliczeń (4,0 kWh)", "4.0 kWh" in (rt.sell_block_reason() or ""), rt.sell_block_reason())
+    try:
+        await rt.run_command("sprzedaz_6000w", source="ręcznie")
+        blocked = False
+    except Exception as err:  # noqa: BLE001
+        blocked = "Sprzedaż zablokowana" in str(err)
+    check("przycisk „Sprzedaż 6000W” zablokowany przy imporcie dziś ponad limit", blocked)
+
+    # plan nie obiecuje sprzedaży, którą blokada i tak zatrzyma
+    async def fake_suggest():
+        return {"generated_at": "x", "mode": "normal", "curve": [], "assumptions": {},
+                "proposals": {"bateria_sprzedaz_start_2": {"proposed": "16:00", "current": "00:00", "skip": False, "label": "Sprzedaż wieczorna", "reason": "Najlepsze okno 16–17."},
+                              "start_grid_charge": {"proposed": "02:00", "current": "00:00", "skip": False, "label": "Ładowanie", "reason": "tanio"}}}
+    rt.optimizer.suggest = fake_suggest
+    plan = await rt.refresh_plan(force=True)
+    pr = plan["proposals"]
+    check("plan: sprzedaż oznaczona jako pominięta z powodem blokady", pr["bateria_sprzedaz_start_2"]["skip"] is True and "Blokada sprzedaży: dziś pobrano z sieci 4.0 kWh" in pr["bateria_sprzedaz_start_2"]["reason"], pr["bateria_sprzedaz_start_2"])
+    check("plan: ładowanie z sieci bez zmian", pr["start_grid_charge"]["skip"] is False)
 
 main()

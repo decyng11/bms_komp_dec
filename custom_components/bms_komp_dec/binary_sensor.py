@@ -92,7 +92,9 @@ class BmsBinarySensor(BmsBaseEntity, BinarySensorEntity):
             if grid is None:
                 return None
             limit = number_value(self.hass, "grid_import_sell_block_w", DEFAULT_SELL_BLOCK_W)
-            return limit > 0 and grid > limit
+            if limit > 0 and grid > limit:
+                return True
+            return bool(rt is not None and rt.daily_import_block())
 
         if rt is None:
             return None
