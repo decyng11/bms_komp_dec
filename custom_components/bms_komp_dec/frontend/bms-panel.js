@@ -394,11 +394,10 @@
     .bell { position: relative; border: none; background: var(--seg-bg); color: var(--text); width: 40px; height: 36px; border-radius: 999px; cursor: pointer; font-size: 17px; line-height: 1; padding: 0; }
     .bell-n { position: absolute; top: -3px; right: -3px; min-width: 18px; height: 18px; padding: 0 5px; box-sizing: border-box; border-radius: 9px; background: #f43f5e; color: #fff; font-size: 11px; font-weight: 700; line-height: 18px; text-align: center; }
     .bell-n.calm { background: var(--accent); }
-    .inb-ov { position: fixed; inset: 0; z-index: 60; background: rgba(0,0,0,0.45); display: flex; align-items: flex-end; justify-content: center; }
+    .inb-ov { position: fixed; inset: 0; z-index: 60; background: rgba(0,0,0,0.45); display: flex; align-items: center; justify-content: center; padding: 16px; box-sizing: border-box; }
     .inb-ov[hidden] { display: none; }
-    .inb { width: 100%; max-width: 560px; max-height: 88vh; display: flex; flex-direction: column; background: var(--card); color: var(--text); border-radius: 20px 20px 0 0; box-shadow: 0 -8px 30px rgba(0,0,0,0.35); }
-    @media (min-width: 700px) { .inb-ov { align-items: center; } .inb { border-radius: 20px; max-height: 80vh; } }
-    .inb-grip { width: 40px; height: 4px; border-radius: 2px; background: var(--line); margin: 8px auto 0; }
+    .inb { width: 100%; max-width: 560px; max-height: 86vh; display: flex; flex-direction: column; background: var(--card); color: var(--text); border-radius: 20px; box-shadow: 0 10px 40px rgba(0,0,0,0.45); }
+    .inb-grip { display: none; }
     .inb-h { display: flex; align-items: center; gap: 8px; padding: 10px 16px 6px; }
     .inb-h b { font-size: 17px; flex: 1; }
     .inb-x { border: none; background: var(--surface); color: var(--text); width: 30px; height: 30px; border-radius: 50%; cursor: pointer; font-size: 14px; }
@@ -3039,16 +3038,14 @@
         const items = keys.filter(k => proposals[k] && typeof proposals[k] === 'object').map(k => { used.add(k); return [k, proposals[k]]; });
         if (!items.length) return;
         const chg = items.filter(([k, p]) => !p.skip && p.proposed && p.proposed !== p.current && rej[k] !== p.proposed);
-        const skip = items.every(([, p]) => p.skip);
         if (chg.length) groups.push({ icon, title, items, chg, kind: 'change' });
-        else if (skip) groups.push({ icon, title, items, chg: [], kind: 'skip' });
       };
       GROUPS.forEach(g => mk(...g));
       Object.keys(proposals).filter(k => !used.has(k)).forEach(k => mk('⚙️', proposals[k].label || k, [k]));
       const gone = this._inbGone || new Set(), read = this._inbRead || new Set();
       const notes = (Array.isArray(ma.inbox) ? ma.inbox : []).filter(e => !gone.has(e.id)).map(e => ({ ...e, read: e.read || read.has(e.id) }));
       const auto = (st[this._eid('switch', 'auto_apply')] || {}).state === 'on';
-      return { groups, notes, auto, pending: groups.filter(g => g.kind === 'change').length, unread: notes.filter(e => !e.read).length };
+      return { groups, notes, auto, pending: groups.length, unread: notes.filter(e => !e.read).length };
     }
 
     _renderInbox() {
@@ -3071,6 +3068,24 @@
         }, true);
         this.shadowRoot.appendChild(ov);
       }
+      // nowe powiadomienie albo nowa propozycja → okno wyskakuje samo (raz); pamiętamy, co już pokazano
+      if (!this._hass.states[this._eid('sensor', 'plan_curve')] && !this._hass.states[this._eid('sensor', 'monitor_status')]) { ov.hidden = true; return; }   // dane jeszcze nie dotarły
+      const maxId = d.notes.reduce((m, e) => Math.max(m, Number(e.id) || 0), 0);
+      const psig = d.groups.map(g => g.chg.map(([k, p]) => k + '=' + p.proposed).join('+')).join('|');
+      if (!this._inbInit) {
+        this._inbInit = true;
+        let st = null;
+        try { st = JSON.parse(localStorage.getItem('bms_inb_seen') || 'null'); } catch (e) { /* brak pamięci przeglądarki */ }
+        this._inbSeenId = st && typeof st.id === 'number' ? st.id : maxId;
+        this._inbSeenP = st && typeof st.p === 'string' ? st.p : psig;
+      }
+      const freshNote = d.notes.some(e => !e.read && Number(e.id) > this._inbSeenId);
+      if (!this._inbOpen && (freshNote || (psig && psig !== this._inbSeenP))) this._inbOpen = true;
+      if (this._inbOpen) { this._inbSeenId = Math.max(this._inbSeenId, maxId); this._inbSeenP = psig; } else if (!psig) this._inbSeenP = '';
+      if (this._inbPersisted !== this._inbSeenId + '|' + this._inbSeenP) {
+        this._inbPersisted = this._inbSeenId + '|' + this._inbSeenP;
+        try { localStorage.setItem('bms_inb_seen', JSON.stringify({ id: this._inbSeenId, p: this._inbSeenP })); } catch (e) { /* ignorujemy */ }
+      }
       ov.hidden = !this._inbOpen;
       if (!this._inbOpen) return;
       const sig = JSON.stringify([d.groups.map(g => [g.title, g.kind, g.chg.map(([k, p]) => k + p.proposed + p.current)]), d.notes.map(e => [e.id, e.read]), d.auto]);
@@ -3087,7 +3102,6 @@
       };
       const prop = d.groups.map((g, i) => {
         const why = [...new Set(g.items.map(([, p]) => clean(p.reason)).filter(Boolean))].map(esc).join('<br>');
-        if (g.kind === 'skip') return `<div class="inb-card p-skip"><div class="inb-r"><span class="inb-t">${g.icon} ${esc(g.title)}</span><span class="inb-tag" style="background:#f43f5e22;color:#f43f5e">POMIJAM</span></div>${det('p' + i, 'Dlaczego', why)}</div>`;
         const vals = g.items.map(([k, p]) => {
           const nm = /stop/.test(k) ? 'STOP' : 'START';
           return g.chg.some(([kk]) => kk === k) ? `<span>${nm} <b>${esc(p.current || '—')} → ${esc(p.proposed)}</b></span>` : `<span>${nm} <b>${esc(p.current)}</b> <i>(bez zmian)</i></span>`;

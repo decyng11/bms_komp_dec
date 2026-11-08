@@ -1,3 +1,9 @@
+# EMS komp-dec — zmiany po 0.9.1 (jeszcze niewydane)
+
+## Dzwonek
+- Okno dzwonka wyskakuje samo na środku ekranu, gdy przyjdzie nowe powiadomienie albo plan zaproponuje nową zmianę godzin (raz na dane zdarzenie — przeglądarka pamięta, co już pokazano). Kliknięcie dzwonka nadal otwiera i zamyka okno ręcznie.
+- Propozycje oznaczone „POMIJAM” nie są już pokazywane w oknie — widać tylko to, co wymaga decyzji.
+
 # EMS komp-dec — zmiany w 0.9.1 (z 0.9.0)
 
 ## Dzwonek: propozycje i powiadomienia w panelu

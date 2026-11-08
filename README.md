@@ -53,7 +53,7 @@ Obsługiwane są taryfy strefowe (np. G12w, z weekendami i świętami) oraz ceny
 
 ## Dzwonek: propozycje i powiadomienia
 
-W nagłówku karty jest dzwonek z licznikiem. Otwiera arkusz „Do decyzji”: każda propozycja zmiany harmonogramu ma znacznik ZMIENIAM albo POMIJAM, zmianę „było → będzie”, rozwijane „Dlaczego” i osobne przyciski **Potwierdź** i **Odrzuć**. Odrzuconą propozycję integracja zapamiętuje do czasu, aż plan zaproponuje inną godzinę, a auto-stosowanie jej nie wykona. Pod propozycjami jest skrzynka powiadomień: podsumowania, alarmy i informacje z ostatnich 14 dni.
+W nagłówku karty jest dzwonek z licznikiem. Okno „Do decyzji” wyskakuje samo na środku ekranu, gdy przyjdzie nowe powiadomienie lub propozycja (można je też otworzyć dzwonkiem). Pokazywane są tylko propozycje, które coś zmieniają: każda ma znacznik ZMIENIAM, zmianę „było → będzie”, rozwijane „Dlaczego” i osobne przyciski **Potwierdź** i **Odrzuć**. Odrzuconą propozycję integracja zapamiętuje do czasu, aż plan zaproponuje inną godzinę, a auto-stosowanie jej nie wykona. Pod propozycjami jest skrzynka powiadomień: podsumowania, alarmy i informacje z ostatnich 14 dni.
 
 <p align="center"><img src="assets/screens/dzwonek.png" width="560" alt="Dzwonek: propozycje i powiadomienia"></p>
 
