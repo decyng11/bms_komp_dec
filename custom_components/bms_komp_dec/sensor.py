@@ -308,6 +308,7 @@ class BmsRuntimeSensor(BmsBaseEntity, SensorEntity):
                 "revenue": round(day.get("revenue", 0.0), 2),
                 "cost": round(day.get("cost", 0.0), 2),
                 "neg_export_kwh": round(day.get("neg_export_kwh", 0.0), 2),
+                "sums": {sc: rt.ledger.sums(dt_util.now().date(), sc) for sc in ("day", "month", "total")},
             }
         if self._key == "reserve_soc":
             res = rt.reserve()

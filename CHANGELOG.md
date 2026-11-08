@@ -9,6 +9,7 @@
 - **Świeża instalacja zbiera dane od zera.** Integracja nie importuje już historii zużycia z rekordera HA (wcześniej dociągała do 365 dni, co przy dziwnych licznikach dawało nierealne dni). Pierwsza prognoza zużycia pojawia się po 5 pełnych dniach, profil godzinowy po 3. Do tego czasu planer działa bez prognozy zużycia. Import można przywrócić stałą `BACKFILL_FROM_RECORDER` w `load_forecast.py`. Już zapisane dane zostają bez zmian — można je skasować w karcie: **Diagnostyka → Zaawansowane → „Wyczyść historię zużycia”** (z oknem potwierdzenia; encja `button.bms_wyczysc_historie_zuzycia`: dni, profile godzinowe, historia prognoz i sezonowość; zbieranie startuje od zera).
 
 ## Karta
+- **Tabelka „Sprzedaż i zakup energii”** pod paskiem „Sieć”: ile sprzedałem i kupiłem w zł (dziś / miesiąc / razem), saldo i średnie ceny sprzedaży i zakupu. Dane z księgi rozliczeń (nowy atrybut `sums` sensora „EMS Bilans dziś”); ze starszą integracją tabelka się nie pokazuje.
 - **Logo Komp-Dec** w nagłówku karty zamiast napisu „Centrum Energii” (pliki w `assets/`).
 - **Tabela cen zakupu:** kolory odwrócone względem sprzedaży (najtańsza godzina zielona, najdroższa czerwona).
 - **Wykresy godzinowe dziś i jutro:** wartości w Wh nad słupkami (poziomo na szerokim ekranie, pionowo na wąskim).

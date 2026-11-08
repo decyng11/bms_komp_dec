@@ -165,4 +165,17 @@ asyncio.run(b.async_press())
 check("przycisk czyści historię", lf.days == {}, lf.days)
 check("encja przycisku: button.bms_wyczysc_historie_zuzycia", getattr(b, "_key", "") == "wyczysc_historie_zuzycia")
 
+# ---- 10. księga: sumy dzień / miesiąc / razem (tabelka „Sprzedałem / Kupiłem” na karcie)
+from custom_components.bms_komp_dec import ledger as ldg
+hass = stubs.FakeHass(); L = ldg.Ledger(hass)
+L.days = {"2026-10-31": {"export_kwh": 5.0, "import_kwh": 1.0, "revenue": 2.0, "cost": 0.7, "neg_export_kwh": 0.0},
+          "2026-11-06": {"export_kwh": 3.0, "import_kwh": 2.0, "revenue": 1.5, "cost": 1.2, "neg_export_kwh": 0.2},
+          "2026-11-07": {"export_kwh": 2.8, "import_kwh": 3.5, "revenue": 1.15, "cost": 2.38, "neg_export_kwh": 0.0}}
+d7 = date(2026, 11, 7)
+sd, sm, st_ = L.sums(d7, "day"), L.sums(d7, "month"), L.sums(d7, "total")
+check("sums day", abs(sd["revenue"] - 1.15) < 1e-6 and abs(sd["cost"] - 2.38) < 1e-6 and abs(sd["net"] + 1.23) < 1e-6, sd)
+check("sums month = tylko listopad", abs(sm["revenue"] - 2.65) < 1e-6 and abs(sm["cost"] - 3.58) < 1e-6 and abs(sm["export_kwh"] - 5.8) < 1e-6, sm)
+check("sums total = cała księga", abs(st_["revenue"] - 4.65) < 1e-6 and abs(st_["net"] - (4.65 - 4.28)) < 1e-6, st_)
+check("sums dla dnia bez danych = zera", L.sums(date(2026, 11, 8), "day")["net"] == 0.0)
+
 print(f"DAYTOTALS PASS={PASS} FAIL={FAIL}")

@@ -4047,7 +4047,29 @@
             <div class="pl-bar" style="position:relative;overflow:visible;"><div style="width:${socNow.toFixed(0)}%;background:#34c759;"></div>${hasFl ? `<span title="próg odcięcia falownika ${Math.round(flr)}%" style="position:absolute;top:-2px;bottom:-2px;left:${flr.toFixed(1)}%;width:2px;background:var(--red);"></span>` : ''}</div>
             <div class="pl-n">${unit > 0 ? '0 — ' + unit.toFixed(1) + ' kWh · ' : ''}${note}${flNote}</div></div>`;
         })() +
-        row('🔌', 'Sieć: eksport względem importu', exp, Math.max(exp, imp), 'kWh', '#af52de', `import ${imp.toFixed(1)} kWh` + (selfSuff != null ? ` · samowystarczalność ${Math.round(selfSuff)}%` : ''));
+        row('🔌', 'Sieć: eksport względem importu', exp, Math.max(exp, imp), 'kWh', '#af52de', `import ${imp.toFixed(1)} kWh` + (selfSuff != null ? ` · samowystarczalność ${Math.round(selfSuff)}%` : '')) +
+        this._moneyTableHtml();
+    }
+
+    // Tabelka „Sprzedaż i zakup energii”: dziś / miesiąc / razem (kwoty z księgi rozliczeń, sensor „EMS Bilans dziś”).
+    _moneyTableHtml() {
+      const st = this._hass && this._hass.states[this._eid('sensor', 'profit_today')];
+      const sums = st && st.attributes && st.attributes.sums;
+      if (!sums || !sums.day) return '';
+      const cols = [['Dziś', sums.day], ['Miesiąc', sums.month || {}], ['Razem', sums.total || {}]];
+      const money = (v, sign) => { const n = Number(v); if (!isFinite(n)) return '—'; const a = Math.abs(n); const t = a >= 1000 ? String(Math.round(a)).replace(/\B(?=(\d{3})+(?!\d))/g, '\u00a0') : a.toFixed(2).replace('.', ','); return (sign ? (n < 0 ? '−' : '+') : '') + t + ' zł'; };
+      const avg = (kwh, zl) => (Number(kwh) > 0.05 ? (Number(zl) / Number(kwh)).toFixed(2).replace('.', ',') : '—');
+      const td = (c, st2) => `<td style="text-align:right;padding:7px 0;border-top:0.5px solid rgba(128,128,128,.3);${st2 || ''}">${c}</td>`;
+      const lab = (t, st2) => `<td style="text-align:left;padding:7px 0;border-top:0.5px solid rgba(128,128,128,.3);${st2 || ''}">${t}</td>`;
+      const mut = 'color:var(--muted);';
+      return `<div class="pl-row" data-role="money-table"><div class="pl-h"><span>💰 Sprzedaż i zakup energii</span></div>
+        <table style="width:100%;border-collapse:collapse;font-size:13px;margin-top:6px;">
+          <tr><th style="text-align:left;font-weight:400;${mut}"></th>${cols.map(([n]) => `<th style="text-align:right;font-weight:400;${mut}">${n}</th>`).join('')}</tr>
+          <tr>${lab('Sprzedałem')}${cols.map(([, d]) => td(money(d.revenue), 'color:#34c759;')).join('')}</tr>
+          <tr>${lab('Kupiłem')}${cols.map(([, d]) => td(money(d.cost), 'color:#ff9f0a;')).join('')}</tr>
+          <tr>${lab('<b style="font-weight:500;">Saldo</b>')}${cols.map(([, d]) => td(money(d.net, true), `font-weight:500;color:${Number(d.net) < 0 ? '#ff453a' : '#34c759'};`)).join('')}</tr>
+          <tr>${lab('Śr. cena sprz. / zakup', mut)}${cols.map(([, d]) => td(`${avg(d.export_kwh, d.revenue)} / ${avg(d.import_kwh, d.cost)}`, mut)).join('')}</tr>
+        </table></div>`;
     }
   }
 

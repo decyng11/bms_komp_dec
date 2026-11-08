@@ -100,6 +100,23 @@ class Ledger:
     def total_net(self) -> float:
         return sum(self.net(v) for v in self.days.values())
 
+    def sums(self, d: date | None = None, scope: str = "day") -> dict[str, float]:
+        """Sumy przychodu/kosztu/kWh dla dnia, miesiąca lub całej księgi (scope: day|month|total)."""
+        if scope == "day":
+            rows = [self.days.get(d.isoformat())] if d else []
+        elif scope == "month" and d:
+            prefix = f"{d.year:04d}-{d.month:02d}-"
+            rows = [v for k, v in self.days.items() if k.startswith(prefix)]
+        else:
+            rows = list(self.days.values())
+        out = _empty_day()
+        for v in rows:
+            if v:
+                for f in out:
+                    out[f] += v.get(f, 0.0)
+        out["net"] = out["revenue"] - out["cost"]
+        return {k: round(x, 4) for k, x in out.items()}
+
     def history(self, n: int = 31) -> list[dict[str, Any]]:
         out = []
         for k in sorted(self.days)[-n:]:
