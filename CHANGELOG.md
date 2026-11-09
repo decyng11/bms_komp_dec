@@ -7,6 +7,7 @@
 - Działa tylko na Deye. Sufit i limit są zwykłymi encjami `number` (m.in. do użycia w automatyzacjach).
 
 ## Poprawki
+- **Ładowanie z sieci zatwierdzone w trakcie okna nie włączało się** (np. propozycja 05:00–06:00 zatwierdzona o 05:13): reguły łapały tylko dokładną minutę startu. Teraz start jest nadrabiany raz na okno (także po restarcie HA); gdy okno trwa, a bateria się nie ładuje, przychodzi ostrzeżenie z progiem startu i prądem z falownika.
 - Propozycja okna ładowania z sieci przy niemal zerowym doładowaniu („Doładuj ~0.0 kWh”) ma teraz uczciwy opis: okno ma tylko utrzymać SOC przy celu, a nie doładować.
 - Odrzucona propozycja jest zapominana, gdy plan przestaje ją proponować, więc ta sama godzina zaproponowana ponownie za kilka dni znów trafi do decyzji (wcześniej mogła zostać ukryta na stałe).
 

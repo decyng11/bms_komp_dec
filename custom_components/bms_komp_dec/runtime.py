@@ -725,8 +725,48 @@ class BmsRuntime:
             due.update((t0 + timedelta(minutes=i)).strftime("%H:%M") for i in range(gap))
         return due
 
+    GC_WINDOWS = (("start_grid_charge", "stop_grid_charge", "ladowanie_z_sieci_1"),
+                  ("start_grid_charge_2", "stop_grid_charge_2", "ladowanie_z_sieci_2"))
+
+    async def _catchup_grid_windows(self, now: datetime) -> None:
+        """Okno ładowania z sieci już trwa, a jego START nie zadziałał (np. zatwierdzono propozycję o 05:13 dla okna 05:00–06:00,
+        albo restart HA w trakcie okna) — włącz ładowanie teraz, raz na okno. Reguły czasowe łapią tylko dokładną minutę startu."""
+        day_ok = self.day_info(now)[0]
+        if not day_ok:
+            return
+        for start_key, stop_key, sw_key in self.GC_WINDOWS:
+            try:
+                sw = self.hass.states.get(find_eid(self.hass, "switch", sw_key))
+                ts = self.hass.states.get(find_eid(self.hass, "time", start_key))
+                te = self.hass.states.get(find_eid(self.hass, "time", stop_key))
+                if not sw or sw.state != "on" or not ts or not te:
+                    continue
+                s_hm, e_hm = str(ts.state)[:5], str(te.state)[:5]
+                if "00:00" in (s_hm, e_hm) or ":" not in s_hm or ":" not in e_hm or s_hm == e_hm:
+                    continue
+                cur = now.strftime("%H:%M")
+                inside = (s_hm <= cur < e_hm) if s_hm < e_hm else (cur >= s_hm or cur < e_hm)
+                if not inside or cur == s_hm:
+                    continue                      # poza oknem albo minuta startu (obsłuży zwykła reguła)
+                stamp = f"{now.date().isoformat()} {s_hm}-{e_hm}"
+                done = self.state.setdefault("gc_catchup", {})
+                if done.get(start_key) == stamp or self.grid_charging_on():
+                    done[start_key] = stamp       # już ładuje (np. ręcznie / „Wymuś”) — nic nie rób
+                    continue
+                done[start_key] = stamp
+                self._save_state()
+                self.fired[start_key] = now
+                await self.run_command("wlacz_ladowanie_siec", source=f"harmonogram {start_key} (nadrobienie {cur})", enforce_guard=False)
+                await self.monitor.notifier.send(
+                    "grid_charge", "🔌 EMS: start ładowania z sieci (w trakcie okna)",
+                    f"{cur} — okno {s_hm}–{e_hm} już trwało, więc włączono ładowanie od razu.", key=f"gc:{start_key}", level="info")
+            except Exception as err:  # noqa: BLE001
+                _LOGGER.error("EMS SCHEDULE: nadrabianie okna %s: %s", start_key, err)
+
     async def process_rules(self, now: datetime, dry_run: bool = False) -> dict[str, Any]:
         now = dt_util.as_local(now)
+        if not dry_run:
+            await self._catchup_grid_windows(now)
         now_hm = now.strftime("%H:%M")
         due = self.due_times(now)
         soc_val = self.soc()
