@@ -430,7 +430,7 @@ class Monitor:
         st = rt.state.setdefault("gc_stall", {})
         tgt = (rt.state.get("grid_target_plan") or {}).get("target")
         soc = rt.soc()
-        if not isinstance(tgt, (int, float)) or soc is None or not rt.grid_charging_on() or soc >= float(tgt) - 1.0:
+        if not isinstance(tgt, (int, float)) or soc is None or not rt.grid_charging_on() or not rt.in_grid_charge_window(now) or soc >= float(tgt) - 1.0:
             st.clear()
             return
         bp = (rt.coordinator.data or {}).get("battery_power")

@@ -728,6 +728,22 @@ class BmsRuntime:
     GC_WINDOWS = (("start_grid_charge", "stop_grid_charge", "ladowanie_z_sieci_1"),
                   ("start_grid_charge_2", "stop_grid_charge_2", "ladowanie_z_sieci_2"))
 
+    def in_grid_charge_window(self, now: datetime) -> bool:
+        """Czy teraz trwa zaplanowane okno ładowania z sieci (zestaw włączony, Start–Stop ustawione i różne od 00:00)."""
+        cur = dt_util.as_local(now).strftime("%H:%M")
+        for start_key, stop_key, sw_key in self.GC_WINDOWS:
+            sw = self.hass.states.get(find_eid(self.hass, "switch", sw_key))
+            ts = self.hass.states.get(find_eid(self.hass, "time", start_key))
+            te = self.hass.states.get(find_eid(self.hass, "time", stop_key))
+            if not sw or sw.state != "on" or not ts or not te:
+                continue
+            s_hm, e_hm = str(ts.state)[:5], str(te.state)[:5]
+            if "00:00" in (s_hm, e_hm) or ":" not in s_hm or ":" not in e_hm or s_hm == e_hm:
+                continue
+            if (s_hm <= cur < e_hm) if s_hm < e_hm else (cur >= s_hm or cur < e_hm):
+                return True
+        return False
+
     async def _catchup_grid_windows(self, now: datetime) -> None:
         """Okno ładowania z sieci już trwa, a jego START nie zadziałał (np. zatwierdzono propozycję o 05:13 dla okna 05:00–06:00,
         albo restart HA w trakcie okna) — włącz ładowanie teraz, raz na okno. Reguły czasowe łapią tylko dokładną minutę startu."""

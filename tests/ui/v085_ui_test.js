@@ -56,7 +56,7 @@ const ST = {
   // ---------- Zysk i log: oszczędności i trafność
   await tab(e, 'log'); await sleep(1200);
   const sv = await sr(e, '#exSavBox');
-  ok(sv && /Koszt energii/.test(sv) && /40,00 zł/.test(sv) && /95,50 zł/.test(sv) && /70,20 zł/.test(sv) && /\+55,50 zł/.test(sv) && /\+30,20 zł/.test(sv), 'oszczędności: 30 dni, trzy warianty i różnice');
+  ok(sv && /Zapłaciłeś/.test(sv) && /40,00 zł/.test(sv) && /95,50 zł/.test(sv) && /70,20 zł/.test(sv) && /\+55,50 zł/.test(sv) && /\+30,20 zł/.test(sv), 'oszczędności: 30 dni, trzy warianty i różnice');
   ok(await e.q(() => window.__insN === 1), 'jedno wywołanie insights_get');
   await e.q(() => __el.shadowRoot.querySelector('#exSavBox [data-exi="period"][data-p="month"]').click()); await sleep(200);
   ok(/\+25,00 zł/.test(await sr(e, '#exSavBox')), 'zmiana okresu: ten miesiąc');

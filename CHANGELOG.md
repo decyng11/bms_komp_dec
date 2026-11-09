@@ -1,3 +1,11 @@
+# EMS komp-dec — zmiany po 0.9.2 (jeszcze niewydane)
+
+## Oszczędności: prostsze opisy
+- Kafelki „Oszczędności” mają zrozumiałe nazwy: „Zapłaciłeś”, „Bez baterii zapłaciłbyś”, „Z samą baterią (bez EMS)”, „Zaoszczędziłeś”, „Z tego zasługa EMS”; krótszy opis pod spodem (3 porównywane sytuacje).
+
+## Poprawki
+- Ostrzeżenie „okno ładowania trwa, a bateria się nie ładuje” działa tylko w zaplanowanym oknie (nie ostrzega, gdy TOU jest wyłączony na stałe).
+
 # EMS komp-dec — zmiany w 0.9.2 (z 0.9.1)
 
 ## Moc ładowania z sieci i ochrona przyłącza

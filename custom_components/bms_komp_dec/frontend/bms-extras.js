@@ -545,11 +545,11 @@
             <div class="chart-empty">Brak danych za ten okres. Oszczędności liczą się od dnia instalacji wersji 0.8.5 — pierwszy pełny dzień pojawi się jutro.</div>`;
         }
         const tiles = [
-          exTile('Koszt energii', cost(p.actual), 'faktycznie: zakup − sprzedaż'),
-          exTile('Bez baterii', cost(p.nobat), 'ten sam dom i PV, bez magazynu'),
-          exTile('Bateria bez planera', cost(p.simple), 'tylko autokonsumpcja PV'),
-          exTile('Oszczędność', `<span style="color:${col(p.vs_nobat)}">${exMoney(p.vs_nobat)}</span>`, 'bateria i planer względem braku baterii'),
-          exTile('W tym planer', `<span style="color:${col(p.vs_simple)}">${exMoney(p.vs_simple)}</span>`, 'względem baterii bez planera'),
+          exTile('Zapłaciłeś', cost(p.actual), 'zakup z sieci minus to, co sprzedałeś'),
+          exTile('Bez baterii zapłaciłbyś', cost(p.nobat), 'ten sam dom i PV, ale bez magazynu'),
+          exTile('Z samą baterią (bez EMS)', cost(p.simple), 'bateria ładuje się tylko z nadwyżki PV'),
+          exTile('Oszczędność', `<span style="color:${col(p.vs_nobat)}">${exMoney(p.vs_nobat)}</span>`, 'dzięki baterii i EMS, wobec domu bez baterii'),
+          exTile('Z tego zasługa EMS', `<span style="color:${col(p.vs_simple)}">${exMoney(p.vs_simple)}</span>`, 'różnica wobec baterii działającej „samej” (minus = EMS wypadł gorzej)'),
         ];
         const daily = (sv.daily || []).filter((d) => d.complete || d.partial).slice(-30);
         let bars = '';
@@ -568,9 +568,9 @@
         const pr = sv.params || {};
         return `<div class="ex-nav" style="justify-content:flex-start;flex-wrap:wrap;gap:6px;">${pills}</div>
           <div class="ex-tiles">${tiles.join('')}</div>${bars}
-          <div class="ex-note">Z ${p.days} ${p.days === 1 ? 'dnia' : 'dni'}${sv.since ? `, dane od ${exEsc(exDay(sv.since))}` : ''}. Koszt to zakup z sieci minus sprzedaż, z cenami z każdej godziny, bez opłat stałych.
-            „Bez baterii”: dom bierze z sieci to, czego nie pokryje PV, a nadwyżkę oddaje. „Bateria bez planera”: bateria ładuje się tylko z nadwyżki PV i oddaje ją do domu
-            (pojemność ${exFmt(pr.cap, 1)} kWh, sprawność ${exPct((exNum(pr.eff) || 0) * 100)}, próg ${exPct(pr.floor)}). Dzisiejszy dzień jest liczony do bieżącej godziny.</div>`;
+          <div class="ex-note">Z ${p.days} ${p.days === 1 ? 'dnia' : 'dni'}${sv.since ? `, dane od ${exEsc(exDay(sv.since))}` : ''}. Dzisiejszy dzień liczony do bieżącej godziny. Ceny godzinowe, bez opłat stałych.
+            Porównuję 3 sytuacje: dom bez baterii · bateria bez sterowania · bateria z EMS (Twoja).
+            Bateria ${exFmt(pr.cap, 1)} kWh, sprawność ${exPct((exNum(pr.eff) || 0) * 100)}, próg ${exPct(pr.floor)}.</div>`;
       },
       _exAccHtml() {
         const s = this._exS().ins;

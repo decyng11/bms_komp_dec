@@ -11,6 +11,8 @@ async def main():
     async def fake_send(kind, title, msg, **kw): sent.append(kind); return True
     rt.monitor.notifier.send = fake_send
     rt.state["grid_target_plan"] = {"target": 40}
+    hass.states.set("time.bms_start_grid_charge", "05:00:00"); hass.states.set("time.bms_stop_grid_charge", "06:00:00")
+    hass.states.set("switch.bms_ladowanie_z_sieci_1", "on")
     st = {"soc": 29.0, "on": True, "bp": -890.0}
     rt.soc = lambda: st["soc"]
     rt.grid_charging_on = lambda: st["on"]
@@ -32,6 +34,11 @@ async def main():
     check("SOC przy celu: cicho", sent == [], sent)
     await step(50, soc=29.0, on=False); await step(58)
     check("okno wyłączone: cicho", sent == [], sent)
+    sent.clear(); rt.state["gc_stall"] = {}
+    await step(100 - 100 + 0, soc=29.0, on=True)   # reset
+    hass.states.set("time.bms_start_grid_charge", "22:00:00"); hass.states.set("time.bms_stop_grid_charge", "23:00:00")
+    await step(0); await step(10)
+    check("TOU wyłączony na stałe, ale poza oknem: cicho", sent == [], sent)
     print(f"GCSTALL PASS={common.PASS} FAIL={common.FAIL}")
     sys.exit(1 if common.FAIL else 0)
 asyncio.run(main())
