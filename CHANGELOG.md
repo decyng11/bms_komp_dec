@@ -1,4 +1,4 @@
-# EMS komp-dec — zmiany po 0.9.1 (jeszcze niewydane)
+# EMS komp-dec — zmiany w 0.9.2 (z 0.9.1)
 
 ## Moc ładowania z sieci i ochrona przyłącza
 - Dwa nowe ustawienia w zakładce EMS (każdy ustawia własne wartości, domyślnie 0 = wyłączone, EMS niczego wtedy nie zapisuje):
