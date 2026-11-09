@@ -3,15 +3,26 @@
 Wszystko to SZACUNKI z dziennych liczników (BatteryStats.days: pv, load, imp, exp, chg, dis) i księgi rozliczeń (Ledger.days)."""
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, timedelta
 from typing import Any
 
-SCOPES = ("day", "month", "total")
+SCOPES = ("day", "week", "month", "prev_month", "year", "total")
+
+
+def prev_month_prefix(d: date) -> str:
+    last = d.replace(day=1) - timedelta(days=1)
+    return f"{last.year:04d}-{last.month:02d}-"
 
 
 def _keys(days: dict, d: date, scope: str, start: date | None = None) -> list[str]:
-    if scope == "week" and start is not None:
+    if scope == "week":
+        start = start or (d - timedelta(days=d.weekday()))        # tydzień: od poniedziałku do dziś
         return [k for k in days if start.isoformat() <= k <= d.isoformat()]
+    if scope == "prev_month":
+        pre = prev_month_prefix(d)
+        return [k for k in days if k.startswith(pre)]
+    if scope == "year":
+        return [k for k in days if k.startswith(f"{d.year:04d}-")]
     if scope == "day":
         return [d.isoformat()] if d.isoformat() in days else []
     if scope == "month":

@@ -45,6 +45,8 @@ Karta pokazuje prognozę po korekcie z zakresem i podpowiedzią z wartością su
 
 Zużycie domu jest liczone z historii zbieranej od zera, osobno dla dni powszednich i weekendów, z poprawką na temperaturę i sezon. Pierwsza prognoza pojawia się po 5 pełnych dniach, profil godzinowy po 3. Podejrzane sumy dnia (np. powtórzony wynik z poprzedniej doby) są oznaczane i pomijane. Tabela „Ostatnie 14 dni” pokazuje rzeczywiste zużycie i prognozę.
 
+**Samostrojenie.** Raz na dobę (po 6:00) EMS przelicza współczynniki temperatury i sezonu oraz sprawdza kilkadziesiąt wariantów modelu na Twojej historii: dla każdego z ostatnich 30 dni liczy prognozę tylko z danych sprzed tego dnia i porównuje z wynikiem. Wariant zmienia się tylko wtedy, gdy jest o co najmniej 3% dokładniejszy od standardowego. Wynik widać pod tabelą „Ostatnie 14 dni”. Tak samo EMS dobiera okno uczenia (7, 14 albo 30 dni) dla prognozy PV.
+
 ## Ceny i taryfy
 
 Obsługiwane są taryfy strefowe (np. G12w, z weekendami i świętami) oraz ceny dynamiczne godzinowe z RCE i Pstryka. Tabele cen sprzedaży i zakupu pokazują dziś i jutro, najtańsze i najdroższe godziny są zaznaczone kolorem. Ceny w planie są godzinowe.

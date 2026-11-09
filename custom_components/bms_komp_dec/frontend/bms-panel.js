@@ -983,7 +983,8 @@
       const historyDays = st.attributes.history_days || 0;
       const profileDays = st.attributes.profiles_days || 0;
 
-      const key = JSON.stringify({ d: days, c: confidence, m: mape, h: historyDays, p: profileDays });
+      const tuning = st.attributes.tuning || null;
+      const key = JSON.stringify({ d: days, c: confidence, m: mape, h: historyDays, p: profileDays, t: tuning });
       if (this._lastLoadConsKey === key) return;
       this._lastLoadConsKey = key;
 
@@ -1013,10 +1014,22 @@
       }
 
       this._drawLoadConsumptionChart(canvas, days, confidence);
-      this._safe(() => this._renderLoadHistTable(st.attributes.history_14d, st.attributes.forecast_bias));
+      this._safe(() => this._renderLoadHistTable(st.attributes.history_14d, st.attributes.forecast_bias, tuning));
     }
 
-    _renderLoadHistTable(rows, bias) {
+    _tuneNote(t) {
+      if (!t || !t.at) return '';
+      const f1 = (v) => String(Number(v).toFixed(1)).replace('.', ',');
+      const dt = new Date(t.at + 'T12:00:00'); const when = `${dt.getDate()}.${String(dt.getMonth() + 1).padStart(2, '0')}`;
+      if (!t.n) return `<div class="lh-note" id="loadTune">🎯 Samostrojenie: ${t.note || 'zbieram historię'} (sprawdzono ${when}).</div>`;
+      const better = t.mae < t.mae_default - 0.005;
+      const txt = better
+        ? `wariant „${t.variant}” — średni błąd na ostatnich ${t.n} dniach ${f1(t.mae)} kWh zamiast ${f1(t.mae_default)} kWh (trafienia ±20%: ${t.hit}% zamiast ${t.hit_default}%)`
+        : `zostaje wariant standardowy — żaden z ${t.tried} sprawdzonych nie był wyraźnie lepszy (błąd ${f1(t.mae_default)} kWh na ostatnich ${t.n} dniach)`;
+      return `<div class="lh-note" id="loadTune">🎯 Samostrojenie (${when}): ${txt}. EMS co dobę sprawdza kilka wariantów na Twojej historii i wybiera ten, który najlepiej przewidziałby ostatnie dni.</div>`;
+    }
+
+    _renderLoadHistTable(rows, bias, tune) {
       const box = this._el('loadHistTable'); if (!box) return;
       if (!Array.isArray(rows) || !rows.length) { box.innerHTML = '<div class="lh-note">Brak historii prognoz (zbieram dane).</div>'; return; }
       const wd = ['pn', 'wt', 'śr', 'czw', 'pt', 'sob', 'nd'];
@@ -1044,6 +1057,7 @@
       }).join('');
       const sum = n ? `<div class="lh-sum"><span>Średni błąd: <b>${f1(sumAbs / n)} kWh</b></span><span>Obciążenie: <b>${sumBias / n > 0 ? '+' : ''}${f1(sumBias / n)} kWh</b> ${sumBias / n > 0.5 ? '(model zawyża)' : sumBias / n < -0.5 ? '(model zaniża)' : ''}</span><span>Trafione ±20%: <b>${hit}/${n}</b></span></div>` : '';
       box.innerHTML = `${sum}<table class="lh-tbl"><thead><tr><th>Dzień</th><th class="num">Rzeczywiste</th><th class="num">Prognoza</th><th class="num">Różnica</th><th class="num">Temp.</th></tr></thead><tbody>${body}</tbody></table><div class="lh-note">Prognoza = wydana dzień wcześniej. * = brak zapisanej prognozy z tamtego dnia, pokazano model liczony wstecz (nie wlicza się do podsumowania). 🎌 = święto.${rows.some(x => x.suspect) ? ' ⚠ = podejrzana suma dnia (przepisany wynik poprzedniego dnia albo niepełne dane) — pominięta w modelu i podsumowaniu.' : ''}${typeof bias === 'number' && Math.abs(bias - 1) >= 0.02 ? ` Korekta obciążenia modelu: <b>×${bias.toFixed(2).replace('.', ',')}</b> (z ostatnich 14 dni).` : ''}</div>`;
+      box.insertAdjacentHTML('beforeend', this._tuneNote(tune));
     }
 
     _roundRect(ctx, x, y, w, h, r) {
@@ -4308,14 +4322,13 @@
       const st = this._hass && this._hass.states[this._eid('sensor', 'profit_today')];
       const sums = st && st.attributes && st.attributes.sums;
       if (!sums || !sums.day) return '';
-      const cols = [['Dziś', sums.day], ['Miesiąc', sums.month || {}], ['Razem', sums.total || {}]];
-      const money = (v, sign) => { const n = Number(v); if (!isFinite(n)) return '—'; const a = Math.abs(n); const t = a >= 1000 ? String(Math.round(a)).replace(/\B(?=(\d{3})+(?!\d))/g, '\u00a0') : a.toFixed(2).replace('.', ','); return (sign ? (n < 0 ? '−' : '+') : '') + t + ' zł'; };
-      const avg = (kwh, zl) => (Number(kwh) > 0.05 ? (Number(zl) / Number(kwh)).toFixed(2).replace('.', ',') : '—');
+      const cols = [['Dziś', sums.day], ['Tydz.', sums.week || {}], ['Miesiąc', sums.month || {}], ['Poprz. m.', sums.prev_month || {}], ['Rok', sums.year || sums.total || {}]];
+      const money = (v, sign) => { const n = Number(v); if (!isFinite(n)) return '—'; const a = Math.abs(n); const t = a >= 1000 ? String(Math.round(a)).replace(/\B(?=(\d{3})+(?!\d))/g, '\u00a0') : a.toFixed(2).replace('.', ','); return (sign ? (n < 0 ? '−' : '+') : '') + t; };
       const td = (c, st2) => `<td style="text-align:right;padding:7px 0;border-top:0.5px solid rgba(128,128,128,.3);${st2 || ''}">${c}</td>`;
       const lab = (t, st2) => `<td style="text-align:left;padding:7px 0;border-top:0.5px solid rgba(128,128,128,.3);${st2 || ''}">${t}</td>`;
       const mut = 'color:var(--muted);';
       const ex = (st.attributes && st.attributes.extras) || {};
-      const keys = ['day', 'month', 'total'];
+      const keys = ['day', 'week', 'month', 'prev_month', 'year'];
       const sv = (k) => ex[k] && ex[k].savings;
       const hasSv = keys.some(k => sv(k) && sv(k).saving != null);
       const pc = (v) => String(Math.round(Number(v) || 0));
@@ -4328,13 +4341,12 @@
           <div style="font-size:12px;margin-top:4px;display:flex;gap:12px;flex-wrap:wrap;"><span><span style="color:#ffcc00;">■</span> PV ${pc(sp.pv_pct)}%</span><span><span style="color:#34c759;">■</span> bateria ${pc(sp.battery_pct)}%</span><span><span style="color:#af52de;">■</span> sieć ${pc(sp.grid_pct)}%</span></div></div>` : '';
       const tf = ex.month && ex.month.tariff;
       const tariffHtml = tf ? `<div data-role="tariff" style="font-size:12px;margin-top:10px;${mut}">Pobór z sieci w tym miesiącu: drogie godziny ${Number(tf.peak_kwh).toFixed(1).replace('.', ',')} kWh (${pc(tf.peak_pct)}%) · tanie ${Number(tf.offpeak_kwh).toFixed(1).replace('.', ',')} kWh (${pc(tf.offpeak_pct)}%)</div>` : '';
-      return `<div class="pl-row" data-role="money-table"><div class="pl-h"><span>💰 Sprzedaż i zakup energii</span></div>
-        <table style="width:100%;border-collapse:collapse;font-size:13px;margin-top:6px;">
+      return `<div class="pl-row" data-role="money-table"><div class="pl-h"><span>💰 Sprzedaż i zakup energii</span><small style="color:var(--muted);font-weight:400;">kwoty w zł</small></div>
+        <table style="width:100%;border-collapse:collapse;font-size:12.5px;margin-top:6px;">
           <tr><th style="text-align:left;font-weight:400;${mut}"></th>${cols.map(([n]) => `<th style="text-align:right;font-weight:400;${mut}">${n}</th>`).join('')}</tr>
           <tr>${lab('Sprzedałem')}${cols.map(([, d]) => td(money(d.revenue), 'color:#34c759;')).join('')}</tr>
           <tr>${lab('Kupiłem')}${cols.map(([, d]) => td(money(d.cost), 'color:#ff9f0a;')).join('')}</tr>
           <tr>${lab('<b style="font-weight:500;">Saldo</b>')}${cols.map(([, d]) => td(money(d.net, true), `font-weight:500;color:${Number(d.net) < 0 ? '#ff453a' : '#34c759'};`)).join('')}</tr>
-          <tr>${lab('Śr. cena sprz. / zakup', mut)}${cols.map(([, d]) => td(`${avg(d.export_kwh, d.revenue)} / ${avg(d.import_kwh, d.cost)}`, mut)).join('')}</tr>
           ${hasSv ? `<tr>${lab('Bez PV i baterii (szac.)', mut)}${keys.map(k => td(sv(k) && sv(k).without_cost != null ? money(sv(k).without_cost) : '—', mut)).join('')}</tr>
           <tr>${lab('Oszczędzam (szac.)')}${keys.map(k => td(sv(k) && sv(k).saving != null ? money(sv(k).saving, true) : '—', 'font-weight:500;color:#34c759;')).join('')}</tr>` : ''}
         </table>${splitHtml}${tariffHtml}</div>`;
@@ -4352,7 +4364,7 @@
   // =====================================================================
   // Wersja tego pliku (ustawiana skryptem pakującym z manifest.json). Każdy moduł niesie tę samą w install.version:
   // gdy się różnią, przeglądarka podała starą kopię modułu z pamięci podręcznej.
-  const CARD_VERSION = '0.9.2';
+  const CARD_VERSION = '0.9.3';
   const MOD_TIMEOUT_MS = 20000;
   const MODULES = {
     diag:   { file: 'bms-diag.js',   global: '__bmsDiagInstall',   contract: 1, label: 'Diagnostyki', p: null, ready: false, err: '', got: '' },

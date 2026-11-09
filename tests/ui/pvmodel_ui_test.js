@@ -57,6 +57,11 @@ const sleep = (ms) => new Promise(r => setTimeout(r, ms));
   ok((html.match(/>—</g) || []).length >= 4, 'horyzonty bez danych po korekcie mają myślnik');
   const html0 = await e.q((ac) => { const x = Object.assign({}, ac); delete x.pv_by_horizon; __el._exS().ins.data = { accuracy: x, pv_correction_on: true, savings: {} }; return __el._exAccHtml(); }, ac);
   ok(!/pv-horizon/.test(html0), 'starszy backend (bez pv_by_horizon): brak tabeli, brak błędu');
+  // samostrojenie PV: notatka pod tabelą
+  const acT = Object.assign({}, ac, { pv_by_horizon: ac.pv_by_horizon.map((r) => r.h === 1 ? Object.assign({}, r, { tune: { window: 14, mode: 'ewma', mae: 1.1, mae_default: 1.6, n: 20 } }) : Object.assign({}, r, { tune: { window: 30, mode: 'median', mae: 1.2, mae_default: 1.2, n: 20 } })) });
+  const htmlT = await e.q((ac) => { __el._exS().ins.data = { accuracy: ac, pv_correction_on: true, savings: {} }; return __el._exAccHtml(); }, acT);
+  ok(/data-role="pv-tune"/.test(htmlT) && /jutro: 14 dni, świeższe dni ważniejsze \(błąd 1,10 kWh zamiast 1,60 kWh\)/.test(htmlT.replace(/\s+/g, ' ')), 'notatka samostrojenia PV: wybrany wariant dla „jutro” i błędy');
+  ok(!/data-role="pv-tune"/.test(html), 'bez wyniku strojenia: brak notatki');
   await b.close();
   console.log(fails ? `FAILS ${fails}` : 'ALL OK'); process.exit(fails ? 1 : 0);
 })();

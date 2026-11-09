@@ -1,4 +1,12 @@
-# EMS komp-dec — zmiany po 0.9.2 (jeszcze niewydane)
+# EMS komp-dec — zmiany w 0.9.3 (z 0.9.2)
+
+## Prognozy: codzienne uczenie i samostrojenie
+- **Prognoza zużycia**: współczynniki temperatury i sezonu są przeliczane codziennie (wcześniej tylko przy starcie HA). Raz na dobę EMS sprawdza kilkadziesiąt wariantów modelu (waga ostatnich dni, wpływ tego samego dnia tygodnia, siła poprawki temperatury, szybkość korekty błędu) na ostatnich 30 dniach — prognoza dnia X liczona tylko z danych sprzed X — i wybiera wariant, który byłby dokładniejszy o co najmniej 3%. Wynik widać pod tabelą „Ostatnie 14 dni”.
+- **Prognoza PV**: okno uczenia współczynnika (7 / 14 / 30 dni, mediana albo średnia ważona wiekiem) jest wybierane osobno dla każdego dnia do przodu tym samym testem wstecz. Notatka pod tabelą trafności w „Zysk i log”.
+
+## Sprzedaż i zakup energii
+- Tabela ma kolumny: Dziś, Tydz. (od poniedziałku), Miesiąc, Poprz. m., Rok (zamiast „Razem”). Usunięty wiersz średnich cen. Kwoty w zł podane raz w nagłówku.
+
 
 ## Oszczędności: prostsze opisy
 - Kafelki „Oszczędności” mają zrozumiałe nazwy: „Zapłaciłeś”, „Bez baterii zapłaciłbyś”, „Z samą baterią (bez EMS)”, „Zaoszczędziłeś”, „Z tego zasługa EMS”; krótszy opis pod spodem (3 porównywane sytuacje).

@@ -51,6 +51,10 @@ PV_LIVE_LO, PV_LIVE_HI = 0.5, 1.6
 PV_LIMIT_SOC = 97.0           # bateria pełna i brak eksportu → PV było ucięte, „wykonanie” nie mówi nic o prognozie
 PV_LIMIT_EXP_KWH = 0.1
 PV_DAY_LIMITED_SHARE = 0.25   # dzień, w którym tyle prognozowanej energii przypada na godziny z ucięciem, nie uczy modelu
+PV_TUNE_WINDOWS = (7, 14, 30)    # samostrojenie (0.9.3): z ilu ostatnich dni uczyć współczynnik
+PV_TUNE_MODES = ("median", "ewma")
+PV_TUNE_MIN_EVAL = 8
+PV_TUNE_MIN_GAIN = 0.03
 PV_SPREAD_DEFAULT = (0.12, 0.18, 0.25, 0.30, 0.35, 0.40, 0.45)
 
 # indeksy w koszyku godzinowym
@@ -383,6 +387,10 @@ class Insights:
 
     def _pv_pairs(self, h: int, today: date, key: str = "raw") -> list[tuple[float, float]]:
         """Pary (prognoza wydana h dni wcześniej, wykonanie) z ostatnich dni; dni z ucięciem PV pomijane."""
+        return [(f_, a_) for _, f_, a_ in self._pv_pairs_dated(h, today, key)]
+
+    def _pv_pairs_dated(self, h: int, today: date, key: str = "raw") -> list[tuple[int, float, float]]:
+        """To samo z wiekiem dnia (liczba dni wstecz od today), od najnowszego."""
         out = []
         for i in range(1, PV_MODEL_DAYS + 1):
             d = (today - timedelta(days=i)).isoformat()
@@ -399,20 +407,76 @@ class Insights:
             lim = _f(rec.get("pv_lim"))
             if lim is not None and lim > PV_DAY_LIMITED_SHARE:
                 continue
-            out.append((f_, a_))
+            out.append((i, f_, a_))
         return out
 
+    @staticmethod
+    def _pv_ratio(pairs: list[tuple[float, float]], mode: str) -> float | None:
+        """Typowy stosunek wykonanie/prognoza z par (od najnowszej): mediana albo średnia ważona wiekiem (świeższe ważą więcej)."""
+        rs = [a / f_ for f_, a in pairs if f_ > 0]
+        if not rs:
+            return None
+        if mode == "ewma":
+            w = [0.7 ** k for k in range(len(rs))]        # rs[0] = najnowsza
+            return sum(r * x for r, x in zip(rs, w)) / sum(w)
+        return _median(rs)
+
+    def _pv_factor_from(self, pairs: list[tuple[float, float]], mode: str) -> tuple[float, float] | None:
+        if len(pairs) < PV_MODEL_MIN_DAYS:
+            return None
+        med = self._pv_ratio(pairs, mode)
+        if med is None:
+            return None
+        w = min(1.0, len(pairs) / 10.0)
+        return min(PV_MODEL_HI, max(PV_MODEL_LO, 1.0 + (med - 1.0) * w)), med
+
+    def pv_tuning(self, h: int, today: date) -> dict[str, Any]:
+        """Wybór okna uczenia (7 / 14 / 30 dni) i sposobu liczenia (mediana / ważona wiekiem) dla horyzontu h na podstawie
+        „prognoz wstecz”: dla każdego dnia współczynnik liczony tylko z dni wcześniejszych. Wariant standardowy: 30 dni, mediana."""
+        key = (today.isoformat(), h)
+        cache = getattr(self, "_pv_tune_cache", None)
+        if cache is None:
+            cache = self._pv_tune_cache = {}
+        if key in cache:
+            return cache[key]
+        dated = self._pv_pairs_dated(h, today)          # najnowsze pierwsze: (wiek, f, a)
+        res: dict[str, Any] = {"window": 30, "mode": "median", "n": 0}
+        if len(dated) >= PV_MODEL_MIN_DAYS + PV_TUNE_MIN_EVAL:
+            scores: dict[tuple[int, str], float] = {}
+            for win in PV_TUNE_WINDOWS:
+                for mode in PV_TUNE_MODES:
+                    errs = []
+                    for idx, (age, f_, a_) in enumerate(dated):
+                        prior = [(pf, pa) for page, pf, pa in dated[idx + 1:] if page - age <= win]
+                        r = self._pv_factor_from(prior, mode)
+                        if r is not None:
+                            errs.append(abs(f_ * r[0] - a_))
+                    if len(errs) >= PV_TUNE_MIN_EVAL:
+                        scores[(win, mode)] = sum(errs) / len(errs)
+            dflt = scores.get((30, "median"))
+            if dflt is not None and scores:
+                best = min(scores, key=scores.get)
+                use = best if (dflt - scores[best]) >= PV_TUNE_MIN_GAIN * dflt and scores[best] < dflt else (30, "median")
+                res = {"window": use[0], "mode": use[1], "mae": round(scores[use], 2), "mae_default": round(dflt, 2),
+                       "n": len(dated)}
+        cache.clear() if len(cache) > 50 else None
+        cache[key] = res
+        return res
+
     def pv_horizon_factor(self, h: int, today: date | None = None) -> tuple[float, int, float | None]:
-        """(współczynnik, liczba dni, mediana wykonanie/prognoza) dla prognozy na h dni do przodu. Brak danych dla h → h−1."""
+        """(współczynnik, liczba dni, typowy stosunek wykonanie/prognoza) dla prognozy na h dni do przodu. Brak danych dla h → h−1.
+        Okno i sposób liczenia wybiera samostrojenie (pv_tuning)."""
         today = today or dt_util.now().date()
         h = max(0, min(PV_HORIZONS - 1, int(h)))
         for hh in range(h, -1, -1):
-            pairs = self._pv_pairs(hh, today)
-            if len(pairs) >= PV_MODEL_MIN_DAYS:
-                med = _median([a / f_ for f_, a in pairs])
-                w = min(1.0, len(pairs) / 10.0)
-                fac = min(PV_MODEL_HI, max(PV_MODEL_LO, 1.0 + (med - 1.0) * w))
-                return round(fac, 3), len(pairs), round(med, 3)
+            tun = self.pv_tuning(hh, today)
+            pairs = [(f_, a_) for age, f_, a_ in self._pv_pairs_dated(hh, today) if age <= tun["window"]]
+            r = self._pv_factor_from(pairs, tun["mode"])
+            if r is None and tun["window"] != 30:
+                pairs = self._pv_pairs(hh, today)
+                r = self._pv_factor_from(pairs, "median")
+            if r is not None:
+                return round(r[0], 3), len(pairs), round(r[1], 3)
         return 1.0, 0, None
 
     def pv_shape(self, today: date | None = None) -> tuple[list[float], int]:
@@ -541,6 +605,7 @@ class Insights:
             fac, n, med = self.pv_horizon_factor(h, today)
             out.append({"h": h, "n": len(raw), "mape": _mape(raw, 0.5), "bias": _bias(raw),
                         "n_adj": len(adj), "mape_adj": _mape(adj, 0.5), "factor": fac, "ratio": med,
+                        "tune": {k: v for k, v in self.pv_tuning(h, today).items()},
                         "spread": self.pv_spread(h, today)})
         return out
 

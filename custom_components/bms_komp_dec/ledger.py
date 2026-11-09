@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import logging
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from typing import Any
 
 from homeassistant.core import HomeAssistant
@@ -103,12 +103,21 @@ class Ledger:
         return sum(self.net(v) for v in self.days.values())
 
     def sums(self, d: date | None = None, scope: str = "day") -> dict[str, float]:
-        """Sumy przychodu/kosztu/kWh dla dnia, miesiąca lub całej księgi (scope: day|month|total)."""
+        """Sumy przychodu/kosztu/kWh dla dnia, miesiąca lub całej księgi (scope: day|week|month|prev_month|year|total)."""
         if scope == "day":
             rows = [self.days.get(d.isoformat())] if d else []
         elif scope == "month" and d:
             prefix = f"{d.year:04d}-{d.month:02d}-"
             rows = [v for k, v in self.days.items() if k.startswith(prefix)]
+        elif scope == "week" and d:
+            start = (d - timedelta(days=d.weekday())).isoformat()       # od poniedziałku do dziś
+            rows = [v for k, v in self.days.items() if start <= k <= d.isoformat()]
+        elif scope == "prev_month" and d:
+            last = d.replace(day=1) - timedelta(days=1)
+            prefix = f"{last.year:04d}-{last.month:02d}-"
+            rows = [v for k, v in self.days.items() if k.startswith(prefix)]
+        elif scope == "year" and d:
+            rows = [v for k, v in self.days.items() if k.startswith(f"{d.year:04d}-")]
         else:
             rows = list(self.days.values())
         out = _empty_day()

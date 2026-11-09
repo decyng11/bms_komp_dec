@@ -56,6 +56,14 @@ BIAS_GAIN = 0.5
 BIAS_MIN = 0.75
 BIAS_MAX = 1.25
 WEATHER_REFRESH_SEC = 1800
+# samostrojenie (0.9.3): co dobę wybór wariantu modelu na podstawie „prognoz wstecz” z własnej historii
+TUNE_EVAL_DAYS = 30            # ile ostatnich dni ocenia wariant
+TUNE_MIN_EVAL = 10             # tyle dni oceny trzeba, by w ogóle zmieniać parametry
+TUNE_MIN_GAIN = 0.03           # wariant musi dać o ≥3% mniejszy średni błąd niż domyślny
+DEFAULT_PARAMS = {"alpha": EWMA_ALPHA, "alpha_fast": EWMA_ALPHA_FAST, "wd_w": 0.7, "temp_scale": 1.0,
+                  "bias_gain": BIAS_GAIN, "bias_max": BIAS_MAX - 1.0, "bias_days": BIAS_DAYS}
+TUNE_CORE = [(a, wd, ts) for a in (0.3, 0.5) for wd in (0.7, 0.4, 0.0) for ts in (1.0, 1.5)]
+TUNE_BIAS = [(0.5, 0.25, 14), (0.8, 0.4, 14), (0.8, 0.4, 7), (1.0, 0.5, 7), (0.0, 0.0, 14)]
 HDD_BASE = 18.0
 CDD_BASE = 24.0
 DEFAULT_HDD_COEF = 0.05
@@ -198,6 +206,9 @@ class LoadForecaster:
         self.seasonal_factors: dict[int, float] = {}
         self.hdd_coef: float = DEFAULT_HDD_COEF
         self.cdd_coef: float = DEFAULT_CDD_COEF
+        self.params: dict[str, float] = dict(DEFAULT_PARAMS)
+        self.tune: dict[str, Any] = {}
+        self._maint_date: date | None = None
         self._loaded = False
         self._last_weather_fetch: float = 0.0
         self._weather_eid: str | None = None
@@ -229,6 +240,97 @@ class LoadForecaster:
 
         self._fit_temperature_coefficients()
         self._compute_seasonal_factors()
+        self._maintenance(dt_util.now(), force=True)
+
+    # ------------------------------------------------- codzienne uczenie (0.9.3)
+    def _maintenance(self, now: datetime, force: bool = False) -> None:
+        """Raz na dobę (po 6:00, gdy wynik wczoraj jest już ostateczny) albo przy starcie: przelicza współczynniki
+        temperatury i sezonu oraz wybiera wariant modelu na podstawie prognoz liczonych wstecz z własnej historii."""
+        today = now.date()
+        if self._maint_date == today or (not force and now.hour < STALE_UNTIL_HOUR):
+            return
+        self._maint_date = today
+        try:
+            self._fit_temperature_coefficients()
+            self._compute_seasonal_factors()
+            self._autotune(today)
+        except Exception as err:  # noqa: BLE001
+            _LOGGER.warning("Prognoza zużycia: codzienne uczenie nie powiodło się: %s", err)
+        self._bias_cache = None
+        self._schedule_save()
+
+    def _backtest(self, today: date) -> list[tuple[tuple, float, float, int]] | None:
+        """Średni błąd bezwzględny (kWh) i trafienia ±20% każdego wariantu na ostatnich dniach — prognoza dnia X liczona
+        wyłącznie z danych sprzed X (jak naprawdę wydana)."""
+        valid = self._valid_history_before(today)
+        days = sorted(valid)
+        eval_days = days[-TUNE_EVAL_DAYS:]
+        if len(eval_days) < TUNE_MIN_EVAL:
+            return None
+        start = eval_days[0] - timedelta(days=14)
+        series = [d for d in days if d >= start]
+        saved = self.params
+        out: list[tuple[tuple, float, float, int]] = []
+        try:
+            for a, wd, ts in TUNE_CORE:
+                self.params = dict(saved, alpha=a, wd_w=wd, temp_scale=ts)
+                core: dict[date, float] = {}
+                for d in series:
+                    v = self._model_core(d, d)
+                    if v and v > 0:
+                        core[d] = v
+                for g, mx, nb in TUNE_BIAS:
+                    errs: list[float] = []
+                    hits = 0
+                    for d in eval_days:
+                        if d not in core:
+                            continue
+                        ratios = [valid[x] / core[x] for x in (d - timedelta(days=i) for i in range(1, nb + 1))
+                                  if x in core and x in valid]
+                        f = 1.0
+                        if g > 0 and len(ratios) >= (BIAS_MIN_SAMPLES if nb >= 14 else 4):
+                            f = min(1.0 + mx, max(1.0 - mx, 1.0 + g * (statistics.median(ratios) - 1.0)))
+                        err = abs(core[d] * f - valid[d])
+                        errs.append(err)
+                        hits += 1 if err <= 0.2 * valid[d] else 0
+                    if len(errs) >= TUNE_MIN_EVAL:
+                        out.append(((a, wd, ts, g, mx, nb), _mean(errs), hits / len(errs), len(errs)))
+        finally:
+            self.params = saved
+        return out or None
+
+    @staticmethod
+    def _variant_label(v: tuple) -> str:
+        a, wd, ts, g, mx, nb = v
+        parts = []
+        if (g, mx, nb) != (0.5, 0.25, 14):
+            parts.append("bez korekty błędu" if g <= 0 else f"szybsza korekta błędu ({nb} dni, waga {g:g}, do ±{mx * 100:.0f}%)")
+        if a != 0.3:
+            parts.append("większa waga ostatnich dni")
+        if wd != 0.7:
+            parts.append("bez wpływu tego samego dnia tygodnia" if wd <= 0 else "mniejszy wpływ tego samego dnia tygodnia")
+        if ts != 1.0:
+            parts.append("mocniejsza poprawka temperatury")
+        return ", ".join(parts) or "standardowy"
+
+    def _autotune(self, today: date) -> None:
+        res = self._backtest(today)
+        if not res:
+            self.tune = {"at": today.isoformat(), "n": 0, "note": "za mało dni historii (min. 10 dni oceny)"}
+            return
+        dv = (0.3, 0.7, 1.0, 0.5, 0.25, 14)
+        default = next((r for r in res if r[0] == dv), None)
+        best = min(res, key=lambda r: r[1])
+        if default is None:
+            return
+        use = best if (default[1] - best[1]) >= TUNE_MIN_GAIN * default[1] and best[1] < default[1] else default
+        v = use[0]
+        self.params = dict(DEFAULT_PARAMS, alpha=v[0], wd_w=v[1], temp_scale=v[2], bias_gain=v[3], bias_max=v[4], bias_days=v[5])
+        self.tune = {"at": today.isoformat(), "n": use[3], "tried": len(res), "variant": self._variant_label(v),
+                     "mae": round(use[1], 2), "mae_default": round(default[1], 2),
+                     "hit": round(use[2] * 100), "hit_default": round(default[2] * 100)}
+        _LOGGER.info("Prognoza zużycia: wariant „%s”, błąd %.2f kWh (standardowy %.2f), trafienia ±20%%: %d%% (std %d%%)",
+                     self.tune["variant"], use[1], default[1], use[2] * 100, default[2] * 100)
 
     def clear_history(self) -> None:
         """Kasuje zebraną historię zużycia; model i prognoza startują od zera (wymagane ≥5 dni)."""
@@ -236,6 +338,8 @@ class LoadForecaster:
         self.profiles.clear()
         self.forecast_history.clear()
         self.seasonal_factors = {}
+        self.params = dict(DEFAULT_PARAMS)
+        self.tune = {}
         self._hourly_accum = [0.0] * 24
         self._hourly_cov = [0.0] * 24
         self._hourly_last_sample = None
@@ -305,6 +409,13 @@ class LoadForecaster:
             self.hdd_coef = float(data["hdd_coef"])
         if isinstance(data.get("cdd_coef"), (int, float)):
             self.cdd_coef = float(data["cdd_coef"])
+        pr = data.get("params")
+        if isinstance(pr, dict):
+            for k, dv in DEFAULT_PARAMS.items():
+                if isinstance(pr.get(k), (int, float)):
+                    self.params[k] = float(pr[k])
+        if isinstance(data.get("tune"), dict):
+            self.tune = data["tune"]
 
     def _schedule_save(self) -> None:
         self._store.request_save(
@@ -316,6 +427,8 @@ class LoadForecaster:
                 "seasonal_factors": {str(k): v for k, v in self.seasonal_factors.items()},
                 "hdd_coef": self.hdd_coef,
                 "cdd_coef": self.cdd_coef,
+                "params": self.params,
+                "tune": self.tune,
                 "hourly_accum": {
                     "date": self._hourly_sample_date.isoformat() if self._hourly_sample_date else None,
                     "values": self._hourly_accum,
@@ -446,6 +559,7 @@ class LoadForecaster:
 
         # Profil godzinowy próbkujemy niezależnie od dostępności licznika dziennego.
         self._sample_hourly_power(now)
+        self._maintenance(now)
 
         value = self._read_today_value()
         if value is None or value < 0 or value > MAX_VALID_KWH:
@@ -832,13 +946,14 @@ class LoadForecaster:
 
     def _adaptive_ewma(self, series: list[float]) -> float:
         """EWMA; gdy dwa ostatnie dni odbiegają w tę samą stronę o >25% — szybsza reakcja."""
-        alpha = EWMA_ALPHA
+        base_a = float(self.params.get("alpha", EWMA_ALPHA))
+        alpha = base_a
         if len(series) >= 5:
-            prior = self._ewma(series[:-2], EWMA_ALPHA)
+            prior = self._ewma(series[:-2], base_a)
             if prior > 0:
                 devs = [(v - prior) / prior for v in series[-2:]]
                 if (all(x > 0 for x in devs) or all(x < 0 for x in devs)) and min(abs(x) for x in devs) > PERSIST_THRESHOLD:
-                    alpha = EWMA_ALPHA_FAST
+                    alpha = max(base_a, float(self.params.get("alpha_fast", EWMA_ALPHA_FAST)))
         return self._ewma(series, alpha)
 
     def _model_core(self, target: date, today: date) -> float | None:
@@ -892,7 +1007,8 @@ class LoadForecaster:
         base_spread = _stdev(recent) if len(recent) >= 2 else 0.0
 
         if wd is not None:
-            w_wd = 0.7 if wd_spread <= base_spread else 0.5
+            wd_w = float(self.params.get("wd_w", 0.7))
+            w_wd = wd_w if wd_spread <= base_spread else max(0.0, wd_w - 0.2)
             result = w_wd * wd + (1 - w_wd) * base
         else:
             result = base
@@ -906,15 +1022,19 @@ class LoadForecaster:
         return result
 
     def _bias_factor(self, today: date) -> float:
-        """Samokorekta: mediana (rzeczywiste / model liczony wstecz) z 14 dni, połowa różnicy, ±25%."""
-        sig = (today.isoformat(), tuple(
-            round(self.days.get((today - timedelta(days=i)).isoformat(), 0.0), 1) for i in range(1, BIAS_DAYS + 1)
+        """Samokorekta: mediana (rzeczywiste / model liczony wstecz) z ostatnich dni, z wagą i sufitem z parametrów
+        (domyślnie połowa różnicy, ±25%, 14 dni; samostrojenie może wybrać szybszy wariant)."""
+        n_days = int(self.params.get("bias_days", BIAS_DAYS))
+        gain = float(self.params.get("bias_gain", BIAS_GAIN))
+        mx = float(self.params.get("bias_max", BIAS_MAX - 1.0))
+        sig = (today.isoformat(), n_days, gain, mx, tuple(
+            round(self.days.get((today - timedelta(days=i)).isoformat(), 0.0), 1) for i in range(1, n_days + 1)
         ))
         cached = getattr(self, "_bias_cache", None)
         if cached and cached[0] == sig:
             return cached[1]
         ratios: list[float] = []
-        for i in range(1, BIAS_DAYS + 1):
+        for i in range(1, n_days + 1):
             d = today - timedelta(days=i)
             actual = self.days.get(d.isoformat())
             if not actual or actual < MIN_VALID_KWH or d.isoformat() in self.suspects():
@@ -923,9 +1043,9 @@ class LoadForecaster:
             if pred and pred > 0:
                 ratios.append(actual / pred)
         factor = 1.0
-        if len(ratios) >= BIAS_MIN_SAMPLES:
+        if len(ratios) >= (BIAS_MIN_SAMPLES if n_days >= 14 else 4) and gain > 0:
             med = statistics.median(ratios)
-            factor = min(BIAS_MAX, max(BIAS_MIN, 1.0 + BIAS_GAIN * (med - 1.0)))
+            factor = min(1.0 + mx, max(1.0 - mx, 1.0 + gain * (med - 1.0)))
         self._bias_cache = (sig, round(factor, 4))
         return round(factor, 4)
 
@@ -977,7 +1097,8 @@ class LoadForecaster:
             return None
         hdd = max(0.0, HDD_BASE - temp)
         cdd = max(0.0, temp - CDD_BASE)
-        return 1.0 + self.hdd_coef * hdd + self.cdd_coef * cdd
+        k = float(self.params.get("temp_scale", 1.0))
+        return 1.0 + k * (self.hdd_coef * hdd + self.cdd_coef * cdd)
 
     def _apply_temperature_correction(self, target: date, base: float, ref: list[date] | None = None) -> float:
         """Poprawka temperaturowa względem średniego czynnika dni bazowych (ref). Bez temperatur dni bazowych —
@@ -1187,4 +1308,5 @@ class LoadForecaster:
             },
             "seasonal_factors": {str(k): round(v, 3) for k, v in self.seasonal_factors.items()},
             "profiles_days": len(self.profiles),
+            "tuning": dict(self.tune),
         }

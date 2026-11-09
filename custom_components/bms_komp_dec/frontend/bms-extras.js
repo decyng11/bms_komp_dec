@@ -603,7 +603,16 @@
           <div style="overflow-x:auto;"><table data-role="pv-horizon" style="width:100%;border-collapse:collapse;font-size:12px;margin-top:4px;">
             <thead><tr style="color:var(--muted);text-align:right;"><th style="text-align:left;font-weight:600;">Dzień</th><th style="font-weight:600;">Dni danych</th><th style="font-weight:600;">Błąd surowej</th><th style="font-weight:600;">Błąd po korekcie</th><th style="font-weight:600;">Korekta</th><th style="font-weight:600;">Zakres</th></tr></thead>
             <tbody>${hzRows}</tbody></table></div>` : '';
-        return `<div class="ex-tiles">${tiles.join('')}</div>${hzTable}${charts}
+        const hzTune = (() => {
+          const tn = hz.filter((r) => r.tune && r.tune.mae != null);
+          if (!tn.length) return '';
+          const ch = tn.filter((r) => r.tune.window !== 30 || r.tune.mode !== 'median');
+          const nm = (t) => `${t.window} dni${t.mode === 'ewma' ? ', świeższe dni ważniejsze' : ''}`;
+          return `<div class="ex-note" data-role="pv-tune">🎯 Samostrojenie PV: EMS co dobę sprawdza okno uczenia (7, 14 albo 30 dni) na Twojej historii. ${ch.length
+            ? ch.map((r) => `${hzName(r.h)}: ${nm(r.tune)} (błąd ${exFmt(r.tune.mae, 2)} kWh zamiast ${exFmt(r.tune.mae_default, 2)} kWh)`).join('; ') + '.'
+            : 'Na razie standardowe 30 dni jest najlepsze albo żaden wariant nie był wyraźnie lepszy.'}</div>`;
+        })();
+        return `<div class="ex-tiles">${tiles.join('')}</div>${hzTable}${hzTune}${charts}
           <div class="ex-note">Błąd to średnia różnica prognozy i wykonania w procentach (dni z co najmniej 0,5 kWh), z ostatnich 30 dni. Prognoza PV jest zapisywana rano (od 6:00) dla każdego z 7 dni do przodu, prognoza zużycia — dzień wcześniej.
             Korekta PV jest liczona osobno dla każdego dnia do przodu (mediana wykonania do prognozy z 30 dni, w granicach 0,5–1,4), uwzględnia stały wzorzec godzinowy i poprawia dzisiejszy dzień na podstawie godzin, które już minęły.
             Dni, w których bateria była pełna i falownik ucinał produkcję, nie uczą modelu. „Błąd po korekcie” liczony jest z prognoz faktycznie wydanych po korekcie, więc pokazuje, czy korekta pomaga. Zakres to typowy błąd tego dnia.</div>`;
@@ -698,6 +707,6 @@
 
   };
   install.contract = 1;
-  install.version = '0.9.2';
+  install.version = '0.9.3';
   window.__bmsExtrasInstall = install;
 })();

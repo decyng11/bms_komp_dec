@@ -75,7 +75,7 @@ class BmsLoadForecastSensor(BmsBaseEntity, SensorEntity):
     # Duże atrybuty (listy prognoz) nie powinny trafiać do bazy rekordera co 10 s.
     _unrecorded_attributes = frozenset({
         "days", "forecast_7d", "hourly_forecast", "hourly_forecast_today", "hourly_today", "seasonal_factors", "history_14d",
-        "confidence_interval", "temperature_correction", "forecast_split",
+        "confidence_interval", "temperature_correction", "forecast_split", "tuning",
     })
 
     def __init__(self, coordinator):
@@ -111,6 +111,7 @@ class BmsLoadForecastSensor(BmsBaseEntity, SensorEntity):
             "hourly_today": d.get("hourly_today"),
             "hourly_today_hour": d.get("hourly_today_hour"),
             "temperature_correction": d.get("temperature_correction"),
+            "tuning": d.get("tuning"),
             "seasonal_factors": d.get("seasonal_factors"),
             "profiles_days": d.get("profiles_days"),
             "forecast_split": d.get("forecast_split"),
@@ -309,7 +310,7 @@ class BmsRuntimeSensor(BmsBaseEntity, SensorEntity):
                 "revenue": round(day.get("revenue", 0.0), 2),
                 "cost": round(day.get("cost", 0.0), 2),
                 "neg_export_kwh": round(day.get("neg_export_kwh", 0.0), 2),
-                "sums": {sc: rt.ledger.sums(dt_util.now().date(), sc) for sc in ("day", "month", "total")},
+                "sums": {sc: rt.ledger.sums(dt_util.now().date(), sc) for sc in ("day", "week", "month", "prev_month", "year", "total")},
                 "extras": money_mod.bundle(rt.ledger, rt.stats, dt_util.now().date()),
             }
         if self._key == "reserve_soc":
