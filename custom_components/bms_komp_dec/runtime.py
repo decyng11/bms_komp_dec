@@ -19,6 +19,8 @@ from .const import (
     CONF_BATTERY_CAPACITY_KWH, CONF_GRID_POWER, CONF_PRICE_BUY_ENTITY, CONF_PRICE_SELL_ENTITY, CONF_SOC,
     DEFAULT_BATTERY_CAPACITY_KWH, DEFAULT_PRICE_BUY_ENTITY, DEFAULT_PRICE_SELL_ENTITY, WEEKDAY_SWITCH_KEYS,
 )
+from . import inbox
+from .gridlimit import GridLimiter
 from . import brands
 from . import inverter_ctl as ictl
 from .battery_sign import SignLearner
@@ -121,6 +123,7 @@ class BmsRuntime:
         self.repairs = Repairs(self)
         self.monitor = Monitor(self)
         self.watch = WriteWatch(self)
+        self.grid_limiter = GridLimiter(self)
         self.fired: dict[str, datetime] = {}
         self._lock = asyncio.Lock()
         self._cmd_gen = 0
@@ -1218,6 +1221,7 @@ class BmsRuntime:
             if res.get("error"):
                 self._spawn(self.monitor.notifier.send("plan_error", "📉 EMS: plan niedostępny", str(res["error"]), key="plan_error"))
             else:
+                inbox.prune_rejected(self.state, self._plan["proposals"])
                 self._remember_grid_target(self._plan)
                 self._remember_sale_power(self._plan)
                 self._log_plan_decisions(self._plan)

@@ -48,6 +48,8 @@
     bateria_sprzedaz_start_2: 'Godzina, od której bateria sprzedaje energię do sieci (okno 2, dodatkowe).',
     bateria_sprzedaz_stop_2: 'Godzina, o której sprzedaż z baterii się kończy (okno 2, dodatkowe).',
     grid_import_sell_block_w: 'Gdy z sieci pobierasz więcej niż tyle watów, sprzedaż jest wstrzymywana. 0 = zabezpieczenie wyłączone.',
+    grid_charge_power_kw: 'Maksymalna moc ładowania baterii z sieci. EMS wpisuje do falownika odpowiedni prąd (kW ÷ napięcie baterii), a plan liczy okna ładowania z tą mocą — niższa moc to dłuższe okno. 0 = EMS nie zmienia ustawienia falownika.',
+    grid_import_limit_kw: 'Limit poboru z sieci dla Twojego przyłącza (np. moc przyłączeniowa minus zapas). Gdy dom i ładowanie razem go przekraczają, EMS zmniejsza prąd ładowania baterii z sieci, a gdy jest zapas — przywraca. Reaguje co kilkanaście sekund, więc krótki szczyt jest możliwy. 0 = wyłączone.',
     pv_plan_pessimism_pct: 'Jak ostrożnie planer traktuje prognozę PV. 0 = środkowa wartość po korekcie, 100 = wersja pesymistyczna (Solcast p10 albo typowy błąd z historii). Wyższa wartość to mniej sprzedaży i więcej ładowania z sieci.',
     grid_import_sell_block_kwh: 'Gdy dziś z sieci pobrano więcej niż tyle kWh, sprzedaż z baterii jest wstrzymana do końca dnia. 0 = zabezpieczenie wyłączone.',
     minimalny_soc_dla_wylaczenia_sprzedazy: 'Gdy bateria spadnie poniżej tego poziomu, sprzedaż się wyłącza i falownik wraca do trybu automatycznego.',
@@ -2772,6 +2774,30 @@
           </div>
 
           <div class="section">
+            <div class="section-title">⚡ Moc ładowania z sieci i ochrona przyłącza</div>
+            <div class="row">
+              <div class="field-info">
+                <div class="name">Moc ładowania baterii z sieci (0 = nie zmieniaj)</div>
+                <div class="eid-hint" id="eid-grid_charge_power_kw"></div>
+              </div>
+              <div class="field-controls">
+                <input type="number" min="0" max="30" step="0.1" data-num-key="grid_charge_power_kw">
+                <span style="color:var(--muted);">kW</span>
+              </div>
+            </div>
+            <div class="row">
+              <div class="field-info">
+                <div class="name">Limit poboru z sieci — ochrona przyłącza (0 = wyłączony)</div>
+                <div class="eid-hint" id="eid-grid_import_limit_kw"></div>
+              </div>
+              <div class="field-controls">
+                <input type="number" min="0" max="60" step="0.1" data-num-key="grid_import_limit_kw">
+                <span style="color:var(--muted);">kW</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="section">
             <div class="section-title">🔌 Ładowanie z sieci</div>
             <div class="action-grid">
               <button class="btn" id="btn-laduj-1"><div class="icon">🔌</div><div class="label">Zestaw 1<br><span id="txt-laduj-1">wyłączono</span></div></button>
@@ -3024,8 +3050,9 @@
       const st = this._hass.states;
       const pa = (st[this._eid('sensor', 'plan_curve')] || {}).attributes || {};
       const ma = (st[this._eid('sensor', 'monitor_status')] || {}).attributes || {};
-      const rej = Object.assign({}, ma.inbox_rejected || {}, this._inbRej || {});
       const proposals = pa.proposals && typeof pa.proposals === 'object' ? pa.proposals : {};
+      Object.keys(this._inbRej || {}).forEach(k => { if (!proposals[k] || proposals[k].proposed !== this._inbRej[k]) delete this._inbRej[k]; });   // lokalne odrzucenie wygasa razem z propozycją
+      const rej = Object.assign({}, ma.inbox_rejected || {}, this._inbRej || {});
       const GROUPS = [
         ['🔌', 'Ładowanie z sieci (noc)', ['start_grid_charge', 'stop_grid_charge']],
         ['🔌', 'Ładowanie z sieci (zestaw 2)', ['start_grid_charge_2', 'stop_grid_charge_2']],

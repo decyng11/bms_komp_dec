@@ -58,5 +58,19 @@ check("send → wpis w skrzynce", len(rt.state.get("inbox", [])) == 1 and rt.sta
 asyncio.run(n.send("proposal", "🤖 propozycja", "x", key="p"))
 check("send(proposal) nie dubluje w skrzynce", len(rt.state["inbox"]) == 1)
 
+# prune_rejected: odrzucenie wygasa, gdy plan przestaje proponować tę godzinę
+s4 = {}
+IB.act(s4, "reject", key="a", proposed="23:00"); IB.act(s4, "reject", key="b", proposed="05:00"); IB.act(s4, "reject", key="c", proposed="07:00")
+IB.act(s4, "reject", key="d", proposed="08:00")
+n = IB.prune_rejected(s4, {"a": {"proposed": "23:00", "skip": False}, "b": {"proposed": "05:30", "skip": False},
+                           "c": {"proposed": "07:00", "skip": True}})
+check("prune: zostaje tylko wciąż proponowana odrzucona godzina", list(s4["rejected_props"]) == ["a"] and n == 3, s4["rejected_props"])
+check("prune: po wygaśnięciu ta sama godzina znów jest do decyzji", not IB.is_rejected(s4, "b", "05:00"))
+
+# nazwa okna ładowania przy ~0 kWh nie mówi „Doładuj ~0.0 kWh”
+from custom_components.bms_komp_dec.scheduler import ScheduleOptimizer as SO
+check("okno bez energii: opis nie obiecuje doładowania", "Doładuj" not in SO._charge_phrase(0.0) and "0.0 kWh" in SO._charge_phrase(0.0))
+check("okno z energią: „Doładuj ~2.5 kWh z sieci”", SO._charge_phrase(2.5) == "Doładuj ~2.5 kWh z sieci")
+
 print(f"INBOX PASS={common.PASS} FAIL={common.FAIL}")
 sys.exit(1 if common.FAIL else 0)

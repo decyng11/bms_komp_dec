@@ -246,6 +246,8 @@ NUMBERS = [
     ("vacation_load_w", "Tryb urlopowy — stałe zużycie domu", 0, 5000, 10, "W"),
     ("battery_price_pln", "Koszt zużycia baterii — cena baterii (0 = nie licz)", 0, 500000, 100, "PLN"),
     ("battery_cycles", "Koszt zużycia baterii — liczba cykli życia", 500, 20000, 100, ""),
+    ("grid_charge_power_kw", "Moc ładowania baterii z sieci (0 = nie zmieniaj)", 0, 30, 0.1, "kW"),
+    ("grid_import_limit_kw", "Limit poboru z sieci — ochrona przyłącza (0 = wyłączony)", 0, 60, 0.1, "kW"),
 ]
 
 NUMBER_DEFAULTS = {
@@ -269,6 +271,8 @@ NUMBER_DEFAULTS = {
     "sell_export_power_w": 6000,
     "surplus_power_w": 9700,
     "normal_charge_current": 0,
+    "grid_charge_power_kw": 0.0,
+    "grid_import_limit_kw": 0.0,
     "battery_charge_sign": 0,
     "storm_mode_hours": 24,
     "vacation_load_w": 250,

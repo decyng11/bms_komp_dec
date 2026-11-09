@@ -724,7 +724,7 @@ class ScheduleOptimizer:
             "soc": soc,
             "cap": self._cfg_num(CONF_BATTERY_CAPACITY_KWH, DEFAULT_BATTERY_CAPACITY_KWH, lo=0.1),
             "max_dis_kw": max(0.1, self._cfg_num(CONF_MAX_DISCHARGE_POWER_W, DEFAULT_MAX_DISCHARGE_POWER_W) / 1000.0),
-            "max_chg_kw": max(0.1, self._cfg_num(CONF_MAX_CHARGE_POWER_W, DEFAULT_MAX_CHARGE_POWER_W) / 1000.0),
+            "max_chg_kw": self._grid_chg_kw(),
             "target_cfg": min(100.0, max(0.0, self._cfg_num(CONF_TARGET_SOC_CHARGE, DEFAULT_TARGET_SOC_CHARGE))),
             "eff": min(1.0, max(0.5, number_value(self.hass, "cycle_efficiency", 90.0) / 100.0)),
             "margin": number_value(self.hass, "min_sell_margin", DEFAULT_MIN_SELL_MARGIN),
@@ -1150,7 +1150,7 @@ class ScheduleOptimizer:
         ctx["grid_targets"] = {h: target for h in range(s_abs, end)}
         ctx["grid_kwh"] = grid_kwh
 
-        reason = (f"Doładuj ~{grid_kwh:.1f} kWh z sieci ({s_abs % 24:02d}:00–{end % 24:02d}:00, najtańsza taryfa nocna): "
+        reason = (f"{self._charge_phrase(grid_kwh)} ({s_abs % 24:02d}:00–{end % 24:02d}:00, najtańsza taryfa nocna): "
                   f"SOC o starcie ~{soc_start:.0f}% → cel {target:.0f}% (tyle potrzeba do rana, "
                   f"do godz. {res['until_hour']}:00, aż PV pokryje zużycie).{floor_note}{peak_note}")
         out[set1[0]] = self._p(set1[0], self._read_current_time(set1[0]), self._fmt_start(s_abs), reason, "high")
@@ -1158,6 +1158,21 @@ class ScheduleOptimizer:
         self._skip_pair(out, set2,
                         "Pomiń — okno nocne wystarcza; ładowanie z sieci w dzień koliduje z darmową energią z PV.")
         return out
+
+    def _grid_chg_kw(self) -> float:
+        """Moc ładowania z sieci używana w planie: ustawienie falownika, ewentualnie obniżone przez „Moc ładowania z sieci”."""
+        chg = max(0.1, self._cfg_num(CONF_MAX_CHARGE_POWER_W, DEFAULT_MAX_CHARGE_POWER_W) / 1000.0)
+        cap = number_value(self.hass, "grid_charge_power_kw", 0.0)
+        return max(0.1, min(chg, cap)) if cap > 0 else chg
+
+    @staticmethod
+    def _charge_phrase(grid_kwh: float) -> str:
+        """Początek uzasadnienia okna ładowania. Przy ~0 kWh „Doładuj ~0.0 kWh” wprowadzało w błąd: okno ma wtedy
+        tylko utrzymać SOC do celu (bez niego bateria na końcu okna wypadłaby tuż pod cel), a nie coś doładować."""
+        if grid_kwh < 0.3:
+            return (f"Krótkie okno ładowania z sieci, które ma utrzymać SOC przy celu (do doładowania tylko ~{grid_kwh:.1f} kWh; "
+                    f"bez tego okna bateria zeszłaby tuż poniżej celu)")
+        return f"Doładuj ~{grid_kwh:.1f} kWh z sieci"
 
     def _grid_charge_dynamic(self, ctx: dict, out: dict, set1, set2, earliest: int, end: int, soc_start: float,
                              target: float, res: dict, floor_note: str, peak_note: str, pk: float | None) -> dict:
@@ -1201,7 +1216,7 @@ class ScheduleOptimizer:
         ctx["grid_targets"] = {h: blk_target for h in range(s_abs, e_abs)}
         ctx["grid_kwh"] = grid_kwh
         price_txt = f", śr. {avg:.2f} zł/kWh" if avg is not None else ""
-        reason = (f"Doładuj ~{grid_kwh:.1f} kWh z sieci ({s_abs % 24:02d}:00–{e_abs % 24:02d}:00 — najtańsze godziny przed szczytem "
+        reason = (f"{self._charge_phrase(grid_kwh)} ({s_abs % 24:02d}:00–{e_abs % 24:02d}:00 — najtańsze godziny przed szczytem "
                   f"o {end % 24:02d}:00{price_txt}): SOC o starcie ~{soc_at:.0f}% → {blk_target:.0f}%, tak by o {end % 24:02d}:00 "
                   f"zostało ~{target:.0f}% (tyle potrzeba do godz. {res['until_hour']}:00, aż PV pokryje zużycie).{floor_note}{peak_note}")
         out[set1[0]] = self._p(set1[0], self._read_current_time(set1[0]), self._fmt_start(s_abs), reason, "high")

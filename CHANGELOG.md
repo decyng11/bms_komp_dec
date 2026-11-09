@@ -1,5 +1,15 @@
 # EMS komp-dec — zmiany po 0.9.1 (jeszcze niewydane)
 
+## Moc ładowania z sieci i ochrona przyłącza
+- Dwa nowe ustawienia w zakładce EMS (każdy ustawia własne wartości, domyślnie 0 = wyłączone, EMS niczego wtedy nie zapisuje):
+  - **Moc ładowania baterii z sieci (kW)** — sufit. EMS wpisuje do falownika Deye odpowiedni prąd w encji „Battery Grid Charging Current” (kW ÷ napięcie baterii), a plan liczy okna ładowania z tą mocą (niższa moc = dłuższe okno).
+  - **Limit poboru z sieci (kW)** — ochrona przyłącza. Gdy dom i ładowanie razem przekraczają limit, EMS co ok. 10 s zmniejsza prąd ładowania z sieci (nie niżej niż 5 A), a gdy jest zapas — przywraca go do sufitu albo do wartości sprzed redukcji. Gdy limit jest przekroczony mimo to (np. samo zużycie domu), dostajesz powiadomienie „Przekroczony limit poboru z sieci”. Reakcja nie jest natychmiastowa, więc krótki szczyt nadal możliwy.
+- Działa tylko na Deye. Sufit i limit są zwykłymi encjami `number` (m.in. do użycia w automatyzacjach).
+
+## Poprawki
+- Propozycja okna ładowania z sieci przy niemal zerowym doładowaniu („Doładuj ~0.0 kWh”) ma teraz uczciwy opis: okno ma tylko utrzymać SOC przy celu, a nie doładować.
+- Odrzucona propozycja jest zapominana, gdy plan przestaje ją proponować, więc ta sama godzina zaproponowana ponownie za kilka dni znów trafi do decyzji (wcześniej mogła zostać ukryta na stałe).
+
 ## Dzwonek
 - Okno dzwonka wyskakuje samo na środku ekranu, gdy przyjdzie nowe powiadomienie albo plan zaproponuje nową zmianę godzin (raz na dane zdarzenie — przeglądarka pamięta, co już pokazano). Kliknięcie dzwonka nadal otwiera i zamyka okno ręcznie.
 - Propozycje oznaczone „POMIJAM” nie są już pokazywane w oknie — widać tylko to, co wymaga decyzji.

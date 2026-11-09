@@ -88,5 +88,17 @@ def act(state: dict[str, Any], action: str, *, ident: Any = None, key: str | Non
     return {"changed": n}
 
 
+def prune_rejected(state: dict[str, Any], proposals: dict[str, Any]) -> int:
+    """Zapomina odrzucenia, których plan już nie proponuje (inna godzina, brak propozycji albo „pomiń”).
+
+    Dzięki temu ta sama godzina zaproponowana ponownie za kilka dni znów trafi do decyzji, zamiast zostać ukryta na zawsze."""
+    rej = rejected(state)
+    drop = [k for k, v in rej.items()
+            if not isinstance(proposals.get(k), dict) or proposals[k].get("skip") or proposals[k].get("proposed") != v]
+    for k in drop:
+        rej.pop(k, None)
+    return len(drop)
+
+
 def unread(state: dict[str, Any]) -> int:
     return sum(1 for e in _items(state) if not e.get("read"))

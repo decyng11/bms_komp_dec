@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import logging
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -13,7 +13,7 @@ from homeassistant.const import EVENT_HOMEASSISTANT_STARTED
 from homeassistant.core import HomeAssistant, ServiceCall, SupportsResponse
 from homeassistant.exceptions import HomeAssistantError, Unauthorized
 from homeassistant.helpers import config_validation as cv, entity_registry as er
-from homeassistant.helpers.event import async_track_time_change
+from homeassistant.helpers.event import async_track_time_change, async_track_time_interval
 from homeassistant.util import dt as dt_util
 
 from .automation import async_auto_apply, async_daily_suggest, async_undo_auto_apply, apply_times
@@ -490,6 +490,14 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         await runtime.tick(now)
 
     entry.async_on_unload(async_track_time_change(hass, tick, second=[0, 30]))
+
+    async def grid_limit_tick(now: datetime) -> None:
+        try:
+            await runtime.grid_limiter.tick(now)
+        except Exception as err:  # noqa: BLE001
+            _LOGGER.error("EMS ochrona przyłącza: %s", err, exc_info=True)
+
+    entry.async_on_unload(async_track_time_interval(hass, grid_limit_tick, timedelta(seconds=10)))
 
     _register_services(hass)
 

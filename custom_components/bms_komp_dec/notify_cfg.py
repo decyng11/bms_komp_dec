@@ -31,6 +31,7 @@ CATALOG: dict[str, tuple] = {
     "command_unconfirmed": ("Falownik", "Falownik nie potwierdził komendy", "Po komendzie i jej ponowieniu stan falownika się nie zgadza.", True, True, 60, False, None),
     "drift": ("Falownik", "Parametr zmienił wartość po zapisie", "Wartość zapisana do falownika zmieniła się po kilku minutach.", True, True, 30, False, None),
     "guard_action": ("Falownik", "Zadziałało zabezpieczenie", "Zabezpieczenie zatrzymało sprzedaż albo odblokowało ładowanie z PV.", True, True, 60, False, None),
+    "grid_limit": ("Falownik", "Przekroczony limit poboru z sieci", "Pobór z sieci przekracza ustawiony limit przyłącza mimo ograniczenia mocy ładowania.", True, True, 60, False, None),
     "high_import": ("Falownik", "Duży pobór z sieci", "Pobór z sieci powyżej progu przez 5 minut.", False, True, 60, False,
                     ("próg", "kW", 7.0, 1.0, 30.0, 0.5)),
     # --- ceny i plan
