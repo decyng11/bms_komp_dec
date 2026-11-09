@@ -62,6 +62,7 @@ CATALOG: dict[str, tuple] = {
     # --- urządzenia (zakładka „Urządzenia”; przy każdym urządzeniu można też wyłączyć jego powiadomienia)
     "device_cycle": ("Urządzenia", "Koniec cyklu urządzenia", "Pralka, zmywarka, suszarka… skończyła — czas, kWh i koszt cyklu.", True, True, 0, False, None),
     "device_anomaly": ("Urządzenia", "Nietypowa praca urządzenia", "Ciągła praca dłużej niż limit urządzenia albo zużycie dnia ponad 2× typowe.", True, True, 360, False, None),
+    "device_shed": ("Urządzenia", "Oszczędzanie energii: urządzenia wyłączone", "Przy SOC poniżej progu EMS wyłączył sterowalne urządzenia, a po odbiciu SOC włączył je z powrotem.", True, True, 180, False, None),
     "device_hint": ("Urządzenia", "Uruchom teraz (urządzenia elastyczne)", "Nadwyżka PV albo najtańsza godzina — dobry moment na pralkę, bojler, auto… (raz na dobę na urządzenie).", True, True, 0, False, None),
     "device_plan": ("Urządzenia", "Plan dla elastycznych urządzeń", "Wieczorem: najlepsze okno na jutro dla każdego elastycznego urządzenia.", True, False, 0, False, None),
     "devices_unknown": ("Urządzenia", "Nierozpoznany odbiornik", "Powtarzalny pobór w „reszcie domu” o tej samej godzinie — warto dodać takie urządzenie.", True, False, 10080, False, None),

@@ -8,6 +8,8 @@ Urządzenia wskazano przełącznik (switch / input_boolean) i tryb. Zasady bezpi
   • przy zaniku sieci niczego nie włączamy, a to, co włączyliśmy, wyłączamy,
   • dzienny limit czasu pracy (ctl_max_h) wyłącza urządzenie po jego przekroczeniu,
   • po wyłączeniu głównego przełącznika wyłączamy urządzenia, które EMS włączył,
+  • oszczędzanie energii: gdy SOC spadnie poniżej progu (device_shed_soc), wyłączamy wszystkie urządzenia z przełącznikiem
+    poza oznaczonymi „nie dotyczy” (ctl_no_shed) i włączamy z powrotem po odbiciu SOC o 5 pkt (tylko te, które były włączone),
   • każda akcja trafia do dziennika decyzji.
 """
 from __future__ import annotations
@@ -19,7 +21,7 @@ from typing import Any
 
 from homeassistant.util import dt as dt_util
 
-from .helpers import state_float, switch_on
+from .helpers import number_value, state_float, switch_on
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -133,8 +135,69 @@ class DeviceController:
         unit = str((st.attributes or {}).get("unit_of_measurement") or "W").strip().lower()
         return v * POWER_UNITS.get(unit, 1.0)
 
+    # ------------------------------------------------------------ oszczędzanie energii przy niskim SOC
+    SHED_RESTORE_PTS = 5.0
+
+    async def _shed_tick(self, now: datetime) -> None:
+        thr = number_value(self.hass, "device_shed_soc", 0.0)
+        soc = self.rt.soc()
+        ts = now.timestamp()
+        day = dt_util.as_local(now).date().isoformat()
+        active = self.enabled() and thr > 0
+        st = self._st()
+        shed_names, back_names = [], []
+        for d in self.rt.devices.devices:
+            if not d.get("switch_eid"):
+                continue
+            rec = st.setdefault(d["id"], {})
+            sw = self.hass.states.get(d["switch_eid"])
+            if sw is None or sw.state not in ("on", "off"):
+                continue
+            is_on = sw.state == "on"
+            if rec.get("shed"):
+                if is_on and ts - float(rec.get("ts") or 0.0) > MANUAL_GRACE_S:     # ktoś włączył ręcznie — szanujemy do końca dnia
+                    rec.pop("shed", None); rec.pop("shed_was_on", None); rec["shed_skip"] = day
+                    rec["reason"] = "włączone ręcznie mimo niskiego SOC"
+                    self.rt._save_state()  # noqa: SLF001
+                    continue
+                back = (not active or d.get("ctl_no_shed")
+                        or (soc is not None and soc >= thr + self.SHED_RESTORE_PTS))
+                if self._held(rec, "shed_back", back, ts):
+                    was_on = bool(rec.get("shed_was_on"))
+                    rec.pop("shed", None); rec.pop("shed_was_on", None)
+                    if was_on and not is_on:
+                        await self._switch(d, rec, True, f"SOC odbił ({soc:.0f}%), koniec oszczędzania" if soc is not None else "koniec oszczędzania", now)
+                    rec["cmd"] = None             # nie przejmujemy urządzenia — zwykłe sterowanie trybu liczy od nowa
+                    back_names.append(d["name"])
+                continue
+            if rec.get("shed_skip") == day:
+                continue
+            low = active and not d.get("ctl_no_shed") and soc is not None and soc < thr
+            if not self._held(rec, "shed_low", low, ts):
+                continue
+            rec.pop("shed_low", None)
+            if is_on:
+                await self._switch(d, rec, False, f"oszczędzanie energii: SOC {soc:.0f}% < {thr:.0f}%", now)
+                rec["cmd"] = None
+                rec["shed"] = True
+                rec["shed_was_on"] = True
+                shed_names.append(d["name"])
+                self.rt._save_state()  # noqa: SLF001
+        n = self.rt.monitor.notifier
+        if shed_names:
+            await n.send("device_shed", "🔋 EMS: oszczędzanie energii — urządzenia wyłączone",
+                         f"SOC {soc:.0f}% poniżej progu {thr:.0f}%. Wyłączono: {', '.join(shed_names)}. "
+                         f"Włączę je z powrotem po SOC ≥ {thr + self.SHED_RESTORE_PTS:.0f}%.", key="shed", level="warn")
+        if back_names:
+            await n.send("device_shed", "🔋 EMS: koniec oszczędzania energii",
+                         f"Włączono z powrotem: {', '.join(back_names)}.", key="shed_back", level="info")
+
     # ------------------------------------------------------------ co minutę
     async def tick(self, now: datetime) -> None:
+        try:
+            await self._shed_tick(now)
+        except Exception as err:  # noqa: BLE001
+            _LOGGER.error("EMS urządzenia: oszczędzanie energii: %s", err, exc_info=True)
         devs = [d for d in self.rt.devices.devices if d.get("switch_eid") and d.get("ctl_mode", "off") != "off"]
         st = self._st()
         known = {d["id"] for d in self.rt.devices.devices}
@@ -184,6 +247,9 @@ class DeviceController:
                 self.rt._save_state()  # noqa: SLF001
                 continue
             if rec.get("manual"):
+                continue
+            if rec.get("shed"):
+                rec["reason"] = "oszczędzanie energii (niski SOC)"
                 continue
             want, why = self._decide(d, rec, now, is_on, owned, grid, soc, plan_curve)
             limit_h = float(d.get("ctl_max_h") or 0.0)

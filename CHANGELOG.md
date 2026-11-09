@@ -6,6 +6,10 @@
   - **Limit poboru z sieci (kW)** — ochrona przyłącza. Gdy dom i ładowanie razem przekraczają limit, EMS co ok. 10 s zmniejsza prąd ładowania z sieci (nie niżej niż 5 A), a gdy jest zapas — przywraca go do sufitu albo do wartości sprzed redukcji. Gdy limit jest przekroczony mimo to (np. samo zużycie domu), dostajesz powiadomienie „Przekroczony limit poboru z sieci”. Reakcja nie jest natychmiastowa, więc krótki szczyt nadal możliwy.
 - Działa tylko na Deye. Sufit i limit są zwykłymi encjami `number` (m.in. do użycia w automatyzacjach).
 
+## Urządzenia
+- **Oszczędzanie energii przy niskim SOC**: ustawienie „wyłączaj urządzenia poniżej SOC” (EMS → Moc ładowania z sieci i ochrona przyłącza; 0 = wyłączone). Gdy SOC jest poniżej progu przez 5 minut, EMS wyłącza urządzenia z przełącznikiem (przy włączonym „Sterowaniu urządzeniami”), a po odbiciu SOC o 5 punktów włącza z powrotem te, które wyłączył. Przy każdym urządzeniu jest pole „Nie dotyczy oszczędzania energii”. Ręczne włączenie w trakcie oszczędzania jest szanowane do końca dnia. Nowe powiadomienie „Oszczędzanie energii”.
+- **Ukrywanie zakładki Urządzenia**: Diagnostyka → Tryby → „Ukryj zakładkę Urządzenia” (dla wszystkich użytkowników; dane i sterowanie działają dalej).
+
 ## Poprawki
 - **Ładowanie z sieci zatwierdzone w trakcie okna nie włączało się** (np. propozycja 05:00–06:00 zatwierdzona o 05:13): reguły łapały tylko dokładną minutę startu. Teraz start jest nadrabiany raz na okno (także po restarcie HA); gdy okno trwa, a bateria się nie ładuje, przychodzi ostrzeżenie z progiem startu i prądem z falownika.
 - Propozycja okna ładowania z sieci przy niemal zerowym doładowaniu („Doładuj ~0.0 kWh”) ma teraz uczciwy opis: okno ma tylko utrzymać SOC przy celu, a nie doładować.

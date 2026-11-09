@@ -49,6 +49,7 @@
     bateria_sprzedaz_stop_2: 'Godzina, o której sprzedaż z baterii się kończy (okno 2, dodatkowe).',
     grid_import_sell_block_w: 'Gdy z sieci pobierasz więcej niż tyle watów, sprzedaż jest wstrzymywana. 0 = zabezpieczenie wyłączone.',
     grid_charge_power_kw: 'Maksymalna moc ładowania baterii z sieci. EMS wpisuje do falownika odpowiedni prąd (kW ÷ napięcie baterii), a plan liczy okna ładowania z tą mocą — niższa moc to dłuższe okno. 0 = EMS nie zmienia ustawienia falownika.',
+    device_shed_soc: 'Gdy SOC baterii spadnie poniżej tej wartości (na 5 minut), EMS wyłącza urządzenia z przełącznikiem (zakładka Urządzenia → Edytuj → Sterowanie), poza oznaczonymi „nie dotyczy”. Włącza je z powrotem po odbiciu SOC o 5 punktów. Działa przy włączonym „Sterowaniu urządzeniami”. 0 = wyłączone.',
     grid_import_limit_kw: 'Limit poboru z sieci dla Twojego przyłącza (np. moc przyłączeniowa minus zapas). Gdy dom i ładowanie razem go przekraczają, EMS zmniejsza prąd ładowania baterii z sieci, a gdy jest zapas — przywraca. Reaguje co kilkanaście sekund, więc krótki szczyt jest możliwy. 0 = wyłączone.',
     pv_plan_pessimism_pct: 'Jak ostrożnie planer traktuje prognozę PV. 0 = środkowa wartość po korekcie, 100 = wersja pesymistyczna (Solcast p10 albo typowy błąd z historii). Wyższa wartość to mniej sprzedaży i więcej ładowania z sieci.',
     grid_import_sell_block_kwh: 'Gdy dziś z sieci pobrano więcej niż tyle kWh, sprzedaż z baterii jest wstrzymana do końca dnia. 0 = zabezpieczenie wyłączone.',
@@ -2542,7 +2543,7 @@
           <button class="tab" data-tab="charts">📊 Wykresy</button>
           <button class="tab" data-tab="ems">🎛️ EMS</button>
           <button class="tab" data-tab="log">💰 Zysk i log</button>
-          <button class="tab" data-tab="dev">🔌 Urządzenia</button>
+          <button class="tab" data-tab="dev" id="tabDev">🔌 Urządzenia</button>
           <button class="tab" data-tab="diag" id="tabDiag" style="display:none;">🛠️ Diagnostyka</button>
         </nav>
 
@@ -2793,6 +2794,16 @@
               <div class="field-controls">
                 <input type="number" min="0" max="60" step="0.1" data-num-key="grid_import_limit_kw">
                 <span style="color:var(--muted);">kW</span>
+              </div>
+            </div>
+            <div class="row">
+              <div class="field-info">
+                <div class="name">Oszczędzanie energii: wyłączaj urządzenia poniżej SOC (0 = wyłączone)</div>
+                <div class="eid-hint" id="eid-device_shed_soc"></div>
+              </div>
+              <div class="field-controls">
+                <input type="number" min="0" max="100" step="1" data-num-key="device_shed_soc">
+                <span style="color:var(--muted);">%</span>
               </div>
             </div>
           </div>
@@ -3391,6 +3402,7 @@
       this._safe(() => this._renderInbox());
       this._safe(() => this._renderEta());
       this._safe(() => this._dgSyncTab());
+      this._safe(() => this._devTabSync());
       if (this._activeTab === 'diag') this._safe(() => this._dgTick());
       if (this._activeTab === 'dev') this._safe(() => this._devTick());
       if (this._activeTab === 'log') this._safe(() => this._renderLogTab());
@@ -4428,6 +4440,13 @@
 
   // Zaślepki: działają do czasu załadowania modułu, potem moduł nadpisuje je pełnymi wersjami.
   const DG_STUBS = {
+    _devTabSync() {            // przełącznik z Diagnostyki → Tryby: chowa całą zakładkę Urządzenia
+      const st = this._hass && this._hass.states[this._eid('switch', 'hide_devices_tab')];
+      const hide = !!st && st.state === 'on';
+      const b = this._el('tabDev'); if (!b) return;
+      b.style.display = hide ? 'none' : '';
+      if (hide && this._activeTab === 'dev') { const m = this.shadowRoot && this.shadowRoot.querySelector('.tab[data-tab="main"]'); if (m) m.click(); }
+    },
     _dgIsAdmin() { const u = this._hass && this._hass.user; return !!(u && u.is_admin); },
     _dgSyncTab() {
       const b = this._el('tabDiag');

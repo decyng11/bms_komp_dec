@@ -191,6 +191,7 @@ SWITCHES = [
     ("live_load_correction", "Korekta planu o bieżące zużycie domu", "mdi:home-lightning-bolt", True),
     ("sale_power_fit", "Obniżaj moc sprzedaży do zapasu energii", "mdi:flash-triangle", True),
     ("device_control", "Sterowanie urządzeniami (włączanie przełączników)", "mdi:power-socket-eu", False),
+    ("hide_devices_tab", "Ukryj zakładkę Urządzenia w panelu", "mdi:eye-off-outline", False),
     ("brand_test_mode", "Sofar: tryb próbny (komendy tylko w dzienniku)", "mdi:flask-outline", True),
 ]
 
@@ -248,6 +249,7 @@ NUMBERS = [
     ("battery_cycles", "Koszt zużycia baterii — liczba cykli życia", 500, 20000, 100, ""),
     ("grid_charge_power_kw", "Moc ładowania baterii z sieci (0 = nie zmieniaj)", 0, 30, 0.1, "kW"),
     ("grid_import_limit_kw", "Limit poboru z sieci — ochrona przyłącza (0 = wyłączony)", 0, 60, 0.1, "kW"),
+    ("device_shed_soc", "Oszczędzanie energii: wyłączaj urządzenia poniżej SOC (0 = wyłączone)", 0, 100, 1, "%"),
 ]
 
 NUMBER_DEFAULTS = {
@@ -273,6 +275,7 @@ NUMBER_DEFAULTS = {
     "normal_charge_current": 0,
     "grid_charge_power_kw": 0.0,
     "grid_import_limit_kw": 0.0,
+    "device_shed_soc": 0.0,
     "battery_charge_sign": 0,
     "storm_mode_hours": 24,
     "vacation_load_w": 250,

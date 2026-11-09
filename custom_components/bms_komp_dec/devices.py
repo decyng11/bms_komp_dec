@@ -162,6 +162,7 @@ def sanitize_device(raw: Any) -> dict[str, Any] | None:
         "ctl_soc": _clamp(raw.get("ctl_soc"), 0.0, 100.0, 90.0),
         "ctl_hours": _clamp(raw.get("ctl_hours"), 0.5, 12.0, 2.0),
         "ctl_max_h": _clamp(raw.get("ctl_max_h"), 0.0, 24.0, 0.0),
+        "ctl_no_shed": b("ctl_no_shed", False) if _SWITCH_RE.match(sw) else False,   # nie wyłączaj przy niskim SOC (oszczędzanie energii)
     }
 
 

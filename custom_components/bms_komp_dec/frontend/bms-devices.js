@@ -389,9 +389,11 @@
               <option value="cheap" ${e.ctl_mode === 'cheap' ? 'selected' : ''}>w najtańszych godzinach planu</option></select></label>
             ${num('ctl_power_w', 'Moc urządzenia (W) — tyle nadwyżki potrzeba', 10)}${num('ctl_soc', 'Nadwyżka PV: włączaj od SOC (%)', 1)}
             ${num('ctl_hours', 'Najtańsze godziny: ile godzin pracy', 0.5)}${num('ctl_max_h', 'Limit pracy na dobę (h, 0 = bez limitu)', 0.5)}
+            ${chk('ctl_no_shed', 'Nie dotyczy oszczędzania energii (nie wyłączaj przy niskim SOC)')}
           </div>
           <div class="dv-note">EMS włącza i wyłącza przełącznik tylko przy włączonym „Sterowaniu urządzeniami” (przełącznik nad listą urządzeń). Zmienia stan najwyżej co 10 minut, a warunek musi trwać 5 minut.
-            Wyłącza tylko to, co sam włączył; gdy przełączysz urządzenie ręcznie, EMS nie steruje nim do końca dnia. Przy zaniku sieci niczego nie włącza.</div>
+            Wyłącza tylko to, co sam włączył; gdy przełączysz urządzenie ręcznie, EMS nie steruje nim do końca dnia. Przy zaniku sieci niczego nie włącza.
+            Oszczędzanie energii: gdy SOC spadnie poniżej progu z EMS → „Oszczędzanie energii”, EMS wyłącza urządzenia z przełącznikiem (poza oznaczonymi „nie dotyczy”) i włącza je po odbiciu SOC o 5 pkt.</div>
           <div class="dv-bar" style="margin-top:12px;"><button class="dv-btn" data-dv="save">💾 Zapisz</button><button class="dv-btn sec" data-dv="cancel">Anuluj</button>
             ${e._new ? '' : '<span style="flex:1;"></span><button class="dv-btn bad" data-dv="del">🗑 Usuń</button>'}<span class="dv-note" id="dvMsg" style="margin:0;color:var(--red);"></span></div></div></div>`;
       },

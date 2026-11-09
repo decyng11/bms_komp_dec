@@ -1232,6 +1232,7 @@
           ['storm_mode', '⛈', 'Tryb burzowy', 'Rezerwa 100%: bateria ładuje się w tanim oknie i nie sprzedaje. Wyłącza się sam po ustawionym czasie.'],
           ['vacation_mode', '🏖', 'Tryb urlopowy', 'Plan zakłada stałe, minimalne zużycie domu zamiast średniej z historii.'],
           ['notifications_enabled', '🔔', 'Powiadomienia', 'Niski SOC, alarm falownika, zmiana parametru po zapisie, brak cen RCE, brak łączności.'],
+          ['hide_devices_tab', '🙈', 'Ukryj zakładkę Urządzenia', 'Chowa całą zakładkę „Urządzenia” w panelu u wszystkich użytkowników (dane i sterowanie urządzeń działają dalej).'],
           ['auto_apply_dry_run', '🧪', 'Auto-stosowanie: tylko podgląd', 'Automat liczy zmiany i zapisuje je w dzienniku, ale niczego nie wysyła do falownika.'],
         ],
         num: [

@@ -158,6 +158,50 @@ async def main():
     check("najtańsze okno = nadwyżka PV 12:00–14:00", bw and bw[0].hour == 12 and bw[1].hour == 14 and bw[3] == 4.0, bw)
     check("brak planu → brak okna", DC.best_window(None, 2, 1.0) is None)
 
+    # ---------- oszczędzanie energii przy niskim SOC
+    d = DV.sanitize_device({"name": "x", "power_eid": "sensor.a", "switch_eid": "switch.a", "ctl_no_shed": True})
+    check("ctl_no_shed zapisywane", d["ctl_no_shed"] is True and DV.sanitize_device({"name": "x", "power_eid": "sensor.a"})["ctl_no_shed"] is False)
+    def shed_env(no_shed=False, thr=30, mode="off", soc=50, sw="on"):
+        hass, c, rt = setup(mode, ctl_no_shed=no_shed)
+        hass.states.set("switch.boj", sw); hass.states.set("number.bms_device_shed_soc", thr); hass.states.set(c.config["soc"], soc)
+        return hass, c, rt
+    hass, c, rt = shed_env()
+    t0 = at(2026, 11, 9, 5, 0)
+    await run(rt, t0, 10)
+    check("SOC wyżej niż próg: nic", sw_calls(hass, "switch.boj") == [])
+    hass.states.set(c.config["soc"], 25)
+    await run(rt, t0 + timedelta(minutes=10), 4)
+    check("SOC < próg krócej niż 5 min: jeszcze nic", sw_calls(hass, "switch.boj") == [])
+    await run(rt, t0 + timedelta(minutes=14), 4)
+    check("po 5 min wyłącza urządzenie (też bez trybu sterowania)", sw_calls(hass, "switch.boj") == ["turn_off"], sw_calls(hass, "switch.boj"))
+    hass.states.set("switch.boj", "off")
+    hass.states.set(c.config["soc"], 33)
+    await run(rt, t0 + timedelta(minutes=18), 10)
+    check("SOC 33% < próg+5: nadal wyłączone", sw_calls(hass, "switch.boj") == ["turn_off"])
+    hass.states.set(c.config["soc"], 36)
+    await run(rt, t0 + timedelta(minutes=28), 10)
+    check("po odbiciu SOC włącza z powrotem", sw_calls(hass, "switch.boj") == ["turn_off", "turn_on"], sw_calls(hass, "switch.boj"))
+    hass.states.set("switch.boj", "on")
+    await run(rt, t0 + timedelta(minutes=40), 10)
+    check("po powrocie bez ponownego wyłączania", sw_calls(hass, "switch.boj") == ["turn_off", "turn_on"])
+    # nie dotyczy
+    hass, c, rt = shed_env(no_shed=True, soc=20)
+    await run(rt, at(2026, 11, 9, 5, 0), 12)
+    check("„nie dotyczy”: nie wyłącza", sw_calls(hass, "switch.boj") == [])
+    # próg 0 = wyłączone, główny przełącznik
+    hass, c, rt = shed_env(thr=0, soc=5); await run(rt, at(2026, 11, 9, 5, 0), 12)
+    check("próg 0: nie wyłącza", sw_calls(hass, "switch.boj") == [])
+    hass, c, rt = shed_env(soc=5); hass.states.set("switch.bms_device_control", "off"); await run(rt, at(2026, 11, 9, 5, 0), 12)
+    check("sterowanie urządzeniami wyłączone: nie wyłącza", sw_calls(hass, "switch.boj") == [])
+    # urządzenie już wyłączone — nie włączamy go po powrocie
+    hass, c, rt = shed_env(soc=5, sw="off"); t0 = at(2026, 11, 9, 5, 0); await run(rt, t0, 12)
+    hass.states.set(c.config["soc"], 60); await run(rt, t0 + timedelta(minutes=12), 12)
+    check("wyłączone przed oszczędzaniem: bez komend", sw_calls(hass, "switch.boj") == [])
+    # ręczne włączenie w trakcie oszczędzania — szanujemy do końca dnia
+    hass, c, rt = shed_env(soc=5); t0 = at(2026, 11, 9, 5, 0); await run(rt, t0, 8)
+    hass.states.set("switch.boj", "on"); await run(rt, t0 + timedelta(minutes=8), 20)
+    check("włączone ręcznie: nie wyłączamy ponownie tego dnia", sw_calls(hass, "switch.boj") == ["turn_off"], sw_calls(hass, "switch.boj"))
+
     print(f"DEVCTL PASS={common.PASS} FAIL={common.FAIL}")
     sys.exit(1 if common.FAIL else 0)
 
