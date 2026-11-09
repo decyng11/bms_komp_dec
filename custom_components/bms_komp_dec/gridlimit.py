@@ -32,7 +32,15 @@ NOTE_GAP_S = 3600.0
 
 def grid_charge_current_eid(hass, cfg: dict[str, Any]) -> str | None:
     """Encja „Battery Grid Charging Current” (number) falownika Deye — po prefiksie encji trybu pracy albo po końcówce."""
-    tails = ("battery_grid_charging_current", "grid_charging_current", "grid_charge_current")
+    return inverter_number_eid(hass, cfg, ("battery_grid_charging_current", "grid_charging_current", "grid_charge_current"))
+
+
+def grid_charge_start_soc_eid(hass, cfg: dict[str, Any]) -> str | None:
+    """Encja „Battery Grid Charging Start” (SOC, poniżej którego falownik zaczyna ładować z sieci)."""
+    return inverter_number_eid(hass, cfg, ("battery_grid_charging_start", "grid_charging_start", "grid_charge_start_soc"))
+
+
+def inverter_number_eid(hass, cfg: dict[str, Any], tails: tuple[str, ...]) -> str | None:
     prefix = ictl.prefix_of(ictl.resolve(hass, cfg, "work_mode"))
     for t in tails:
         eid = f"number.{prefix}_{t}"

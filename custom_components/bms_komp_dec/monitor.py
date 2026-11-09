@@ -173,6 +173,7 @@ class Monitor:
                           ("ceny RCE", self._rce), ("łączność", self._comm),
                           ("SOC dnia", self._soc_track), ("bateria pełna", self._battery_full),
                           ("temperatura", self._battery_temp), ("sieć", self._grid_outage),
+                          ("ładowanie z sieci stoi", self._grid_charge_stalled), 
                           ("pobór z sieci", self._high_import), ("ceny jutro", self._prices_tomorrow),
                           ("źródła danych", self._sources), ("zużycie", self._load_above),
                           ("PV jutro", self._weak_pv), ("plan a próg", self._plan_floor), ("trafność prognoz", self._accuracy), ("zdrowie baterii", self._health),
@@ -419,6 +420,48 @@ class Monitor:
                                          f"Od 5 min pobór z sieci {p / 1000.0:.1f} kW (próg {thr / 1000.0:.1f} kW).")
         else:
             st.clear()
+
+    async def _grid_charge_stalled(self, now: datetime) -> None:
+        """Okno ładowania z sieci trwa (TOU wyłączony), SOC jest poniżej celu planu, a bateria nie ładuje się od 5 min.
+
+        Typowa przyczyna: własny próg startu ładowania w falowniku („Battery Grid Charging Start”) jest niższy niż
+        bieżący SOC albo prąd ładowania z sieci wynosi 0 — falownik wtedy nie ładuje, mimo że EMS włączył okno."""
+        rt = self.rt
+        st = rt.state.setdefault("gc_stall", {})
+        tgt = (rt.state.get("grid_target_plan") or {}).get("target")
+        soc = rt.soc()
+        if not isinstance(tgt, (int, float)) or soc is None or not rt.grid_charging_on() or soc >= float(tgt) - 1.0:
+            st.clear()
+            return
+        bp = (rt.coordinator.data or {}).get("battery_power")
+        try:
+            charging_w = float(bp) * int(rt.battery_sign()["sign"]) if bp is not None else None
+        except (TypeError, ValueError):
+            charging_w = None
+        if charging_w is None or charging_w > 150.0:
+            st.clear()
+            return
+        ts = now.timestamp()
+        since = st.setdefault("since", ts)
+        if ts - since < 300 or st.get("sent"):
+            return
+        st["sent"] = True
+        from .gridlimit import grid_charge_current_eid, grid_charge_start_soc_eid
+        from .helpers import state_float
+        start_eid, cur_eid = grid_charge_start_soc_eid(rt.hass, rt.cfg), grid_charge_current_eid(rt.hass, rt.cfg)
+        start_soc = state_float(rt.hass, start_eid) if start_eid else None
+        cur_a = state_float(rt.hass, cur_eid) if cur_eid else None
+        hints = []
+        if start_soc is not None:
+            hints.append(f"próg startu ładowania z sieci w falowniku: {start_soc:.0f}% (SOC {soc:.0f}% jest {'wyżej' if soc >= start_soc else 'niżej'})")
+        if cur_a is not None:
+            hints.append(f"prąd ładowania z sieci: {cur_a:.0f} A")
+        await self.notifier.send(
+            "grid_charge_stalled", "🔌 EMS: okno ładowania trwa, a bateria się nie ładuje",
+            f"SOC {soc:.0f}%, plan zakładał ~{float(tgt):.0f}%, a bateria nie przyjmuje energii od 5 min. "
+            + ("; ".join(hints) + ". " if hints else "")
+            + "Falownik ładuje z sieci tylko poniżej własnego progu startu SOC — podnieś go (Diagnostyka → Ładowanie z sieci) "
+              "i sprawdź, czy prąd ładowania z sieci nie jest 0.", key="gc_stall", level="warn")
 
     def _plan_props(self) -> dict:
         try:
