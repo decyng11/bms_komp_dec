@@ -56,6 +56,16 @@ class BmsSwitch(BmsBaseEntity, RestoreEntity, SwitchEntity):
             _LOGGER.error("EMS switch %s: encja %s nie ma oczekiwanej opcji TOU (dostępne: %s)",
                           self._key, eid, ictl.options_of(self.hass, eid))
             return False
+        if enable:                       # prąd ładowania 0 A (blokada PV) blokuje też ładowanie z sieci
+            for v in (self.hass.data.get("bms_komp_dec") or {}).values():
+                rt = getattr(v, "runtime", None)
+                if rt is not None and hasattr(rt, "pv_charge_blocked"):
+                    try:
+                        if rt.pv_charge_blocked():
+                            await rt.run_command("odblokuj_ladowanie", source="Wymuś ładowanie z sieci", enforce_guard=False)
+                    except Exception as err:  # noqa: BLE001
+                        _LOGGER.error("EMS switch %s: nie udało się przywrócić prądu ładowania: %s", self._key, err)
+                    break
         try:
             await self.hass.services.async_call(
                 "select", "select_option", {"entity_id": eid, "option": option}, blocking=True)

@@ -1,3 +1,8 @@
+# EMS komp-dec — zmiany po 0.9.3 (jeszcze niewydane)
+
+## Poprawki
+- **Ładowanie z sieci nie działało przy zablokowanym prądzie ładowania baterii (0 A)**: „Battery Max Charging Current” = 0 (blokada ładowania z PV, np. po oknie eksportu PV) blokuje ładowanie z każdego źródła, także z sieci. EMS przy starcie okna i przy „Wymuś ładowanie z sieci” przywraca prąd ładowania, a zabezpieczenie robi to też w trakcie trwającego okna (z powiadomieniem).
+
 # EMS komp-dec — zmiany w 0.9.3 (z 0.9.2)
 
 ## Prognozy: codzienne uczenie i samostrojenie

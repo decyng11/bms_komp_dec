@@ -577,7 +577,9 @@ class BmsRuntime:
             ],
             "zablokuj_ladowanie": lambda: [("number", cc, 0)],
             "odblokuj_ladowanie": lambda: [("number", cc, num(normal()))],
-            "wlacz_ladowanie_siec": lambda: [("select", tou, opt(tou, "tou_off"))],
+            # prąd ładowania 0 A (blokada ładowania z PV) blokuje też ładowanie z sieci — przy starcie okna go przywracamy
+            "wlacz_ladowanie_siec": lambda: ([("number", cc, num(normal()))] if self.pv_charge_blocked() else [])
+                                            + [("select", tou, opt(tou, "tou_off"))],
             "wylacz_ladowanie_siec": lambda: [("select", tou, opt(tou, "tou_on"))],
         }
         build = builders.get(key)
@@ -1137,6 +1139,22 @@ class BmsRuntime:
                                                      f"SOC {soc:.0f}% spadł poniżej {floor:.0f}% przy zablokowanym ładowaniu z PV.", key="guard:charge")
                 except Exception as err:  # noqa: BLE001
                     _LOGGER.error("EMS GUARD: błąd odblokowania ładowania: %s", err)
+
+        # okno ładowania z sieci trwa, a prąd ładowania baterii wynosi 0 A (blokada ładowania z PV): falownik nie naładuje
+        # baterii z żadnego źródła — zdejmujemy blokadę (okno ładowania z sieci ma pierwszeństwo)
+        try:
+            gc_on = self.grid_charging_on() and self.in_grid_charge_window(now)
+        except Exception:  # noqa: BLE001
+            gc_on = False
+        if gc_on and self.pv_charge_blocked() and self._cooldown_ok("unblock_for_grid", now):
+            self.log.add("guard", "Okno ładowania z sieci trwa, a prąd ładowania baterii wynosi 0 A — przywracam prąd ładowania", "warn")
+            try:
+                await self.run_command("odblokuj_ladowanie", source="zabezpieczenie (okno ładowania z sieci)")
+                await self.monitor.notifier.send("guard_action", "🛡 EMS: przywrócono prąd ładowania baterii",
+                                                 "W oknie ładowania z sieci „Battery Max Charging Current” wynosił 0 A (blokada ładowania z PV), "
+                                                 "więc falownik nie ładowałby baterii. Prąd został przywrócony.", key="guard:gc_unblock")
+            except Exception as err:  # noqa: BLE001
+                _LOGGER.error("EMS GUARD: błąd przywracania prądu ładowania: %s", err)
 
     # --------------------------------------------- niskie/ujemne ceny (funkcja 1)
     async def price_reaction_tick(self, now: datetime) -> None:
