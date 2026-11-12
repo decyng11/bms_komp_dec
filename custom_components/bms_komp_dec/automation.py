@@ -27,6 +27,59 @@ PAIRS = [
 ]
 
 
+# przełącznik zestawu, bez którego okno (godziny Start/Stop) nigdy nie zadziała
+SET_SWITCH = {
+    "start_grid_charge": "ladowanie_z_sieci_1", "stop_grid_charge": "ladowanie_z_sieci_1",
+    "start_grid_charge_2": "ladowanie_z_sieci_2", "stop_grid_charge_2": "ladowanie_z_sieci_2",
+    "bateria_sprzedaz_start": "bateria_sprzedaz_1", "bateria_sprzedaz_stop": "bateria_sprzedaz_1",
+    "bateria_sprzedaz_start_2": "bateria_sprzedaz_2", "bateria_sprzedaz_stop_2": "bateria_sprzedaz_2",
+}
+SALE_SWITCHES = {"bateria_sprzedaz_1", "bateria_sprzedaz_2"}
+SET_TIMES = {
+    "ladowanie_z_sieci_1": ("start_grid_charge", "stop_grid_charge"),
+    "ladowanie_z_sieci_2": ("start_grid_charge_2", "stop_grid_charge_2"),
+    "bateria_sprzedaz_1": ("bateria_sprzedaz_start", "bateria_sprzedaz_stop"),
+    "bateria_sprzedaz_2": ("bateria_sprzedaz_start_2", "bateria_sprzedaz_stop_2"),
+}
+
+
+async def async_enable_sets(runtime, hass: HomeAssistant, keys) -> list[str]:
+    """Włącza przełączniki zestawów, których godziny właśnie zapisano — bez tego okno nigdy nie wystartuje.
+
+    Sprzedaż z baterii włączamy TYLKO, gdy nie ma zakazu sprzedaży (import z sieci, bilans arbitrażu: bateria
+    naładowana więcej niż wyprodukowało PV, tryb burzowy). Samo włączenie niczego nie uruchamia — każdy start sprzedaży
+    i tak przechodzi te same blokady w czasie wykonania."""
+    out: list[str] = []
+    done = runtime.state.setdefault("auto_enabled", [])
+    for sw_key in sorted({SET_SWITCH[k] for k in keys if k in SET_SWITCH}):
+        eid = find_eid(hass, "switch", sw_key)
+        st = hass.states.get(eid)
+        if st is None or st.state == "on":
+            continue
+        k1, k2 = SET_TIMES[sw_key]
+        t1, t2 = _current(hass, k1), _current(hass, k2)
+        if not t1 or not t2 or "00:00" in (t1, t2) or t1 == t2:
+            continue                                   # okno niepełne — nie ma czego włączać
+        label = st.attributes.get("friendly_name") or sw_key
+        if sw_key in SALE_SWITCHES:
+            why = runtime.sell_block_reason(strict_grid=False)
+            if why:
+                runtime.log.add("auto", f"Nie włączam „{label}”: zakaz sprzedaży — {why}", "warn")
+                continue
+        try:
+            await hass.services.async_call("switch", "turn_on", {"entity_id": eid}, blocking=True)
+        except Exception as err:  # noqa: BLE001
+            _LOGGER.error("EMS: nie udało się włączyć %s: %s", eid, err)
+            continue
+        if sw_key not in done:
+            done.append(sw_key)
+        out.append(sw_key)
+        runtime.log.add("auto", f"Włączono „{label}” ({t1}–{t2}) — bez tego okno by nie wystartowało", "ok")
+    if out:
+        runtime._save_state()  # noqa: SLF001
+    return out
+
+
 def _minutes(hm: str | None) -> int | None:
     if not hm or not TIME_RE.match(hm[:5]):
         return None
@@ -145,9 +198,12 @@ async def async_auto_apply(runtime, hass: HomeAssistant, result: dict[str, Any],
         return {"applied": {}, "would_apply": final, "previous": previous, "skipped": skipped, "dry_run": True}
     applied_n, apply_skipped = await apply_times(hass, final)
     skipped.extend(apply_skipped)
+    enabled = await async_enable_sets(runtime, hass, set(final)) if applied_n else []
     runtime.state["last_applied"] = previous
     runtime._save_state()  # noqa: SLF001
     changes = ", ".join(f"{k}: {previous[k]}→{v}" for k, v in final.items())
+    if enabled:
+        changes += "; włączono zestawy: " + ", ".join(enabled)
     log.add("auto", f"Auto-zastosowano {applied_n} zmian(y): {changes}", "ok", skipped=len(skipped))
     if applied_n:
         try:
@@ -166,6 +222,14 @@ async def async_undo_auto_apply(runtime, hass: HomeAssistant) -> dict[str, Any]:
         runtime.log.add("auto", "Cofnięcie: brak zapisanych poprzednich ustawień")
         return {"applied": 0, "skipped": ["brak danych do cofnięcia"]}
     applied_n, skipped = await apply_times(hass, dict(prev))
+    for sw_key in list(runtime.state.get("auto_enabled") or []):     # zestawy włączone przez auto-stosowanie wracają do wyłączonych
+        eid = find_eid(hass, "switch", sw_key)
+        if hass.states.get(eid):
+            try:
+                await hass.services.async_call("switch", "turn_off", {"entity_id": eid}, blocking=True)
+            except Exception as err:  # noqa: BLE001
+                _LOGGER.error("EMS: nie udało się wyłączyć %s: %s", eid, err)
+    runtime.state["auto_enabled"] = []
     runtime.state["last_applied"] = {}
     runtime._save_state()  # noqa: SLF001
     runtime.log.add("auto", f"Cofnięto auto-zastosowane godziny ({applied_n})", "ok")

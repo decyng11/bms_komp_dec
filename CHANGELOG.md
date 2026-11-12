@@ -1,6 +1,7 @@
 # EMS komp-dec — zmiany po 0.9.3 (jeszcze niewydane)
 
 ## Poprawki
+- **Zatwierdzone godziny nie uruchamiały okna, gdy przełącznik zestawu był wyłączony**: auto-stosowanie i ręczne zatwierdzenie propozycji zmieniały tylko godziny Start/Stop, a przełączniki „Ładowanie z sieci (zestaw 1/2)” i „Sprzedaż z baterii (zestaw 1/2)” są domyślnie wyłączone — okno nigdy nie startowało. Teraz EMS włącza przełącznik zestawu, którego godziny zapisał (tylko gdy okno jest kompletne). Sprzedaż włączana jest wyłącznie przy braku zakazu sprzedaży (import z sieci, bilans arbitrażu — bateria naładowana więcej niż wyprodukowało PV, tryb burzowy); w razie zakazu EMS pisze to w dzienniku i nie włącza. Cofnięcie auto-stosowania przywraca też wyłączenie tych przełączników.
 - **Ładowanie z sieci nie działało przy zablokowanym prądzie ładowania baterii (0 A)**: „Battery Max Charging Current” = 0 (blokada ładowania z PV, np. po oknie eksportu PV) blokuje ładowanie z każdego źródła, także z sieci. EMS przy starcie okna i przy „Wymuś ładowanie z sieci” przywraca prąd ładowania, a zabezpieczenie robi to też w trakcie trwającego okna (z powiadomieniem).
 - **Mniej, a lepszych propozycji planera**:
   - *Sprzedaż z baterii przy małej produkcji PV*: koszt odtworzenia sprzedanej energii liczony realnie — z PV tylko w tej części, którą PV faktycznie odrobi w ciągu doby (nadwyżka ponad zużycie domu), resztę wyceniamy po cenie zakupu z sieci. Im mniej PV odrobi, tym wyższa wymagana marża (do 2×). Zimą, gdy PV nie uzupełni baterii, sprzedaż „na styk” już się nie pojawia.

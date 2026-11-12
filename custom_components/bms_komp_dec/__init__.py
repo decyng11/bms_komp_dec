@@ -16,7 +16,7 @@ from homeassistant.helpers import config_validation as cv, entity_registry as er
 from homeassistant.helpers.event import async_track_time_change, async_track_time_interval
 from homeassistant.util import dt as dt_util
 
-from .automation import async_auto_apply, async_daily_suggest, async_undo_auto_apply, apply_times
+from .automation import async_auto_apply, async_daily_suggest, async_enable_sets, async_undo_auto_apply, apply_times
 from .const import DOMAIN, PLATFORMS, SCHEDULER_DEFAULTS, VERSION
 from .coordinator import BmsCoordinator
 from .direct import async_setup_inverter_entry, async_unload_inverter_entry, is_inverter_entry
@@ -261,9 +261,11 @@ def _register_services(hass: HomeAssistant) -> None:
         times = call.data.get("times") or {}
         applied, skipped = await apply_times(hass, times)
         runtime = _get_runtime(hass)
+        enabled: list[str] = []
         if runtime and applied:
             runtime.log.add("schedule", f"Ręcznie zastosowano {applied} godzin(y) z propozycji", "ok")
-        return {"applied": applied, "skipped": skipped}
+            enabled = await async_enable_sets(runtime, hass, set(times))
+        return {"applied": applied, "skipped": skipped, "enabled_sets": enabled}
 
     async def handle_undo(call):
         runtime = _get_runtime(hass)

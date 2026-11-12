@@ -158,6 +158,7 @@ class FakeServices:
         elif (domain, service) == ("number", "set_value"):
             self.hass.states.set(eid, data["value"], self.hass.states.attrs_of(eid))
         elif (domain, service) == ("switch", "turn_off"): self.hass.states.set(eid, "off")
+        elif (domain, service) == ("switch", "turn_on"): self.hass.states.set(eid, "on")
         elif (domain, service) == ("switch", "toggle"):
             self.hass.states.set(eid, "off" if self.hass.states.get(eid).state == "on" else "on")
         elif (domain, service) == ("time", "set_value"): self.hass.states.set(eid, data["time"])
