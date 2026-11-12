@@ -294,6 +294,32 @@ async def async_undo_auto_apply(runtime, hass: HomeAssistant) -> dict[str, Any]:
     return {"applied": applied_n, "skipped": skipped}
 
 
+def _store_sale_plan(runtime, proposals: dict[str, Any]) -> None:
+    """Zapamiętuje zaplanowaną sprzedaż (kWh, przychód brutto, zysk netto) na dany dzień — do porównania z faktem.
+
+    Każdy zestaw (poranny / wieczorny szczyt) zapisywany osobno, więc późniejsze odświeżenie planu nie kasuje okna,
+    które już minęło."""
+    from datetime import timedelta
+    from homeassistant.util import dt as dt_util
+    today = dt_util.now().date()
+    store = runtime.state.setdefault("sale_plan", {})
+    changed = False
+    for key in ("bateria_sprzedaz_start", "bateria_sprzedaz_start_2"):
+        p = proposals.get(key)
+        if not isinstance(p, dict) or p.get("skip") or "sale_kwh" not in p:
+            continue
+        d = (today + timedelta(days=int(p.get("sale_day") or 0))).isoformat()
+        rec = store.setdefault(d, {"sets": {}})
+        rec.setdefault("sets", {})[key] = {"kwh": round(float(p.get("sale_kwh") or 0.0), 2),
+                                           "gross": round(float(p.get("sale_gross_pln") or 0.0), 2),
+                                           "net": round(float(p.get("gain_pln") or 0.0), 2)}
+        for f in ("kwh", "gross", "net"):
+            rec[f] = round(sum(v[f] for v in rec["sets"].values()), 2)
+        changed = True
+    if changed:
+        runtime._save_state()  # noqa: SLF001
+
+
 async def async_daily_suggest(runtime, hass: HomeAssistant, optimizer) -> None:
     """Uruchamiane codziennie (16:00): propozycja + opcjonalnie automatyczne zastosowanie."""
     result = await optimizer.suggest()
@@ -301,6 +327,7 @@ async def async_daily_suggest(runtime, hass: HomeAssistant, optimizer) -> None:
         runtime.log.add("auto", f"Propozycja harmonogramu: {result['error']}", "warn")
         return
     proposals = result.get("proposals") or {}
+    _store_sale_plan(runtime, proposals)
     worthwhile = [
         p for k, p in proposals.items()
         if not p.get("skip") and p.get("proposed") and p.get("proposed") != p.get("current")

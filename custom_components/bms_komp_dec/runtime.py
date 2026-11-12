@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from typing import Any
 
 from homeassistant.core import HomeAssistant
@@ -1284,7 +1284,7 @@ class BmsRuntime:
                 "error": res.get("error"), "curve": res.get("curve"), "assumptions": res.get("assumptions"),
                 "proposals": {k: {"proposed": p.get("proposed"), "current": p.get("current"), "skip": p.get("skip"),
                                   "label": p.get("label"), "reason": str(p.get("reason") or "")[:600],
-                                  **{x: p[x] for x in ("gain_pln", "required", "confidence") if x in p}}
+                                  **{x: p[x] for x in ("gain_pln", "required", "confidence", "sale_kwh", "sale_gross_pln", "sale_day") if x in p}}
                               for k, p in (res.get("proposals") or {}).items()},
             }
             blk = self.daily_import_block()
@@ -1507,6 +1507,59 @@ class BmsRuntime:
             return
         self.insights.snapshot_horizons(now, raw, adj)
 
+    SALE_KEEP_DAYS = 14
+
+    def _track_sale(self, now: datetime) -> None:
+        """Ile faktycznie wyeksportowano do sieci w oknach sprzedaży (tryb eksportu) — do porównania z planem.
+
+        Uwaga: w trybie eksportu do sieci idzie też nadwyżka PV, więc to eksport w oknach sprzedaży, a nie sama energia z baterii."""
+        prev = getattr(self, "_sale_ts", None)
+        self._sale_ts = now
+        local = dt_util.as_local(now)
+        today = local.date().isoformat()
+        done = self.state.get("sale_report_done")
+        if done != today:                                      # pierwsza chwila nowej doby: podsumuj wczoraj
+            self.state["sale_report_done"] = today
+            if done is not None:
+                self._sale_report(local.date() - timedelta(days=1))
+        gp = self.grid_power()
+        if prev is None or gp is None or gp >= 0 or not self.is_selling():
+            return
+        dt_s = (now - prev).total_seconds()
+        if dt_s <= 0 or dt_s > 120 or abs(gp) > 100000:
+            return
+        kwh = abs(gp) * dt_s / 3_600_000.0
+        price = self.sell_price()
+        act = self.state.setdefault("sale_actual", {}).setdefault(today, {"kwh": 0.0, "rev": 0.0})
+        act["kwh"] += kwh
+        if price is not None:
+            act["rev"] += kwh * price
+        self._save_state()
+
+    def _sale_report(self, day: date) -> None:
+        """Wpis w dzienniku: plan vs faktyczny eksport w oknach sprzedaży za dzień `day`; porządkuje stare dane."""
+        key = day.isoformat()
+        plan = (self.state.get("sale_plan") or {}).get(key)
+        act = (self.state.get("sale_actual") or {}).get(key) or {"kwh": 0.0, "rev": 0.0}
+        cut = (day - timedelta(days=self.SALE_KEEP_DAYS)).isoformat()
+        for name in ("sale_plan", "sale_actual"):
+            d = self.state.get(name)
+            if isinstance(d, dict):
+                for k in [k for k in d if k < cut]:
+                    d.pop(k, None)
+        if not plan and act["kwh"] < 0.05:
+            return
+        fmt = lambda v: f"{v:.2f}".replace(".", ",")  # noqa: E731
+        if plan:
+            msg = (f"Sprzedaż {key}: plan ~{plan['kwh']:.1f} kWh / {fmt(plan['gross'])} zł; w oknach sprzedaży wyeksportowano "
+                   f"{act['kwh']:.1f} kWh / {fmt(act['rev'])} zł (zysk netto planu ~{fmt(plan.get('net', 0.0))} zł)")
+            level = "warn" if act["kwh"] < 0.5 * plan["kwh"] else "ok"
+        else:
+            msg = f"Sprzedaż {key}: bez planu, ale w oknach sprzedaży wyeksportowano {act['kwh']:.1f} kWh / {fmt(act['rev'])} zł"
+            level = "info"
+        self.log.add("profit", msg, level, plan_kwh=(plan or {}).get("kwh"), actual_kwh=round(act["kwh"], 2),
+                     actual_pln=round(act["rev"], 2))
+
     def on_coordinator_update(self) -> None:
         """Wywoływane co 10 s: całkowanie bilansu PLN i statystyk baterii."""
         now = dt_util.now()
@@ -1518,6 +1571,10 @@ class BmsRuntime:
             self.ledger.update(now, self.grid_power(), self.sell_price(), self.buy_price(), peak)
         except Exception as err:  # noqa: BLE001
             _LOGGER.debug("EMS ledger: %s", err)
+        try:
+            self._track_sale(now)
+        except Exception as err:  # noqa: BLE001
+            _LOGGER.debug("EMS rozliczenie sprzedaży: %s", err)
         try:
             for ev in self.devices.update(now, self.coordinator.data or {}, self.buy_price()):
                 self._spawn(self._device_event(ev))

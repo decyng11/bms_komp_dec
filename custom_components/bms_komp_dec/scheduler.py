@@ -976,7 +976,7 @@ class ScheduleOptimizer:
 
     def _p(self, key: str, current: str, proposed: str | None, reason: str,
            confidence: str = "medium", skip: bool = False, gain: float | None = None,
-           required: bool = False) -> dict:
+           required: bool = False, extra: dict | None = None) -> dict:
         label = TIME_LABELS.get(key, (key, "", ""))[0]
         out = {
             "label": label,
@@ -990,6 +990,8 @@ class ScheduleOptimizer:
             out["gain_pln"] = round(float(gain), 2)      # szacowany zysk netto z tej propozycji (zł)
         if required:
             out["required"] = True                        # propozycja wymagana (zabezpieczenie), nie decyzja zarobkowa
+        if extra:
+            out.update(extra)
         return out
 
     def _plan_curve(self, ctx: dict) -> dict[str, Any]:
@@ -1566,8 +1568,9 @@ class ScheduleOptimizer:
                       f"Do świtu (PV pokryje dom ok. {dawn % 24:02d}:00) SOC nie spadnie poniżej ~{max(0.0, low_pt):.0f}%.{fit_txt}")
             conf = "high" if (avg - (day_avg or avg)) > 0.05 and net >= 2 * margin and p_kw is None else "medium"
             k_s, k_e = keys
-            out[k_s] = self._p(k_s, self._read_current_time(k_s), f"{s:02d}:00", reason, conf, gain=net * sell_kwh)
-            out[k_e] = self._p(k_e, self._read_current_time(k_e), self._fmt_stop(e), reason, conf, gain=net * sell_kwh)
+            sale_x = {"sale_kwh": round(sell_kwh, 2), "sale_gross_pln": round(avg * sell_kwh, 2), "sale_day": day}
+            out[k_s] = self._p(k_s, self._read_current_time(k_s), f"{s:02d}:00", reason, conf, gain=net * sell_kwh, extra=sale_x)
+            out[k_e] = self._p(k_e, self._read_current_time(k_e), self._fmt_stop(e), reason, conf, gain=net * sell_kwh, extra=sale_x)
             sold.update(range(day * 24 + s, day * 24 + e))
         return out
 

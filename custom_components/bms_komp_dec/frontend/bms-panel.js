@@ -2482,10 +2482,34 @@
           <span style="word-break:break-word;">${this._esc(e.msg)}</span></div>`;
       }).join('') : `<div class="chart-empty">Dziennik jest pusty.</div>`;
 
+      // ---- co EMS zrobił dziś: ważne zdarzenia z dzisiejszej doby (komendy, zabezpieczenia, zmiany automatu, rozliczenie sprzedaży)
+      const todayKey = new Date().toLocaleDateString('sv-SE');
+      const IMPORTANT = new Set(['command', 'guard', 'auto', 'profit']);
+      const todays = entries.filter(e => {
+        const d = new Date(e.ts); if (isNaN(d) || d.toLocaleDateString('sv-SE') !== todayKey) return false;
+        return IMPORTANT.has(e.kind) || e.level === 'warn' || e.level === 'error';
+      }).sort((a, b) => String(b.ts).localeCompare(String(a.ts)));
+      const cnt = (f) => todays.filter(f).length;
+      const chip = (n, label, color) => n ? `<span style="font-size:11px;padding:3px 9px;border-radius:999px;background:${color}22;color:${color};font-weight:700;">${n} ${label}</span>` : '';
+      const todayRows = todays.slice(0, 12).map(e => {
+        const d = new Date(e.ts);
+        return `<div style="display:flex;gap:8px;padding:6px 0;border-bottom:1px solid var(--line);font-size:12px;">
+          <span style="width:6px;border-radius:3px;background:${LEVEL[e.level] || LEVEL.info};flex:none;"></span>
+          <span style="color:var(--muted);white-space:nowrap;flex:none;">${d.toLocaleTimeString('pl-PL', { hour: '2-digit', minute: '2-digit' })}</span>
+          <span style="word-break:break-word;">${this._esc(e.msg)}</span></div>`;
+      }).join('');
+      const todayBox = todays.length
+        ? `<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:6px;">${chip(cnt(e => e.kind === 'command'), 'komend', '#10b981')}${chip(cnt(e => e.kind === 'guard'), 'blokad / zabezpieczeń', '#f59e0b')}${chip(cnt(e => e.kind === 'auto'), 'zmian automatu', '#60a5fa')}${chip(cnt(e => e.level === 'warn' || e.level === 'error'), 'ostrzeżeń', '#f87171')}</div>${todayRows}${todays.length > 12 ? `<div style="font-size:11px;color:var(--muted);padding-top:6px;">…i ${todays.length - 12} więcej — pełna lista w dzienniku niżej.</div>` : ''}`
+        : `<div class="chart-empty">Dziś EMS nie wykonał jeszcze żadnych komend ani zmian.</div>`;
+
       body.innerHTML = `
         <div class="section" style="margin-top:6px;">
           <div class="section-title">💰 Bilans w PLN</div>
           <div class="chart-card full" style="padding:14px 16px;">${tiles}${bars}</div>
+        </div>
+        <div class="section" id="logToday">
+          <div class="section-title">🗓️ Co EMS zrobił dziś</div>
+          <div class="chart-card full" style="padding:10px 16px;">${todayBox}</div>
         </div>
         <div class="section">
           <div class="section-title">💡 Oszczędności</div>
@@ -4414,7 +4438,7 @@
   // =====================================================================
   // Wersja tego pliku (ustawiana skryptem pakującym z manifest.json). Każdy moduł niesie tę samą w install.version:
   // gdy się różnią, przeglądarka podała starą kopię modułu z pamięci podręcznej.
-  const CARD_VERSION = '0.9.3';
+  const CARD_VERSION = '0.9.4';
   const MOD_TIMEOUT_MS = 20000;
   const MODULES = {
     diag:   { file: 'bms-diag.js',   global: '__bmsDiagInstall',   contract: 1, label: 'Diagnostyki', p: null, ready: false, err: '', got: '' },
