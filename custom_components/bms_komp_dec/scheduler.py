@@ -36,6 +36,11 @@ MORNING_PEAK = (6, 13)
 EVENING_PEAK = (15, 22)
 PV_BLOCK_MAX_SOC = 30       # nie blokuj PV gdy SOC < 30
 URGENT_MARGIN_PCT = 5.0       # SOC ≤ próg falownika + tyle pkt = „pilnie” (ładowanie od bieżącej godziny)
+SELL_MIN_KWH = 1.5            # sprzedaż z baterii mniejsza niż tyle kWh się nie opłaca
+SELL_MIN_GAIN_PLN = 0.5       # ... ani taka, której zysk netto jest mniejszy niż tyle zł
+MIDDAY_MIN_GAIN_PLN = 0.3     # doładowanie południowe o mniejszym zysku nie jest proponowane
+GRID_MIN_KWH = 0.5            # nocne okno ładowania „na styk” (< tyle kWh do doładowania) nie jest proponowane
+NOOP_SHIFT_MIN = 15           # propozycja różniąca się od bieżących godzin o ≤ tyle minut = bez zmian
 HARD_FLOOR_SOC = 10         # poniżej tego SOC nigdy nie planujemy rozładowania
 
 # Mapowanie klucza time entity -> (label, para start/stop, faza)
@@ -871,6 +876,7 @@ class ScheduleOptimizer:
         else:
             proposals.update(self._suggest_battery_sell(ctx))
             proposals.update(self._suggest_pv_block(ctx))
+        self._prune_proposals(proposals, ctx)
         try:
             curve = self._plan_curve(ctx)
         except Exception as err:  # noqa: BLE001
@@ -899,6 +905,51 @@ class ScheduleOptimizer:
             "proposals": proposals,
             "assumptions": self._assumptions(ctx),
         }
+
+    @staticmethod
+    def _min_of(hhmm: str | None) -> int | None:
+        try:
+            h, m = str(hhmm).split(":")[:2]
+            return int(h) * 60 + int(m)
+        except (ValueError, TypeError):
+            return None
+
+    def _prune_proposals(self, proposals: dict, ctx: dict) -> None:
+        """Mniej, a lepiej: usuwa propozycje bez realnej wartości.
+
+        1) nocne okno ładowania z sieci „na styk” (< GRID_MIN_KWH do doładowania) → pominięte,
+        2) propozycja o niskiej pewności nie jest proponowana do zastosowania,
+        3) propozycja różniąca się od bieżących godzin o ≤ NOOP_SHIFT_MIN min (start i stop) = „bez zmian” —
+           pokazujemy bieżące godziny, więc nic nie trzeba zatwierdzać."""
+        g1 = proposals.get("start_grid_charge")
+        if (isinstance(g1, dict) and not g1.get("skip") and ctx["mode"] != "storm" and not ctx.get("urgent_charge")
+                and 0.0 <= ctx["grid_kwh"] < GRID_MIN_KWH and not ctx["midday_hours"]):
+            self._skip_pair(proposals, ("start_grid_charge", "stop_grid_charge"),
+                            f"Pomiń — bateria wystarczy do rana (do doładowania tylko ~{ctx['grid_kwh']:.1f} kWh, "
+                            f"poniżej {GRID_MIN_KWH:.1f} kWh nie ma sensu ładować z sieci).")
+            ctx["grid_hours"], ctx["grid_targets"], ctx["grid_kwh"] = set(), {}, 0.0
+        pairs = (("start_grid_charge", "stop_grid_charge"), ("start_grid_charge_2", "stop_grid_charge_2"),
+                 ("bateria_sprzedaz_start", "bateria_sprzedaz_stop"), ("bateria_sprzedaz_start_2", "bateria_sprzedaz_stop_2"),
+                 ("pv_export_start", "pv_export_stop"))
+        for k1, k2 in pairs:
+            a, b = proposals.get(k1), proposals.get(k2)
+            if not isinstance(a, dict) or not isinstance(b, dict) or a.get("skip") or b.get("skip"):
+                continue
+            if a.get("confidence") == "low":
+                self._skip_pair(proposals, (k1, k2), "Pomiń — zbyt niska pewność propozycji.", "low")
+                continue
+            moves = []
+            for p in (a, b):
+                cur, new = self._min_of(p.get("current")), self._min_of(p.get("proposed"))
+                if cur is None or new is None or cur == 0:
+                    break
+                d = abs(cur - new)
+                moves.append(min(d, 1440 - d))
+            else:
+                if all(m <= NOOP_SHIFT_MIN for m in moves):
+                    for p in (a, b):
+                        p["proposed"] = p["current"]
+                        p["reason"] = f"Bez zmian — obecne godziny wystarczają (różnica ≤ {NOOP_SHIFT_MIN} min). " + str(p.get("reason") or "")
 
     def _assumptions(self, ctx: dict) -> dict[str, Any]:
         """Na czym opiera się plan (do wyświetlenia pod wykresem): zużycie dziś / jutro i prognoza PV."""
@@ -1293,8 +1344,9 @@ class ScheduleOptimizer:
                             f"wieczornego (śr. {pk:.2f}), by pokryć straty cyklu baterii"
                             + (f" i koszt jej zużycia ({wear:.2f} zł/kWh)." if wear > 0 else "."))
         saving = stored * (pk - off / eff - wear)
-        if saving < 0.1:
-            return skip(f"Pomiń — zysk z doładowania w oknie {ms}–{me} byłby znikomy (~{saving:.2f} zł).")
+        if saving < MIDDAY_MIN_GAIN_PLN:
+            return skip(f"Pomiń — zysk z doładowania w oknie {ms}–{me} byłby zbyt mały, by się opłacało (~{saving:.2f} zł, "
+                        f"min. {MIDDAY_MIN_GAIN_PLN:.2f} zł).")
         stop_h = s + n
         reason = (f"Doładuj ~{grid_kwh:.1f} kWh z sieci {s:02d}:00–{stop_h:02d}:00 (tania taryfa, {'tuż ' if not dyn else ''}przed szczytem {ev_a}–{ev_b}): "
                   f"SOC o {ev_a:02d}:00 bez doładowania ~{soc15:.0f}% → cel {target:.0f}% (ok. {need:.0f}% potrzeba na szczyt do {ev_b:02d}:00; "
@@ -1431,11 +1483,26 @@ class ScheduleOptimizer:
                     tried.append((nn, f"najlepsze okno {dname} ({avg:.3f} zł/kWh) jest poniżej średniej dnia ({day_avg:.3f})", "high"))
                     continue
                 wear = ctx.get("wear", 0.0)
-                net = avg * eff - (ref if ref is not None else 0.0) - wear
-                if net < margin:
+                # koszt alternatywny = koszt odtworzenia sprzedanej energii: z PV (cena RCE w godzinach PV) tylko w tej części,
+                # którą PV rzeczywiście odrobi; resztę trzeba dokupić z sieci (zimą/przy małej produkcji — całość)
+                sell_est = min(avail_lo, ctx["max_dis_kw"] * (e - s))
+                frac, surplus = self._sale_refill(ctx, day, e, sell_est)
+                repl = ref if ref is not None else 0.0
+                off_price = self._pk_off(d0 + timedelta(days=day))[1]
+                if off_price is None:
+                    off_price = day_avg      # taryfa jeszcze nienauczona: średnia cena dnia jako przybliżenie ceny zakupu
+                if frac is not None and frac < 1.0 and ref is not None and off_price is not None:
+                    repl = frac * ref + (1.0 - frac) * off_price
+                need_margin = margin * (2.0 - frac) if frac is not None else margin
+                net = avg * eff - repl - wear
+                if net < need_margin:
                     wear_txt = f" − {wear:.3f} (zużycie baterii)" if wear > 0 else ""
-                    tried.append((nn, f"sprzedaż nieopłacalna {dname}: {avg:.3f} × {eff:.0%} − {(ref or 0):.3f} (koszt alternatywny)"
-                                      f"{wear_txt} = {net:.3f} < min. marża {margin:.2f} zł/kWh", "high"))
+                    pv_txt = ""
+                    if frac is not None and frac < 1.0:
+                        pv_txt = (f"; PV odrobi tylko ~{surplus:.1f} kWh z ~{sell_est:.1f} kWh, resztę trzeba dokupić z sieci "
+                                  f"({off_price if off_price is not None else 0:.3f} zł/kWh), więc wymagana marża wynosi {need_margin:.2f}")
+                    tried.append((nn, f"sprzedaż nieopłacalna {dname}: {avg:.3f} × {eff:.0%} − {repl:.3f} (koszt alternatywny)"
+                                      f"{wear_txt} = {net:.3f} < min. marża {need_margin:.2f} zł/kWh{pv_txt}", "high"))
                     continue
                 s_abs = day * 24 + s
                 soc_s = soc_lo if s_abs <= lo_abs else self._simulate(ctx, soc_lo, lo_abs, s_abs, ctx["grid_hours"], sold)
@@ -1475,12 +1542,16 @@ class ScheduleOptimizer:
                 continue
             s, e, avg, net, soc_s, avail, low_pt, dawn, p_kw = chosen
             power_kw = p_kw if p_kw is not None else ctx["max_dis_kw"]
+            sell_kwh = min(avail, power_kw * (e - s))
+            if sell_kwh < SELL_MIN_KWH or net * sell_kwh < SELL_MIN_GAIN_PLN:
+                skip(f"Pomiń — sprzedaż {dname} {s:02d}–{e:02d} byłaby za mała, by się opłacało: ~{sell_kwh:.1f} kWh, "
+                     f"zysk ~{net * sell_kwh:+.2f} zł (min. {SELL_MIN_KWH:.1f} kWh i {SELL_MIN_GAIN_PLN:.2f} zł).", "high")
+                continue
             for h_ in range(day * 24 + s, day * 24 + e):
                 ctx["sale_kw"][h_] = power_kw
             ctx["sale_windows"].append({"day": day, "start": s, "stop": e,
                                         "power_w": int(round(p_kw * 1000)) if p_kw is not None else None})
 
-            sell_kwh = min(avail, power_kw * (e - s))
             fit_txt = (f" Moc sprzedaży obniżona do {power_kw:.1f} kW (zamiast {ctx['max_dis_kw']:.1f} kW), bo zapas energii "
                        f"ponad próg nocny wystarcza na ~{sell_kwh:.1f} kWh.") if p_kw is not None else ""
             reason = (f"Najlepsze okno {dname} w szczycie {lbl}: {s:02d}–{e:02d}, śr. {avg:.3f} zł/kWh "
@@ -1493,6 +1564,25 @@ class ScheduleOptimizer:
             out[k_e] = self._p(k_e, self._read_current_time(k_e), self._fmt_stop(e), reason, conf)
             sold.update(range(day * 24 + s, day * 24 + e))
         return out
+
+    def _sale_refill(self, ctx: dict, day: int, e: int, sell_kwh: float) -> tuple[float | None, float]:
+        """Jaką część sprzedanej energii odrobi PV w ciągu doby po sprzedaży (nadwyżka PV ponad zużycie domu).
+
+        Zwraca (ułamek 0–1, nadwyżka kWh). None = brak prognozy godzinowej PV, więc nie oceniamy (stary sposób liczenia).
+        Godziny po 48. godzinie planu bierzemy z profilu PV „jutra” jako przybliżenie następnego dnia."""
+        pv_t = ctx["pv"][1] if len(ctx["pv"]) > 1 else None
+        if not ctx["pv"][day] and not pv_t:
+            return None, 0.0
+        surplus = 0.0
+        for h in range(day * 24 + e, day * 24 + e + 24):
+            if h < 48:
+                pv_h = self._pv_abs(ctx, h)
+            else:
+                v = pv_t[h % 24] if pv_t else None
+                pv_h = float(v) if isinstance(v, (int, float)) else 0.0
+            surplus += max(0.0, pv_h - self._load_abs(ctx, h))
+        need = sell_kwh * 1.15 + 0.5
+        return (min(1.0, surplus / need) if need > 0 else 1.0), surplus
 
     def _fit_sale_power(self, ctx: dict, soc_s: float, s_abs: int, e_abs: int, sold: set, dawn: int) -> tuple[float, float] | None:
         """Największa moc sprzedaży (krok 0,1 kW, min. 0,5 kW), przy której bateria nie spadnie poniżej progu nocnego

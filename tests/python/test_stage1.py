@@ -91,7 +91,7 @@ async def main():
     check("planer G12: sobota też ma okno 13–15", (not m1["skip"]) and m1["proposed"] in ("13:00", "14:00"), m1["reason"])
     # (b) inne okna: 7-13,16-21 → noc 21–7, południe 13–16
     tar.set_profile(tar.TariffProfile(peaks=((7, 13), (16, 21))))
-    hass, c, sched = await mk((2026, 11, 3, 10), 30, shutdown=25)
+    hass, c, sched = await mk((2026, 11, 3, 10), 15, shutdown=10)
     out = (await sched.suggest())["proposals"]
     m1, m2 = out["start_grid_charge_2"], out["stop_grid_charge_2"]
     check("planer 7-13,16-21: południe 13–16 (stop o 16:00)", (not m1["skip"]) and m2["proposed"] == "16:00" and m1["proposed"] in ("13:00", "14:00", "15:00"), (m1, m2))

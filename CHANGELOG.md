@@ -2,6 +2,10 @@
 
 ## Poprawki
 - **Ładowanie z sieci nie działało przy zablokowanym prądzie ładowania baterii (0 A)**: „Battery Max Charging Current” = 0 (blokada ładowania z PV, np. po oknie eksportu PV) blokuje ładowanie z każdego źródła, także z sieci. EMS przy starcie okna i przy „Wymuś ładowanie z sieci” przywraca prąd ładowania, a zabezpieczenie robi to też w trakcie trwającego okna (z powiadomieniem).
+- **Mniej, a lepszych propozycji planera**:
+  - *Sprzedaż z baterii przy małej produkcji PV*: koszt odtworzenia sprzedanej energii liczony realnie — z PV tylko w tej części, którą PV faktycznie odrobi w ciągu doby (nadwyżka ponad zużycie domu), resztę wyceniamy po cenie zakupu z sieci. Im mniej PV odrobi, tym wyższa wymagana marża (do 2×). Zimą, gdy PV nie uzupełni baterii, sprzedaż „na styk” już się nie pojawia.
+  - Minimalna sprzedaż: ≥ 1,5 kWh i zysk ≥ 0,50 zł (drobne okna odpadają). Doładowanie południowe: zysk ≥ 0,30 zł (wcześniej 0,10 zł). Nocne ładowanie „na styk” (< 0,5 kWh do doładowania) jest pomijane.
+  - Propozycja różniąca się od bieżących godzin o ≤ 15 min (start i stop) nie wymaga zatwierdzania; propozycje o niskiej pewności nie są proponowane do zastosowania.
 
 # EMS komp-dec — zmiany w 0.9.3 (z 0.9.2)
 
