@@ -192,6 +192,7 @@ SWITCHES = [
     ("sale_power_fit", "Obniżaj moc sprzedaży do zapasu energii", "mdi:flash-triangle", True),
     ("device_control", "Sterowanie urządzeniami (włączanie przełączników)", "mdi:power-socket-eu", False),
     ("hide_devices_tab", "Ukryj zakładkę Urządzenia w panelu", "mdi:eye-off-outline", False),
+    ("tabs_top", "Pasek zakładek na górze (zamiast na dole)", "mdi:dock-top", False),
     ("brand_test_mode", "Sofar: tryb próbny (komendy tylko w dzienniku)", "mdi:flask-outline", True),
 ]
 

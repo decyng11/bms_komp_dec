@@ -103,7 +103,7 @@
   const STYLES = `
     :host { --bg:#000; --card:#1c1c1e; --surface:rgba(255,255,255,0.06); --line:rgba(255,255,255,0.10); --text:#fff; --text2:#e5e5ea; --muted:#8e8e93; --muted2:#6e6e73; --accent:#0a84ff; --green:#30d158; --orange:#ff9f0a; --red:#ff453a; --input-bg:#2c2c2e; --seg-bg:rgba(118,118,128,0.24); --seg-active:#636366; --shadow:none; --pf-bg:#1c1c1e; color-scheme: dark; }
     :host([data-theme="light"]) { --bg:#e4e4e9; --card:#f0f0f4; --surface:rgba(60,60,67,0.07); --line:rgba(60,60,67,0.12); --text:#1c1c1e; --text2:#3a3a3c; --muted:#6c6c70; --muted2:#8e8e93; --accent:#0a84ff; --green:#34c759; --orange:#ff9500; --red:#ff3b30; --input-bg:#e4e4e9; --seg-bg:rgba(118,118,128,0.14); --seg-active:#f7f7fa; --shadow:0 1px 2px rgba(0,0,0,0.05),0 6px 18px rgba(0,0,0,0.07); --pf-bg:#f0f0f4; color-scheme: light; }
-    :host { display: block; background: var(--bg); color: var(--text); border-radius: 22px; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; overflow-x: hidden; }
+    :host { display: block; background: var(--bg); color: var(--text); border-radius: 22px; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; overflow-x: hidden; overflow-x: clip; }
     * { box-sizing: border-box; }
     .app { padding: 14px; width: 100%; max-width: 1200px; margin: 0 auto; }
     .header { text-align: center; margin-bottom: 16px; }
@@ -428,6 +428,31 @@
     .theme-seg button.active { background: var(--seg-active); color: var(--text); box-shadow: 0 1px 4px rgba(0,0,0,0.18); }
     .tabs { background: var(--seg-bg); border-radius: 14px; padding: 3px; }
     .tab { border-radius: 11px; color: var(--text2); font-weight: 600; }
+    /* pasek zakładek na dole: same ikony, bez tła, treść przy dolnej krawędzi łagodnie znika */
+    :host { --tab-on: #6ee7b7; }
+    :host([data-theme="light"]) { --tab-on: #059669; }
+    .tabs.bottom { position: sticky; bottom: calc(6px + env(safe-area-inset-bottom, 0px)); z-index: 30; isolation: isolate; margin: 14px -14px -14px; padding: 22px 10px 4px; background: transparent; border-radius: 0; box-shadow: none; overflow: visible; gap: 0; justify-content: space-around; }
+    .tabs.bottom::before { content: ''; position: absolute; left: 0; right: 0; top: 0; bottom: -8px; z-index: -1; pointer-events: none; background: linear-gradient(180deg, transparent, var(--bg) 62%); }
+    .tabs.bottom .tab { flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 6px 2px; background: transparent; box-shadow: none; color: var(--muted); position: relative; transition: color .2s, transform .2s; filter: drop-shadow(0 1px 5px rgba(0,0,0,.45)); }
+    :host([data-theme="light"]) .tabs.bottom .tab { filter: drop-shadow(0 1px 4px rgba(255,255,255,.7)); }
+    .tabs.bottom .tab .ti { display: flex; position: relative; }
+    .tabs.bottom .tab .ti svg { width: 28px; height: 28px; }
+    .tabs.bottom .tab .tl { display: none; }
+    .tabs.bottom .tab::after { content: ''; width: 5px; height: 5px; border-radius: 50%; background: transparent; }
+    .tabs.bottom .tab.active { background: transparent; box-shadow: none; color: var(--tab-on); transform: translateY(-2px) scale(1.08); }
+    .tabs.bottom .tab.active svg { filter: drop-shadow(0 0 7px var(--tab-on)); }
+    .tabs.bottom .tab.active::after { background: currentColor; box-shadow: 0 0 8px currentColor; }
+    .tabs.bottom .tab.warn .ti::after { content: ''; position: absolute; top: -2px; right: -3px; width: 9px; height: 9px; border-radius: 50%; background: #ff453a; border: 2px solid var(--bg); }
+    @media (min-width: 641px) {
+      .tabs.bottom { justify-content: center; gap: 8px; }
+      .tabs.bottom .tab { flex: 0 0 auto; flex-direction: row; gap: 8px; padding: 9px 16px; border-radius: 22px; }
+      .tabs.bottom .tab .tl { display: inline; font-size: 13px; }
+      .tabs.bottom .tab::after { display: none; }
+      .tabs.bottom .tab.active { transform: none; }
+    }
+    .tabs:not(.bottom) .tab .ti svg { width: 16px; height: 16px; vertical-align: -3px; }
+    .tabs:not(.bottom) .tab { display: inline-flex; align-items: center; justify-content: center; gap: 6px; }
+    .tabs:not(.bottom) .tab .ti { display: inline-flex; }
     .section-title { letter-spacing: 0.6px; font-weight: 600; }
     .chart-card, .soc-card, .weather-tile, .ds-item, .btn, .pf-wrapper { background: var(--card); border: none; box-shadow: var(--shadow); backdrop-filter: none; }
     .chart-card, .soc-card { border-radius: 26px; }
@@ -2552,13 +2577,13 @@
           </div>
           </div>
         </div>
-        <nav class="tabs">
-          <button class="tab active" data-tab="main">🏠 Główny</button>
-          <button class="tab" data-tab="charts">📊 Wykresy</button>
-          <button class="tab" data-tab="ems">🎛️ EMS</button>
-          <button class="tab" data-tab="log">💰 Zysk i log</button>
-          <button class="tab" data-tab="dev" id="tabDev">🔌 Urządzenia</button>
-          <button class="tab" data-tab="diag" id="tabDiag" style="display:none;">🛠️ Diagnostyka</button>
+        <nav class="tabs bottom" id="tabsNav">
+          <button class="tab active" data-tab="main" title="Główny" aria-label="Główny"><span class="ti">${TAB_SVG.main}</span><span class="tl">Główny</span></button>
+          <button class="tab" data-tab="charts" title="Wykresy" aria-label="Wykresy"><span class="ti">${TAB_SVG.charts}</span><span class="tl">Wykresy</span></button>
+          <button class="tab" data-tab="ems" title="EMS" aria-label="EMS"><span class="ti">${TAB_SVG.ems}</span><span class="tl">EMS</span></button>
+          <button class="tab" data-tab="log" title="Zysk i log" aria-label="Zysk i log"><span class="ti">${TAB_SVG.log}</span><span class="tl">Zysk i log</span></button>
+          <button class="tab" data-tab="dev" id="tabDev" title="Urządzenia" aria-label="Urządzenia"><span class="ti">${TAB_SVG.dev}</span><span class="tl">Urządzenia</span></button>
+          <button class="tab" data-tab="diag" id="tabDiag" style="display:none;" title="Diagnostyka" aria-label="Diagnostyka"><span class="ti">${TAB_SVG.diag}</span><span class="tl">Diagnostyka</span></button>
         </nav>
 
         <div class="price-bar" id="priceBar" style="display:none;"></div>
@@ -2844,6 +2869,7 @@
         </div>
       `;
       this.shadowRoot.appendChild(wrap);
+      this._safe(() => this._tabsPosSync());
 
       // Obsługa przycisków czasu dla Historii
       wrap.querySelectorAll('.time-btn').forEach(btn => {
@@ -3417,6 +3443,7 @@
       this._safe(() => this._renderEta());
       this._safe(() => this._dgSyncTab());
       this._safe(() => this._devTabSync());
+      this._safe(() => this._tabsPosSync());
       if (this._activeTab === 'diag') this._safe(() => this._dgTick());
       if (this._activeTab === 'dev') this._safe(() => this._devTick());
       if (this._activeTab === 'log') this._safe(() => this._renderLogTab());
@@ -4450,6 +4477,19 @@
   const bmsEsc = (t) => String(t).replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
   const bmsModuleError = (name) => `<div class="chart-empty" style="color:var(--danger,#d33);">Nie udało się wczytać modułu ${MODULES[name].label}: ${bmsEsc(MODULES[name].err || 'nieznany błąd')}<br><button type="button" class="btn" data-mod-retry="${name}" style="margin-top:10px;padding:8px 14px;">↻ Spróbuj ponownie</button><div style="margin-top:10px;font-size:11px;opacity:.75;color:var(--secondary-text-color,inherit);">karta ${bmsEsc(CARD_VERSION)} · integracja ${bmsEsc(MOD_VER || '?')} · moduł ${bmsEsc(MODULES[name].got || '—')}</div></div>`;
 
+  // Ikony zakładek (SVG, kolor = currentColor)
+  const TAB_SVG = (() => {
+    const mk = (p) => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${p}</svg>`;
+    return {
+      main: mk('<path d="M3 11l9-8 9 8"/><path d="M5 10v10h14V10"/><path d="M10 20v-6h4v6"/>'),
+      charts: mk('<path d="M5 20V11"/><path d="M12 20V4"/><path d="M19 20v-6"/>'),
+      ems: mk('<path d="M4 6h9M17 6h3M4 12h3M11 12h9M4 18h11M19 18h1"/><circle cx="15" cy="6" r="2"/><circle cx="9" cy="12" r="2"/><circle cx="17" cy="18" r="2"/>'),
+      log: mk('<circle cx="12" cy="12" r="9"/><path d="M9 9.5c0-1 1-1.5 3-1.5s3 .5 3 1.5-1 1.5-3 1.5-3 .5-3 1.5 1 1.5 3 1.5 3-.5 3-1.5"/><path d="M12 6v2M12 16v2"/>'),
+      dev: mk('<path d="M9 2v5M15 2v5"/><path d="M6 7h12v4a6 6 0 0 1-12 0z"/><path d="M12 17v5"/>'),
+      diag: mk('<circle cx="12" cy="12" r="3"/><circle cx="12" cy="12" r="8" stroke-dasharray="3.1 2.6"/>'),
+    };
+  })();
+
   // Zaślepki: działają do czasu załadowania modułu, potem moduł nadpisuje je pełnymi wersjami.
   const DG_STUBS = {
     _devTabSync() {            // przełącznik z Diagnostyki → Tryby: chowa całą zakładkę Urządzenia
@@ -4459,6 +4499,15 @@
       b.style.display = hide ? 'none' : '';
       if (hide && this._activeTab === 'dev') { const m = this.shadowRoot && this.shadowRoot.querySelector('.tab[data-tab="main"]'); if (m) m.click(); }
     },
+    _tabsPosSync() {           // przełącznik z Diagnostyki → Tryby: pasek zakładek na górze zamiast na dole
+      const wrap = this.shadowRoot && this.shadowRoot.querySelector('.app');
+      const nav = wrap && wrap.querySelector('#tabsNav'); if (!nav) return;
+      const st = this._hass && this._hass.states[this._eid('switch', 'tabs_top')];
+      const top = !!st && st.state === 'on';
+      nav.classList.toggle('bottom', !top);
+      if (top) { const pb = wrap.querySelector('#priceBar'); if (pb && nav.nextElementSibling !== pb) wrap.insertBefore(nav, pb); }
+      else if (wrap.lastElementChild !== nav) wrap.appendChild(nav);
+    },
     _dgIsAdmin() { const u = this._hass && this._hass.user; return !!(u && u.is_admin); },
     _dgSyncTab() {
       const b = this._el('tabDiag');
@@ -4467,8 +4516,10 @@
         // alarm z integracji widać na zakładce, zanim załaduje się moduł Diagnostyki
         const ms = this._hass && this._hass.states[this._eid('sensor', 'monitor_status')];
         const be = ms && ms.attributes && Array.isArray(ms.attributes.alarms) ? ms.attributes.alarms.length : 0;
-        const want = '🛠️ Diagnostyka' + (be ? ' ⚠' : '');
-        if (b.textContent !== want) b.textContent = want;
+        const want = 'Diagnostyka' + (be ? ' ⚠' : '');
+        const lb = b.querySelector('.tl');
+        if (lb && lb.textContent !== want) lb.textContent = want;
+        b.classList.toggle('warn', !!be);
       }
     },
     _dgTick() { /* bez modułu nic do odświeżania */ },

@@ -312,7 +312,7 @@
       if (DG_ST.card && !DG_ST.ready && Date.now() - DG_ST.retryAt > 30000) { DG_ST.retryAt = Date.now(); dgStoreLoad(this); }
       if (DG_ST.ready && DG_ST.card && Object.keys(DG_ST.dirty).length && !DG_ST.timer) dgStoreSchedule(2000);
       const b = this._el('tabDiag');
-      if (b) { b.style.display = this._dgIsAdmin() ? '' : 'none'; const ms = this._hass.states[this._eid('sensor', 'monitor_status')]; const be = ms && ms.attributes && Array.isArray(ms.attributes.alarms) ? ms.attributes.alarms.length : 0; const bad = (DG_LS.get('bms_diag_alarms', []).length || be) ? ' ⚠' : ''; const want = '🛠️ Diagnostyka' + bad; if (b.textContent !== want) b.textContent = want; }
+      if (b) { b.style.display = this._dgIsAdmin() ? '' : 'none'; const ms = this._hass.states[this._eid('sensor', 'monitor_status')]; const be = ms && ms.attributes && Array.isArray(ms.attributes.alarms) ? ms.attributes.alarms.length : 0; const bad = (DG_LS.get('bms_diag_alarms', []).length || be) ? ' ⚠' : ''; const want = 'Diagnostyka' + bad; const lb = b.querySelector('.tl'); if (lb && lb.textContent !== want) lb.textContent = want; b.classList.toggle('warn', !!bad); }
       const s = this._dgS();
       const nw = Date.now(); if (nw - (s._wcAt || 0) > 5000) { s._wcAt = nw; try { this._dgWatchCheck(); } catch (e) { console.warn('EMS diag watch', e); } }
       if (s.until && !this._dgUnlocked() && this._activeTab === 'diag' && this._el('dgBody')) { s.until = 0; this._dgRender(); }
@@ -1232,6 +1232,7 @@
           ['storm_mode', '⛈', 'Tryb burzowy', 'Rezerwa 100%: bateria ładuje się w tanim oknie i nie sprzedaje. Wyłącza się sam po ustawionym czasie.'],
           ['vacation_mode', '🏖', 'Tryb urlopowy', 'Plan zakłada stałe, minimalne zużycie domu zamiast średniej z historii.'],
           ['notifications_enabled', '🔔', 'Powiadomienia', 'Niski SOC, alarm falownika, zmiana parametru po zapisie, brak cen RCE, brak łączności.'],
+          ['tabs_top', '⬆️', 'Pasek zakładek na górze', 'Domyślnie pasek zakładek (same ikony) jest przyklejony do dołu ekranu. Włącz, aby wrócić do paska na górze — u wszystkich użytkowników.'],
           ['hide_devices_tab', '🙈', 'Ukryj zakładkę Urządzenia', 'Chowa całą zakładkę „Urządzenia” w panelu u wszystkich użytkowników (dane i sterowanie urządzeń działają dalej).'],
           ['auto_apply_dry_run', '🧪', 'Auto-stosowanie: tylko podgląd', 'Automat liczy zmiany i zapisuje je w dzienniku, ale niczego nie wysyła do falownika.'],
         ],
