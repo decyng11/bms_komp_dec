@@ -68,6 +68,30 @@ async def main():
         async def suggest(self): return {"proposals": {"bateria_sprzedaz_start_2": sk(), "bateria_sprzedaz_stop_2": sk()}}
     await automation.async_daily_suggest(rt, hass, Opt())
     check("dzienna propozycja bez zmian godzin też wyłącza zestaw", S.get("switch.bms_bateria_sprzedaz_2").state == "off")
+
+    # zerowanie okna: plan nie ma sprzedaży → stop = start (także gdy zestaw był już wyłączony)
+    hass, c, opt, rt, S = setup()
+    await automation.async_auto_apply(rt, hass, res)
+    check("brak propozycji: okno wyzerowane (stop = start)",
+          S.get("time.bms_bateria_sprzedaz_stop_2").state[:5] == "18:00" and S.get("time.bms_bateria_sprzedaz_start_2").state[:5] == "18:00",
+          (S.get("time.bms_bateria_sprzedaz_start_2").state, S.get("time.bms_bateria_sprzedaz_stop_2").state))
+    hass, c, opt, rt, S = setup()
+    S.set("switch.bms_bateria_sprzedaz_2", "off")
+    await automation.async_auto_apply(rt, hass, res)
+    check("zestaw już wyłączony: okno i tak wyzerowane", S.get("time.bms_bateria_sprzedaz_stop_2").state[:5] == "18:00")
+    hass, c, opt, rt, S = setup()
+    await automation.async_auto_apply(rt, hass, {"proposals": {"bateria_sprzedaz_start_2": sk("low"), "bateria_sprzedaz_stop_2": sk("low")}})
+    check("niska pewność: godziny nietknięte", S.get("time.bms_bateria_sprzedaz_stop_2").state[:5] == "19:00")
+    hass, c, opt, rt, S = setup()
+    S.set("switch.bms_auto_apply_dry_run", "on")
+    await automation.async_auto_apply(rt, hass, res)
+    check("podgląd: godziny nietknięte", S.get("time.bms_bateria_sprzedaz_stop_2").state[:5] == "19:00")
+    # plan wraca do sprzedaży z nowym stopem → okno znów ustawione
+    hass, c, opt, rt, S = setup()
+    await automation.async_auto_apply(rt, hass, res)
+    await automation.async_auto_apply(rt, hass, {"proposals": {"bateria_sprzedaz_start_2": ok_p("18:00", "18:00"), "bateria_sprzedaz_stop_2": ok_p("18:00", "19:00")}})
+    check("plan wraca: stop ustawiony z powrotem, zestaw włączony",
+          S.get("time.bms_bateria_sprzedaz_stop_2").state[:5] == "19:00" and S.get("switch.bms_bateria_sprzedaz_2").state == "on")
     print(f"SALESYNC PASS={common.PASS} FAIL={common.FAIL}")
 
 asyncio.run(main())

@@ -98,19 +98,24 @@ async def async_sync_sale_sets(runtime, hass: HomeAssistant, proposals: dict[str
             continue
         eid = find_eid(hass, "switch", sw_key)
         st = hass.states.get(eid)
-        if st is None or st.state != "on":
-            continue
-        label = st.attributes.get("friendly_name") or sw_key
-        try:
-            await hass.services.async_call("switch", "turn_off", {"entity_id": eid}, blocking=True)
-        except Exception as err:  # noqa: BLE001
-            _LOGGER.error("EMS: nie udało się wyłączyć %s: %s", eid, err)
-            continue
-        if sw_key not in done:
-            done.append(sw_key)
-        off.append(sw_key)
+        label = (st.attributes.get("friendly_name") if st is not None else None) or sw_key
         why = str(p1.get("reason") or "").replace("Pomiń — ", "")[:220]
-        runtime.log.add("auto", f"Wyłączono „{label}”: plan nie przewiduje sprzedaży — {why}", "warn")
+        if st is not None and st.state == "on":
+            try:
+                await hass.services.async_call("switch", "turn_off", {"entity_id": eid}, blocking=True)
+            except Exception as err:  # noqa: BLE001
+                _LOGGER.error("EMS: nie udało się wyłączyć %s: %s", eid, err)
+                continue
+            if sw_key not in done:
+                done.append(sw_key)
+            off.append(sw_key)
+            runtime.log.add("auto", f"Wyłączono „{label}”: plan nie przewiduje sprzedaży — {why}", "warn")
+        # wyzeruj okno (stop = start), żeby w falowniku nie wisiały stare godziny sprzedaży
+        t1, t2 = _current(hass, k1), _current(hass, k2)
+        if t1 and t2 and t1 != t2 and t1 != "00:00":
+            n, _err = await apply_times(hass, {k2: t1})
+            if n:
+                runtime.log.add("auto", f"Wyzerowano okno sprzedaży „{label}” ({t1}–{t2} → {t1}–{t1}): brak propozycji", "info")
     if off:
         runtime._save_state()  # noqa: SLF001
     return off

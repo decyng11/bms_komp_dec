@@ -245,6 +245,8 @@
     .row .eid-hint.err { color: #f43f5e; }
     .row .eid-hint.help { font-family: inherit; font-size: 11px; line-height: 1.35; color: var(--muted); white-space: normal; }
     .row .eid-hint.err { font-family: inherit; font-size: 11px; white-space: normal; }
+    .row.inactive-row .field-controls { opacity: .4; }
+    .row.inactive-row .name::after { content: ' · nieaktywne'; font-size: 11px; font-weight: 400; color: var(--muted2); }
     .row .field-controls { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
     select, input[type="time"], input[type="number"] { background: var(--input-bg); color: var(--text); border: 1px solid var(--line); border-radius: 10px; padding: 8px 12px; font-size: 15px; font-family: inherit; outline: none; transition: border-color 0.2s; }
     input[type="time"]:focus, input[type="number"]:focus { border-color: var(--accent); }
@@ -3611,6 +3613,15 @@
           const d = new Date(), cur = d.getHours() * 60 + d.getMinutes(), s = a[0] * 60 + a[1], e = b[0] * 60 + b[1];
           soon = s === e ? false : (s < e ? !(cur >= s && cur < e) : !(cur >= s || cur < e));
         }
+      }
+      if (timeKeys) {
+        // godziny zestawu wyszarzone, gdy zestaw wyłączony albo okno puste (start = stop)
+        const raw = (k) => String(this._st(this._eid('time', k)) || '').slice(0, 5);
+        const idle = !isOn || raw(timeKeys[0]) === raw(timeKeys[1]);
+        timeKeys.forEach((k) => {
+          const row = this.shadowRoot.querySelector(`[data-time-key="${k}"]`)?.closest('.row');
+          if (row) row.classList.toggle('inactive-row', idle);
+        });
       }
       if (badge.textContent !== txt) badge.textContent = txt;
       badge.classList.toggle('on', isOn);
