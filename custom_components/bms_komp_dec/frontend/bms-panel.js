@@ -436,28 +436,25 @@
     .theme-seg button.active { background: var(--seg-active); color: var(--text); box-shadow: 0 1px 4px rgba(0,0,0,0.18); }
     .tabs { background: var(--seg-bg); border-radius: 14px; padding: 3px; }
     .tab { border-radius: 11px; color: var(--text2); font-weight: 600; }
-    /* pasek zakładek na dole: same ikony, bez tła, treść przy dolnej krawędzi łagodnie znika */
-    :host { --tab-on: #6ee7b7; }
-    :host([data-theme="light"]) { --tab-on: #059669; }
-    .tabs.bottom { position: sticky; bottom: calc(6px + env(safe-area-inset-bottom, 0px)); z-index: 30; isolation: isolate; margin: 14px -14px -14px; padding: 22px 10px 4px; background: transparent; border-radius: 0; box-shadow: none; overflow: visible; gap: 0; justify-content: space-around; }
-    .tabs.bottom::before { content: ''; position: absolute; left: 0; right: 0; top: 0; bottom: -8px; z-index: -1; pointer-events: none; background: linear-gradient(180deg, transparent, var(--bg) 62%); }
-    .tabs.bottom .tab { flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 6px 2px; background: transparent; box-shadow: none; color: var(--muted); position: relative; transition: color .2s, transform .2s; filter: drop-shadow(0 1px 5px rgba(0,0,0,.45)); }
-    :host([data-theme="light"]) .tabs.bottom .tab { filter: drop-shadow(0 1px 4px rgba(255,255,255,.7)); }
+    /* pasek zakładek na dole: pływająca „wyspa” z pełnym tłem, ikony z podpisami, aktywna zakładka jako pastylka */
+    :host { --tab-on: #34d399; --tab-on-fg: #05261a; --tab-off: #c7c7cc; --tab-bg: #2c2c2e; --tab-line: #3a3a3c; --tab-bot: calc(env(safe-area-inset-bottom, 0px) * 0.35 + 6px); }
+    :host([data-theme="light"]) { --tab-on: #059669; --tab-on-fg: #fff; --tab-off: #3a3a3c; --tab-bg: #fff; --tab-line: rgba(60,60,67,0.18); }
+    .tabs.bottom { position: sticky; bottom: var(--tab-bot); z-index: 30; isolation: isolate; margin: 16px 0 -8px; padding: 5px; background: var(--tab-bg); border: 1px solid var(--tab-line); border-radius: 30px; box-shadow: 0 8px 24px rgba(0,0,0,0.35); overflow: visible; gap: 2px; justify-content: space-around; }
+    .tabs.bottom::before { content: ''; position: absolute; left: -14px; right: -14px; top: -28px; bottom: calc(-1 * var(--tab-bot) - 14px); z-index: -1; pointer-events: none; background: linear-gradient(180deg, transparent, var(--bg) 42%); }
+    .tabs.bottom .tab { flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; padding: 7px 2px 6px; border-radius: 24px; background: transparent; box-shadow: none; color: var(--tab-off); position: relative; transition: background .2s, color .2s; }
     .tabs.bottom .tab .ti { display: flex; position: relative; }
-    .tabs.bottom .tab .ti svg { width: 28px; height: 28px; }
+    .tabs.bottom .tab .ti svg { width: 24px; height: 24px; }
     .tabs.bottom .tab .tl { display: none; }
-    .tabs.bottom .tab::after { content: ''; width: 5px; height: 5px; border-radius: 50%; background: transparent; }
-    .tabs.bottom .tab.active { background: transparent; box-shadow: none; color: var(--tab-on); transform: translateY(-2px) scale(1.08); }
-    .tabs.bottom .tab.active svg { filter: drop-shadow(0 0 7px var(--tab-on)); }
-    .tabs.bottom .tab.active::after { background: currentColor; box-shadow: 0 0 8px currentColor; }
-    .tabs.bottom .tab.warn .ti::after { content: ''; position: absolute; top: -2px; right: -3px; width: 9px; height: 9px; border-radius: 50%; background: #ff453a; border: 2px solid var(--bg); }
+    .tabs.bottom .tab .tls { display: block; font-size: 10px; font-weight: 600; line-height: 1.1; white-space: nowrap; }
+    .tabs.bottom .tab.active { background: var(--tab-on); color: var(--tab-on-fg); box-shadow: none; }
+    .tabs.bottom .tab.warn .ti::after { content: ''; position: absolute; top: -2px; right: -4px; width: 9px; height: 9px; border-radius: 50%; background: #ff453a; border: 2px solid var(--tab-bg); }
     @media (min-width: 641px) {
-      .tabs.bottom { justify-content: center; gap: 8px; }
-      .tabs.bottom .tab { flex: 0 0 auto; flex-direction: row; gap: 8px; padding: 9px 16px; border-radius: 22px; }
-      .tabs.bottom .tab .tl { display: inline; font-size: 13px; }
-      .tabs.bottom .tab::after { display: none; }
-      .tabs.bottom .tab.active { transform: none; }
+      .tabs.bottom { justify-content: center; gap: 4px; width: fit-content; max-width: 100%; margin-left: auto; margin-right: auto; }
+      .tabs.bottom .tab { flex: 0 0 auto; flex-direction: row; gap: 8px; padding: 9px 16px; }
+      .tabs.bottom .tab .tl { display: inline; font-size: 13px; font-weight: 600; }
+      .tabs.bottom .tab .tls { display: none; }
     }
+    .tabs:not(.bottom) .tab .tls { display: none; }
     .tabs:not(.bottom) .tab .ti svg { width: 16px; height: 16px; vertical-align: -3px; }
     .tabs:not(.bottom) .tab { display: inline-flex; align-items: center; justify-content: center; gap: 6px; }
     .tabs:not(.bottom) .tab .ti { display: inline-flex; }
@@ -2610,12 +2607,12 @@
           </div>
         </div>
         <nav class="tabs bottom" id="tabsNav">
-          <button class="tab active" data-tab="main" title="Główny" aria-label="Główny"><span class="ti">${TAB_SVG.main}</span><span class="tl">Główny</span></button>
-          <button class="tab" data-tab="charts" title="Wykresy" aria-label="Wykresy"><span class="ti">${TAB_SVG.charts}</span><span class="tl">Wykresy</span></button>
-          <button class="tab" data-tab="ems" title="EMS" aria-label="EMS"><span class="ti">${TAB_SVG.ems}</span><span class="tl">EMS</span></button>
-          <button class="tab" data-tab="log" title="Zysk i log" aria-label="Zysk i log"><span class="ti">${TAB_SVG.log}</span><span class="tl">Zysk i log</span></button>
-          <button class="tab" data-tab="dev" id="tabDev" title="Urządzenia" aria-label="Urządzenia"><span class="ti">${TAB_SVG.dev}</span><span class="tl">Urządzenia</span></button>
-          <button class="tab" data-tab="diag" id="tabDiag" style="display:none;" title="Diagnostyka" aria-label="Diagnostyka"><span class="ti">${TAB_SVG.diag}</span><span class="tl">Diagnostyka</span></button>
+          <button class="tab active" data-tab="main" title="Główny" aria-label="Główny"><span class="ti">${TAB_SVG.main}</span><span class="tl">Główny</span><span class="tls">Główny</span></button>
+          <button class="tab" data-tab="charts" title="Wykresy" aria-label="Wykresy"><span class="ti">${TAB_SVG.charts}</span><span class="tl">Wykresy</span><span class="tls">Wykresy</span></button>
+          <button class="tab" data-tab="ems" title="EMS" aria-label="EMS"><span class="ti">${TAB_SVG.ems}</span><span class="tl">EMS</span><span class="tls">EMS</span></button>
+          <button class="tab" data-tab="log" title="Zysk i log" aria-label="Zysk i log"><span class="ti">${TAB_SVG.log}</span><span class="tl">Zysk i log</span><span class="tls">Zysk</span></button>
+          <button class="tab" data-tab="dev" id="tabDev" title="Urządzenia" aria-label="Urządzenia"><span class="ti">${TAB_SVG.dev}</span><span class="tl">Urządzenia</span><span class="tls">Urządz.</span></button>
+          <button class="tab" data-tab="diag" id="tabDiag" style="display:none;" title="Diagnostyka" aria-label="Diagnostyka"><span class="ti">${TAB_SVG.diag}</span><span class="tl">Diagnostyka</span><span class="tls">Diagn.</span></button>
         </nav>
 
         <div class="price-bar" id="priceBar" style="display:none;"></div>
