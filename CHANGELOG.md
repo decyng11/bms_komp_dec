@@ -1,4 +1,4 @@
-# EMS komp-dec — w przygotowaniu (po 0.9.4.1, jeszcze niewydane)
+# EMS komp-dec — zmiany w 0.9.4.2 (z 0.9.4.1)
 
 ## Zmiany
 - **Zerowanie godzin sprzedaży bez propozycji**: gdy plan nie przewiduje sprzedaży z baterii (zestaw 1 lub 2), EMS wyłącza zestaw i ustawia stop = start (puste okno), żeby w falowniku nie wisiały stare godziny. Dotyczy tylko okien sprzedaży (nie ładowania z sieci), nie rusza przy niskiej pewności propozycji ani w trybie „tylko podgląd”; gdy plan znów zaproponuje sprzedaż, godziny i zestaw wracają.
