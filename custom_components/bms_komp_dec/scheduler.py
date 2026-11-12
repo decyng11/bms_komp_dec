@@ -975,9 +975,10 @@ class ScheduleOptimizer:
         }
 
     def _p(self, key: str, current: str, proposed: str | None, reason: str,
-           confidence: str = "medium", skip: bool = False) -> dict:
+           confidence: str = "medium", skip: bool = False, gain: float | None = None,
+           required: bool = False) -> dict:
         label = TIME_LABELS.get(key, (key, "", ""))[0]
-        return {
+        out = {
             "label": label,
             "current": current or "—",
             "proposed": proposed,
@@ -985,6 +986,11 @@ class ScheduleOptimizer:
             "confidence": confidence,
             "skip": skip,
         }
+        if gain is not None:
+            out["gain_pln"] = round(float(gain), 2)      # szacowany zysk netto z tej propozycji (zł)
+        if required:
+            out["required"] = True                        # propozycja wymagana (zabezpieczenie), nie decyzja zarobkowa
+        return out
 
     def _plan_curve(self, ctx: dict) -> dict[str, Any]:
         """Przewidywany SOC godzina po godzinie (do ~30 h) z zaplanowanym ładowaniem i sprzedażą.
@@ -1204,8 +1210,8 @@ class ScheduleOptimizer:
         reason = (f"{self._charge_phrase(grid_kwh)} ({s_abs % 24:02d}:00–{end % 24:02d}:00, najtańsza taryfa nocna): "
                   f"SOC o starcie ~{soc_start:.0f}% → cel {target:.0f}% (tyle potrzeba do rana, "
                   f"do godz. {res['until_hour']}:00, aż PV pokryje zużycie).{floor_note}{peak_note}")
-        out[set1[0]] = self._p(set1[0], self._read_current_time(set1[0]), self._fmt_start(s_abs), reason, "high")
-        out[set1[1]] = self._p(set1[1], self._read_current_time(set1[1]), self._fmt_stop(end), reason, "high")
+        out[set1[0]] = self._p(set1[0], self._read_current_time(set1[0]), self._fmt_start(s_abs), reason, "high", required=True)
+        out[set1[1]] = self._p(set1[1], self._read_current_time(set1[1]), self._fmt_stop(end), reason, "high", required=True)
         self._skip_pair(out, set2,
                         "Pomiń — okno nocne wystarcza; ładowanie z sieci w dzień koliduje z darmową energią z PV.")
         return out
@@ -1270,8 +1276,8 @@ class ScheduleOptimizer:
         reason = (f"{self._charge_phrase(grid_kwh)} ({s_abs % 24:02d}:00–{e_abs % 24:02d}:00 — najtańsze godziny przed szczytem "
                   f"o {end % 24:02d}:00{price_txt}): SOC o starcie ~{soc_at:.0f}% → {blk_target:.0f}%, tak by o {end % 24:02d}:00 "
                   f"zostało ~{target:.0f}% (tyle potrzeba do godz. {res['until_hour']}:00, aż PV pokryje zużycie).{floor_note}{peak_note}")
-        out[set1[0]] = self._p(set1[0], self._read_current_time(set1[0]), self._fmt_start(s_abs), reason, "high")
-        out[set1[1]] = self._p(set1[1], self._read_current_time(set1[1]), self._fmt_stop(e_abs), reason, "high")
+        out[set1[0]] = self._p(set1[0], self._read_current_time(set1[0]), self._fmt_start(s_abs), reason, "high", required=True)
+        out[set1[1]] = self._p(set1[1], self._read_current_time(set1[1]), self._fmt_stop(e_abs), reason, "high", required=True)
         self._skip_pair(out, set2,
                         "Pomiń — okno nocne wystarcza; ładowanie z sieci w dzień koliduje z darmową energią z PV.")
         return out
@@ -1358,8 +1364,8 @@ class ScheduleOptimizer:
         ctx["grid_hours"] = set(ctx["grid_hours"]) | hrs
         ctx["midday_hours"] = hrs
         ctx["grid_targets"].update({h: target for h in hrs})
-        out[keys[0]] = self._p(keys[0], self._read_current_time(keys[0]), f"{s:02d}:00", reason, conf)
-        out[keys[1]] = self._p(keys[1], self._read_current_time(keys[1]), f"{stop_h:02d}:00", reason, conf)
+        out[keys[0]] = self._p(keys[0], self._read_current_time(keys[0]), f"{s:02d}:00", reason, conf, gain=saving)
+        out[keys[1]] = self._p(keys[1], self._read_current_time(keys[1]), f"{stop_h:02d}:00", reason, conf, gain=saving)
         return out
 
     # -------------------------------------------- SPRZEDAŻ Z BATERII
@@ -1560,8 +1566,8 @@ class ScheduleOptimizer:
                       f"Do świtu (PV pokryje dom ok. {dawn % 24:02d}:00) SOC nie spadnie poniżej ~{max(0.0, low_pt):.0f}%.{fit_txt}")
             conf = "high" if (avg - (day_avg or avg)) > 0.05 and net >= 2 * margin and p_kw is None else "medium"
             k_s, k_e = keys
-            out[k_s] = self._p(k_s, self._read_current_time(k_s), f"{s:02d}:00", reason, conf)
-            out[k_e] = self._p(k_e, self._read_current_time(k_e), self._fmt_stop(e), reason, conf)
+            out[k_s] = self._p(k_s, self._read_current_time(k_s), f"{s:02d}:00", reason, conf, gain=net * sell_kwh)
+            out[k_e] = self._p(k_e, self._read_current_time(k_e), self._fmt_stop(e), reason, conf, gain=net * sell_kwh)
             sold.update(range(day * 24 + s, day * 24 + e))
         return out
 
@@ -1693,8 +1699,8 @@ class ScheduleOptimizer:
                       f"(+{profit:.2f} zł), a bateria dopełni się z późniejszej nadwyżki PV (~{surplus:.1f} kWh).")
             conf = "high" if len(run) >= 2 and profit >= 0.5 else "medium"
             out["pv_export_start"] = self._p("pv_export_start", self._read_current_time("pv_export_start"),
-                                             f"{run[0]:02d}:00", reason, conf)
+                                             f"{run[0]:02d}:00", reason, conf, gain=profit)
             out["pv_export_stop"] = self._p("pv_export_stop", self._read_current_time("pv_export_stop"),
-                                            self._fmt_stop(end), reason, conf)
+                                            self._fmt_stop(end), reason, conf, gain=profit)
             return out
         return skip(f"Pomiń — {best_reason or 'brak opłacalnej blokady'}.")

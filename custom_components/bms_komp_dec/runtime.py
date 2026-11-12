@@ -1283,7 +1283,8 @@ class BmsRuntime:
                 "generated_at": res.get("generated_at"), "mode": res.get("mode"),
                 "error": res.get("error"), "curve": res.get("curve"), "assumptions": res.get("assumptions"),
                 "proposals": {k: {"proposed": p.get("proposed"), "current": p.get("current"), "skip": p.get("skip"),
-                                  "label": p.get("label"), "reason": str(p.get("reason") or "")[:600]}
+                                  "label": p.get("label"), "reason": str(p.get("reason") or "")[:600],
+                                  **{x: p[x] for x in ("gain_pln", "required", "confidence") if x in p}}
                               for k, p in (res.get("proposals") or {}).items()},
             }
             blk = self.daily_import_block()

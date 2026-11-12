@@ -71,12 +71,59 @@ async def async_enable_sets(runtime, hass: HomeAssistant, keys) -> list[str]:
         except Exception as err:  # noqa: BLE001
             _LOGGER.error("EMS: nie udało się włączyć %s: %s", eid, err)
             continue
-        if sw_key not in done:
+        was_disabled = list(runtime.state.get("auto_disabled") or [])
+        if sw_key in was_disabled:        # wyłączył go wcześniej sam EMS (plan pomijał sprzedaż) — to nie jest „włączone przez auto-stosowanie”
+            runtime.state["auto_disabled"] = [x for x in was_disabled if x != sw_key]
+        elif sw_key not in done:
             done.append(sw_key)
         out.append(sw_key)
         runtime.log.add("auto", f"Włączono „{label}” ({t1}–{t2}) — bez tego okno by nie wystartowało", "ok")
     if out:
         runtime._save_state()  # noqa: SLF001
+    return out
+
+
+async def async_sync_sale_sets(runtime, hass: HomeAssistant, proposals: dict[str, Any]) -> list[str]:
+    """Plan pomija sprzedaż (np. nieopłacalna przy małym PV, zakaz arbitrażu) → wyłącz włączony zestaw sprzedaży,
+    żeby stare godziny nie wykonały sprzedaży, której plan nie przewiduje. Zapamiętuje wyłączone zestawy,
+    by włączyć je z powrotem, gdy plan znów zaproponuje sprzedaż. Pomija propozycje o niskiej pewności (brak danych)."""
+    off: list[str] = []
+    done = runtime.state.setdefault("auto_disabled", [])
+    for sw_key in sorted(SALE_SWITCHES):
+        k1, k2 = SET_TIMES[sw_key]
+        p1, p2 = proposals.get(k1), proposals.get(k2)
+        if not isinstance(p1, dict) or not isinstance(p2, dict) or not (p1.get("skip") and p2.get("skip")):
+            continue
+        if p1.get("confidence") == "low":
+            continue
+        eid = find_eid(hass, "switch", sw_key)
+        st = hass.states.get(eid)
+        if st is None or st.state != "on":
+            continue
+        label = st.attributes.get("friendly_name") or sw_key
+        try:
+            await hass.services.async_call("switch", "turn_off", {"entity_id": eid}, blocking=True)
+        except Exception as err:  # noqa: BLE001
+            _LOGGER.error("EMS: nie udało się wyłączyć %s: %s", eid, err)
+            continue
+        if sw_key not in done:
+            done.append(sw_key)
+        off.append(sw_key)
+        why = str(p1.get("reason") or "").replace("Pomiń — ", "")[:220]
+        runtime.log.add("auto", f"Wyłączono „{label}”: plan nie przewiduje sprzedaży — {why}", "warn")
+    if off:
+        runtime._save_state()  # noqa: SLF001
+    return off
+
+
+def _plan_confirmed_keys(runtime, proposals: dict[str, Any]) -> set[str]:
+    """Klucze godzin zestawów sprzedaży wyłączonych przez EMS, dla których plan znów proponuje sprzedaż (bez zmiany godzin)."""
+    out: set[str] = set()
+    for sw_key in runtime.state.get("auto_disabled") or []:
+        k1, k2 = SET_TIMES.get(sw_key, (None, None))
+        p1, p2 = proposals.get(k1), proposals.get(k2)
+        if isinstance(p1, dict) and isinstance(p2, dict) and not p1.get("skip") and not p2.get("skip") and p1.get("proposed") and p2.get("proposed"):
+            out.update((k1, k2))
     return out
 
 
@@ -143,6 +190,7 @@ async def async_auto_apply(runtime, hass: HomeAssistant, result: dict[str, Any],
         log.add("auto", msg, "warn")
         return {"applied": {}, "skipped": [msg]}
 
+    disabled_sets = [] if dry_run else await async_sync_sale_sets(runtime, hass, proposals)
     max_shift = number_value(hass, "auto_apply_max_shift_h", 4.0)
     wanted: dict[str, str] = {}
     for key, p in proposals.items():
@@ -186,9 +234,11 @@ async def async_auto_apply(runtime, hass: HomeAssistant, result: dict[str, Any],
                 final[k] = wanted[k]
 
     if not final:
+        if not dry_run:
+            await async_enable_sets(runtime, hass, _plan_confirmed_keys(runtime, proposals))
         log.add("auto", "Auto-stosowanie: brak zmian do wprowadzenia"
                 + (f" ({len(skipped)} pominiętych)" if skipped else ""))
-        return {"applied": {}, "skipped": skipped}
+        return {"applied": {}, "skipped": skipped, "disabled_sets": disabled_sets}
 
     previous = {k: (_current(hass, k) or "00:00") for k in final}
     if dry_run:
@@ -198,7 +248,7 @@ async def async_auto_apply(runtime, hass: HomeAssistant, result: dict[str, Any],
         return {"applied": {}, "would_apply": final, "previous": previous, "skipped": skipped, "dry_run": True}
     applied_n, apply_skipped = await apply_times(hass, final)
     skipped.extend(apply_skipped)
-    enabled = await async_enable_sets(runtime, hass, set(final)) if applied_n else []
+    enabled = await async_enable_sets(runtime, hass, set(final) | _plan_confirmed_keys(runtime, proposals)) if applied_n else []
     runtime.state["last_applied"] = previous
     runtime._save_state()  # noqa: SLF001
     changes = ", ".join(f"{k}: {previous[k]}→{v}" for k, v in final.items())
@@ -213,12 +263,12 @@ async def async_auto_apply(runtime, hass: HomeAssistant, result: dict[str, Any],
                 key="auto_apply", level="info")
         except Exception as err:  # noqa: BLE001
             _LOGGER.debug("EMS: powiadomienie o auto-stosowaniu nieudane: %s", err)
-    return {"applied": final, "skipped": skipped}
+    return {"applied": final, "skipped": skipped, "disabled_sets": disabled_sets}
 
 
 async def async_undo_auto_apply(runtime, hass: HomeAssistant) -> dict[str, Any]:
     prev = runtime.state.get("last_applied") or {}
-    if not prev:
+    if not prev and not runtime.state.get("auto_disabled") and not runtime.state.get("auto_enabled"):
         runtime.log.add("auto", "Cofnięcie: brak zapisanych poprzednich ustawień")
         return {"applied": 0, "skipped": ["brak danych do cofnięcia"]}
     applied_n, skipped = await apply_times(hass, dict(prev))
@@ -230,6 +280,14 @@ async def async_undo_auto_apply(runtime, hass: HomeAssistant) -> dict[str, Any]:
             except Exception as err:  # noqa: BLE001
                 _LOGGER.error("EMS: nie udało się wyłączyć %s: %s", eid, err)
     runtime.state["auto_enabled"] = []
+    for sw_key in list(runtime.state.get("auto_disabled") or []):    # zestawy sprzedaży wyłączone przez plan wracają jako włączone
+        eid = find_eid(hass, "switch", sw_key)
+        if hass.states.get(eid):
+            try:
+                await hass.services.async_call("switch", "turn_on", {"entity_id": eid}, blocking=True)
+            except Exception as err:  # noqa: BLE001
+                _LOGGER.error("EMS: nie udało się włączyć %s: %s", eid, err)
+    runtime.state["auto_disabled"] = []
     runtime.state["last_applied"] = {}
     runtime._save_state()  # noqa: SLF001
     runtime.log.add("auto", f"Cofnięto auto-zastosowane godziny ({applied_n})", "ok")
@@ -249,6 +307,15 @@ async def async_daily_suggest(runtime, hass: HomeAssistant, optimizer) -> None:
         and not inbox.is_rejected(runtime.state, k, p.get("proposed"))
     ]
     if not worthwhile:
+        if switch_on(hass, "auto_apply", False):      # nawet bez zmian godzin: wyłącz zestaw sprzedaży, gdy plan jej nie przewiduje
+            outcome = await async_auto_apply(runtime, hass, result)
+            off = outcome.get("disabled_sets") or []
+            if off:
+                await runtime.monitor.notifier.send(
+                    "auto_apply", "🤖 EMS: wyłączono sprzedaż z baterii",
+                    "Plan nie przewiduje dziś opłacalnej sprzedaży, więc wyłączyłem: " + ", ".join(off)
+                    + ".\nZestaw włączy się sam, gdy plan znów zaproponuje sprzedaż (albo cofnij: usługa bms_komp_dec.undo_auto_apply).",
+                    key="auto_apply", level="info")
         runtime.log.add("auto", "Propozycja harmonogramu: bez zmian")
         return
 
@@ -263,6 +330,8 @@ async def async_daily_suggest(runtime, hass: HomeAssistant, optimizer) -> None:
                           "ale nic nie zapisano."]
         else:
             lines += ["", f"Zastosowano automatycznie: {len(outcome['applied'])}."]
+            if outcome.get("disabled_sets"):
+                lines += [f"Wyłączono zestawy sprzedaży (plan jej nie przewiduje): {', '.join(outcome['disabled_sets'])}."]
         if outcome["skipped"]:
             lines += ["Pominięto:"] + [f"– {s}" for s in outcome["skipped"]]
         lines += ["", "Cofnięcie: usługa bms_komp_dec.undo_auto_apply lub zakładka EMS."]

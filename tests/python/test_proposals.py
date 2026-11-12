@@ -43,6 +43,8 @@ async def main():
     P = (await sched.suggest())["proposals"]
     ok = not P["bateria_sprzedaz_start_2"]["skip"]
     check("dużo PV: sprzedaż wieczorna zaproponowana", ok, P["bateria_sprzedaz_start_2"]["reason"])
+    g = P["bateria_sprzedaz_start_2"].get("gain_pln")
+    check("sprzedaż ma szacowany zysk w zł", isinstance(g, float) and g >= 0.5 and g == P["bateria_sprzedaz_stop_2"].get("gain_pln"), g)
     # 2. listopad, mała produkcja (PV ~1 kWh/dobę, dom 12 kWh) → sprzedaż bez sensu (koszt odtworzenia z sieci)
     hass, c, sched, rt = T.mk(soc=95, now=now, load=4.0, price=lambda h: 300 + (300 if 18 <= h < 21 else 0))
     setpv(hass, now, lambda h: 0.2 if 10 <= h < 14 else 0.0, lambda h: 0.2 if 10 <= h < 14 else 0.0)

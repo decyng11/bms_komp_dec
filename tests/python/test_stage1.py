@@ -99,6 +99,7 @@ async def main():
     hass, c, sched = await mk((2026, 11, 2, 20), 35, shutdown=25)
     n1, n2 = (await sched.suggest())["proposals"]["start_grid_charge"], None
     check("planer 7-13,16-21: noc, ładowanie kończy się o 07:00", (not n1["skip"]) and "07:00" in n1["reason"], n1["reason"])
+    check("planer: nocne ładowanie oznaczone jako wymagane (bez zysku w zł)", n1.get("required") is True and "gain_pln" not in n1, n1)
     sell = (await sched.suggest())["proposals"]
     check("planer 7-13,16-21: sprzedaż w oknach 7-13 / 16-21", all(k in sell for k in ("bateria_sprzedaz_start", "bateria_sprzedaz_start_2")))
     for k in ("bateria_sprzedaz_start", "bateria_sprzedaz_start_2"):

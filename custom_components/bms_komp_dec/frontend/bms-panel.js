@@ -288,6 +288,14 @@
     .sg-title { font-size: 14px; font-weight: 600; color: var(--text); }
     .sg-skip .sg-title { color: var(--text2); }
     .sg-badges { display: flex; gap: 6px; }
+    .sg-gain { background: rgba(16,185,129,0.18); color: #10b981; text-transform: none; font-size: 12px; }
+    .sg-gain.sg-req { background: var(--surface); color: var(--muted); font-size: 10px; text-transform: uppercase; }
+    .sg-gain-sum { color: #10b981; }
+    .set-warn { margin: 0 0 12px; display: flex; flex-direction: column; gap: 8px; }
+    .set-warn-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 10px 14px; border-radius: 14px; background: rgba(251,191,36,0.14); border: 1px solid rgba(251,191,36,0.45); font-size: 13px; color: var(--text); }
+    .set-warn-row button { flex: none; padding: 7px 14px; border-radius: 10px; border: none; background: #fbbf24; color: #1c1300; font-weight: 700; cursor: pointer; }
+    .sg-skipbox { margin-top: 10px; } .sg-skipbox > summary { cursor: pointer; font-size: 12px; color: var(--muted); padding: 6px 2px; }
+    .sg-skipbox .sg-list { margin-top: 6px; }
     .sg-badge { font-size: 10px; padding: 3px 8px; border-radius: 6px; font-weight: 700; text-transform: uppercase; white-space: nowrap; }
     .sg-vals { display: flex; gap: 16px; flex-wrap: wrap; font-size: 13px; color: var(--text2); margin-top: 6px; }
     .sg-vals i { color: var(--muted); font-style: normal; }
@@ -3166,7 +3174,7 @@
       }
       ov.hidden = !this._inbOpen;
       if (!this._inbOpen) return;
-      const sig = JSON.stringify([d.groups.map(g => [g.title, g.kind, g.chg.map(([k, p]) => k + p.proposed + p.current)]), d.notes.map(e => [e.id, e.read]), d.auto]);
+      const sig = JSON.stringify([d.groups.map(g => [g.title, g.kind, g.chg.map(([k, p]) => k + p.proposed + p.current + (p.gain_pln == null ? '' : p.gain_pln) + (p.required ? 'r' : ''))]), d.notes.map(e => [e.id, e.read]), d.auto]);
       if (sig === this._inbSig) return;
       this._inbSig = sig;
       const esc = t => String(t == null ? '' : t).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -3185,7 +3193,11 @@
           return g.chg.some(([kk]) => kk === k) ? `<span>${nm} <b>${esc(p.current || '—')} → ${esc(p.proposed)}</b></span>` : `<span>${nm} <b>${esc(p.current)}</b> <i>(bez zmian)</i></span>`;
         }).join('');
         const dat = g.chg.map(([k, p]) => `${k}=${esc(p.proposed)}`).join(',');
-        return `<div class="inb-card p-change"><div class="inb-r"><span class="inb-t">${g.icon} ${esc(g.title)}</span><span class="inb-tag" style="background:#10b98122;color:#10b981">ZMIENIAM</span></div>
+        const lp = g.chg[0] && g.chg[0][1];
+        const fz = v => (v >= 0 ? '+' : '−') + Math.abs(v).toFixed(2).replace('.', ',') + ' zł';
+        const gtag = lp && lp.required ? '<span class="inb-tag" style="background:#ffffff14;color:var(--muted)">WYMAGANE</span>'
+          : (lp && typeof lp.gain_pln === 'number' && isFinite(lp.gain_pln) ? `<span class="inb-tag" style="background:#10b98133;color:#10b981">${fz(lp.gain_pln)}</span>` : '');
+        return `<div class="inb-card p-change"><div class="inb-r"><span class="inb-t">${g.icon} ${esc(g.title)}</span><span>${gtag} <span class="inb-tag" style="background:#10b98122;color:#10b981">ZMIENIAM</span></span></div>
           <div class="inb-v">${vals}</div>${det('p' + i, 'Dlaczego', why)}
           <div class="inb-btns"><button type="button" data-inb="reject" data-p="${dat}">Odrzuć</button><button type="button" class="ok" data-inb="apply" data-p="${dat}">Potwierdź</button></div></div>`;
       }).join('');
@@ -3272,8 +3284,9 @@
         if (t) t = t.charAt(0).toUpperCase() + t.slice(1);
         return t;
       };
-      let nChange = 0, nSkip = 0, nSame = 0;
-      let cards = '';
+      let nChange = 0, nSkip = 0, nSame = 0, gainSum = 0, nGain = 0, nReq = 0;
+      const fz = v => (v >= 0 ? '+' : '−') + Math.abs(v).toFixed(2).replace('.', ',') + ' zł';
+      let cards = '', skipCards = '';
       groups.forEach(g => {
         const its = g.items;
         const allSkip = its.every(([, p]) => p.skip);
@@ -3281,6 +3294,13 @@
         const verdict = allSkip ? 'skip' : (changed ? 'change' : 'same');
         if (verdict === 'skip') nSkip++; else if (verdict === 'change') nChange++; else nSame++;
         const conf = (its.find(([, p]) => !p.skip) || its[0])[1].confidence;
+        const live = its.find(([, p]) => !p.skip);
+        let gainBadge = '';
+        if (verdict === 'change' && live) {
+          const gp = live[1];
+          if (gp.required) { nReq++; gainBadge = '<span class="sg-badge sg-gain sg-req">wymagane do rana</span>'; }
+          else if (typeof gp.gain_pln === 'number' && isFinite(gp.gain_pln)) { gainSum += gp.gain_pln; nGain++; gainBadge = `<span class="sg-badge sg-gain">${fz(gp.gain_pln)}</span>`; }
+        }
         const confColor = conf === 'high' ? '#10b981' : conf === 'medium' ? '#fbbf24' : TC('muted');
         const badge = verdict === 'skip' ? ['Pomijam', '#f43f5e'] : verdict === 'change' ? ['Zmieniam', '#10b981'] : ['Bez zmian', TC('muted')];
         const rows = its.map(([k, p]) => {
@@ -3296,22 +3316,24 @@
         const attrs = canApply
           ? `data-suggest-key="${k1}" data-suggest-val="${esc((p1.proposed || '').replace(/"/g, ''))}"` + (second ? ` data-suggest-key2="${second[0]}" data-suggest-val2="${esc((second[1].proposed || '').replace(/"/g, ''))}"` : '')
           : '';
-        cards += `<label class="sg sg-${verdict}">
+        const card = `<label class="sg sg-${verdict}">
           <input type="checkbox" ${attrs} ${canApply ? 'checked' : 'disabled'}>
           <div class="sg-body">
             <div class="sg-head"><span class="sg-title">${g.icon} ${esc(g.title)}</span>
-              <span class="sg-badges"><span class="sg-badge" style="background:${badge[1]}22;color:${badge[1]};">${badge[0]}</span>${verdict !== 'skip' ? `<span class="sg-badge" style="background:${confColor}22;color:${confColor};">${esc(conf || '?')}</span>` : ''}</span></div>
+              <span class="sg-badges">${gainBadge}<span class="sg-badge" style="background:${badge[1]}22;color:${badge[1]};">${badge[0]}</span>${verdict !== 'skip' ? `<span class="sg-badge" style="background:${confColor}22;color:${confColor};">${esc(conf || '?')}</span>` : ''}</span></div>
             ${rows ? `<div class="sg-vals">${rows}</div>` : ''}
             <div class="sg-why"><span>${verdict === 'skip' ? 'Dlaczego pomijam' : 'Dlaczego tak'}</span>${why || '—'}</div>
           </div>
         </label>`;
+        if (verdict === 'skip') skipCards += card; else cards += card;
       });
 
       const head = `<div class="sg-sum"><div class="sg-sum-h">Na czym oparłem decyzje (stan z ${at})</div>
         <div class="sg-sum-t">${facts.join(' · ')}</div>
-        <div class="sg-sum-r">Wynik: <b>zmieniam ${nChange}</b>, bez zmian ${nSame}, pomijam ${nSkip}.${has(data.rce_tomorrow_avg) ? '' : ' Bez cen RCE na jutro nie planuję sprzedaży na jutro.'}</div></div>`;
+        <div class="sg-sum-r">Wynik: <b>zmieniam ${nChange}</b>, bez zmian ${nSame}, pomijam ${nSkip}.${nGain ? ` Szacowany zysk z propozycji: <b class="sg-gain-sum">${fz(gainSum)}</b>${nReq ? ` (+ ${nReq} wymagane)` : ''}.` : ''}${has(data.rce_tomorrow_avg) ? '' : ' Bez cen RCE na jutro nie planuję sprzedaży na jutro.'}</div></div>`;
 
-      el.innerHTML = head + `<div class="sg-list">${cards}</div>
+      const skipBox = skipCards ? `<details class="sg-skipbox"><summary>Nie planuję (${nSkip})</summary><div class="sg-list">${skipCards}</div></details>` : '';
+      el.innerHTML = head + `<div class="sg-list">${cards}</div>${skipBox}
         <div style="margin-top:12px;display:flex;gap:8px;">
           <button class="btn" id="btn-apply-suggest" style="flex:1;padding:10px;flex-direction:row;gap:6px;background:rgba(16,185,129,0.2);border-color:#10b981;">
             <span style="font-size:16px;">✅</span><span class="label">Zastosuj zaznaczone</span>
@@ -3444,6 +3466,7 @@
       this._safe(() => this._dgSyncTab());
       this._safe(() => this._devTabSync());
       this._safe(() => this._tabsPosSync());
+      this._safe(() => this._setWarnSync());
       if (this._activeTab === 'diag') this._safe(() => this._dgTick());
       if (this._activeTab === 'dev') this._safe(() => this._devTick());
       if (this._activeTab === 'log') this._safe(() => this._renderLogTab());
@@ -4507,6 +4530,37 @@
       nav.classList.toggle('bottom', !top);
       if (top) { const pb = wrap.querySelector('#priceBar'); if (pb && nav.nextElementSibling !== pb) wrap.insertBefore(nav, pb); }
       else if (wrap.lastElementChild !== nav) wrap.appendChild(nav);
+    },
+    _setWarnSync() {           // zestaw z ustawionymi godzinami, ale wyłączonym przełącznikiem — okno nigdy nie wystartuje
+      const root = this.shadowRoot, ems = root && root.querySelector('[data-tab-content="ems"]'); if (!ems || !this._hass) return;
+      const SETS = [
+        ['bateria_sprzedaz_1', 'Sprzedaż z baterii — zestaw 1', 'bateria_sprzedaz_start', 'bateria_sprzedaz_stop'],
+        ['bateria_sprzedaz_2', 'Sprzedaż z baterii — zestaw 2', 'bateria_sprzedaz_start_2', 'bateria_sprzedaz_stop_2'],
+        ['ladowanie_z_sieci_1', 'Ładowanie z sieci — zestaw 1', 'start_grid_charge', 'stop_grid_charge'],
+        ['ladowanie_z_sieci_2', 'Ładowanie z sieci — zestaw 2', 'start_grid_charge_2', 'stop_grid_charge_2'],
+      ];
+      const hm = (k) => String(this._st(this._eid('time', k)) || '').slice(0, 5);
+      const items = [];
+      SETS.forEach(([sw, name, k1, k2]) => {
+        if (this._st(this._eid('switch', sw)) !== 'off') return;
+        const a = hm(k1), b = hm(k2);
+        if (!/^\d\d:\d\d$/.test(a) || !/^\d\d:\d\d$/.test(b) || a === '00:00' || b === '00:00' || a === b) return;
+        items.push([sw, name, a, b]);
+      });
+      let box = root.getElementById('setWarn');
+      if (!items.length) { if (box) box.remove(); return; }
+      const sig = JSON.stringify(items);
+      if (!box) {
+        box = document.createElement('div'); box.id = 'setWarn'; box.className = 'set-warn';
+        box.addEventListener('click', (ev) => {
+          const bt = ev.target.closest && ev.target.closest('[data-set-on]'); if (!bt) return;
+          this._hass.callService('switch', 'turn_on', { entity_id: this._eid('switch', bt.dataset.setOn) });
+        });
+        ems.insertBefore(box, ems.firstChild);
+      }
+      if (box._sig === sig) return;
+      box._sig = sig;
+      box.innerHTML = items.map(([sw, name, a, b]) => `<div class="set-warn-row"><span>⚠️ <b>${name}</b> jest wyłączony, a ma ustawione godziny ${a}–${b} — okno nie wystartuje.</span><button type="button" data-set-on="${sw}">Włącz</button></div>`).join('');
     },
     _dgIsAdmin() { const u = this._hass && this._hass.user; return !!(u && u.is_admin); },
     _dgSyncTab() {
