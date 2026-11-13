@@ -128,7 +128,7 @@ class BmsRuntimeSensor(BmsBaseEntity, SensorEntity):
         "curve", "proposals", "days", "watches", "alarms", "recent_notifications", "inbox", "inbox_rejected",
         "prices_sell_today", "prices_sell_tomorrow", "prices_buy_today", "prices_buy_tomorrow",
         "price_sell_entity", "price_buy_entity", "price_sell_source", "price_buy_source", "tariff_mode", "tariff_dynamic",
-        "pv_forecast_source", "pv_hourly_today", "pv_hourly_tomorrow", "pv_daily", "assumptions",
+        "pv_forecast_source", "pv_hourly_today", "pv_hourly_tomorrow", "pv_daily", "pv_sources", "assumptions",
         "devices", "power_total", "accuracy",
     })
 
@@ -318,6 +318,7 @@ class BmsRuntimeSensor(BmsBaseEntity, SensorEntity):
             return {"need_kwh": res["need_kwh"], "until_hour": res["until_hour"],
                     "enabled": res["enabled"], "sell_threshold": round(rt.sell_soc_threshold(), 1),
                     "price_buy": _r3(rt.buy_price()), "price_sell": _r3(rt.sell_price()),
+                    "grid_batt_kwh": round(rt.grid_batt_kwh(), 2), "grid_batt_block": rt.grid_batt_block(),
                     **self._floor_attrs(rt), **self._price_attrs(rt), **self._pv_attrs(rt),
                     "capacity_kwh": float(rt.optimizer.config.get(CONF_BATTERY_CAPACITY_KWH, DEFAULT_BATTERY_CAPACITY_KWH))}
         if self._key == "plan_curve":

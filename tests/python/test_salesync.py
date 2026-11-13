@@ -48,7 +48,11 @@ async def main():
     hass, c, opt, rt, S = setup()
     S.set("switch.bms_bateria_sprzedaz_2", "off")
     await automation.async_auto_apply(rt, hass, res2)
-    check("wyłączony ręcznie, plan bez zmian godzin: zostaje wyłączony", S.get("switch.bms_bateria_sprzedaz_2").state == "off")
+    check("zestaw wyłączony, plan przewiduje sprzedaż o tych samych godzinach: EMS go włącza", S.get("switch.bms_bateria_sprzedaz_2").state == "on")
+    hass, c, opt, rt, S = setup()
+    S.set("switch.bms_bateria_sprzedaz_2", "off"); S.set("switch.bms_auto_enable_sets", "off")
+    await automation.async_auto_apply(rt, hass, res2)
+    check("„Auto-włączanie zestawów” wyłączone: zestaw zostaje wyłączony", S.get("switch.bms_bateria_sprzedaz_2").state == "off")
 
     # trwa sprzedaż → nie ruszamy
     hass, c, opt, rt, S = setup()

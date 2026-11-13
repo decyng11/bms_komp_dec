@@ -756,6 +756,7 @@ class ScheduleOptimizer:
             "charge_2d": c2,
             "pv_2d": p2,
             "arb_now": rt.arbitrage_status() if rt is not None else (False, ""),
+            "grid_batt": (rt.grid_batt_kwh() if rt is not None and hasattr(rt, "grid_batt_kwh") else 0.0),
             "grid_hours": set(), "grid_end": 0, "grid_target": 0.0, "grid_kwh": 0.0,
             "grid_targets": {}, "sold": set(), "midday_hours": set(),
             "sale_kw": {}, "sale_windows": [], "sale_fit": switch_on(self.hass, "sale_power_fit", True),
@@ -1365,6 +1366,7 @@ class ScheduleOptimizer:
         hrs = set(range(s, stop_h))                    # dalsze symulacje (sprzedaż wieczorna, wykres) widzą to ładowanie
         ctx["grid_hours"] = set(ctx["grid_hours"]) | hrs
         ctx["midday_hours"] = hrs
+        ctx["midday_kwh"] = grid_kwh
         ctx["grid_targets"].update({h: target for h in hrs})
         out[keys[0]] = self._p(keys[0], self._read_current_time(keys[0]), f"{s:02d}:00", reason, conf, gain=saving)
         out[keys[1]] = self._p(keys[1], self._read_current_time(keys[1]), f"{stop_h:02d}:00", reason, conf, gain=saving)
@@ -1411,6 +1413,33 @@ class ScheduleOptimizer:
                     f"z 2 dni ({p2:.1f} kWh) — blokada arbitrażu zatrzymałaby sprzedaż")
         return None
 
+    def _grid_energy_at(self, ctx: dict, h_abs: int) -> float:
+        """Ile kWh energii z sieci będzie w baterii o godzinie h_abs: obecny licznik + planowane ładowania z sieci,
+        pomniejszone o to, co dom zużyje z baterii (zużycie ponad produkcję PV) w godzinach bez ładowania."""
+        rem = float(ctx.get("grid_batt") or 0.0)
+        mid = set(ctx.get("midday_hours") or ())
+        night = set(ctx.get("grid_hours") or ()) - mid
+        per_n = (float(ctx.get("grid_kwh") or 0.0) / len(night)) if night else 0.0
+        per_m = (float(ctx.get("midday_kwh") or 0.0) / len(mid)) if mid else 0.0
+        for h in range(ctx["now"].hour + 1, h_abs):
+            if h in night:
+                rem += per_n
+            elif h in mid:
+                rem += per_m
+            else:
+                rem = max(0.0, rem - max(0.0, self._load_abs(ctx, h) - self._pv_abs(ctx, h)))
+        return rem
+
+    def _grid_energy_blocks_sale(self, ctx: dict, h_abs: int) -> str | None:
+        """Zakaz „ładuj z sieci → sprzedaj”: sprzedaż dopiero, gdy dom zużyje energię naładowaną z sieci."""
+        if ctx["tol"] <= 0:
+            return None
+        rem = self._grid_energy_at(ctx, h_abs)
+        if rem > ctx["tol"]:
+            return (f"o {h_abs % 24:02d}:00 w baterii będzie jeszcze ~{rem:.1f} kWh energii naładowanej z sieci "
+                    f"(dom nie zdąży jej zużyć) — sprzedaż energii z sieci jest niedozwolona")
+        return None
+
     def _suggest_battery_sell(self, ctx: dict) -> dict:
         out: dict = {}
         now_h = ctx["now"].hour
@@ -1455,6 +1484,10 @@ class ScheduleOptimizer:
                 continue
             blk = self._grid_blocks_sales(ctx, day, lo_abs)
             if blk:
+                skip(f"Pomiń — {blk}.")
+                continue
+            blk = self._grid_energy_blocks_sale(ctx, b_abs - 1)
+            if blk:      # nawet w ostatniej godzinie szczytu w baterii byłaby energia z sieci
                 skip(f"Pomiń — {blk}.")
                 continue
 
@@ -1513,6 +1546,10 @@ class ScheduleOptimizer:
                                       f"{wear_txt} = {net:.3f} < min. marża {need_margin:.2f} zł/kWh{pv_txt}", "high"))
                     continue
                 s_abs = day * 24 + s
+                gblk = self._grid_energy_blocks_sale(ctx, s_abs)
+                if gblk:
+                    tried.append((nn, gblk, "high"))
+                    continue
                 soc_s = soc_lo if s_abs <= lo_abs else self._simulate(ctx, soc_lo, lo_abs, s_abs, ctx["grid_hours"], sold)
                 avail = (soc_s - floor) / 100.0 * ctx["cap"]
                 if soc_s < need_soc or avail < 1.0:

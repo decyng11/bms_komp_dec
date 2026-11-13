@@ -495,43 +495,6 @@ class Monitor:
             await self.notifier.send("rce_high", "📈 EMS: wysoka cena sprzedaży jutro",
                                      f"Jutro o {top_h:02d}:00 cena RCE {top_v:.2f} zł/kWh (próg {hi:.2f}).{plan_txt}", key=f"rce_high:{key}", level="info")
 
-        await self._arbitrage_window(now, tomorrow, key, vals)
-
-    async def _arbitrage_window(self, now: datetime, tomorrow, key: str, vals: list[tuple[int, float]]) -> None:
-        """Jutro: najlepsza para „kup tanio (godzina h1) → sprzedaj drogo (godzina h2 > h1)” po stracie cyklu."""
-        thr = self._thr("arbitrage_window")
-        if thr is None:
-            return
-        try:
-            buy = self.rt.optimizer.buy_hourly_for(tomorrow)
-        except Exception:  # noqa: BLE001
-            buy = None
-        if not buy:
-            return
-        eff = 0.9
-        try:
-            eff = min(1.0, max(0.5, number_value(self.rt.hass, "cycle_efficiency", 90.0) / 100.0))
-        except Exception:  # noqa: BLE001
-            pass
-        sell = dict(vals)
-        best = None
-        for h1, b in enumerate(buy):
-            if not isinstance(b, (int, float)):
-                continue
-            for h2, sv in sell.items():
-                if h2 > h1:
-                    gain = sv * eff - float(b)
-                    if best is None or gain > best[0]:
-                        best = (gain, h1, float(b), h2, sv)
-        if best is None or best[0] < thr or not self._once("arbitrage_window", key):
-            return
-        gain, h1, b, h2, sv = best
-        await self.notifier.send(
-            "arbitrage_window", "🔁 EMS: jutro opłaca się arbitraż",
-            f"Jutro kup około {h1:02d}:00 po {_pl(b)} zł/kWh i sprzedaj około {h2:02d}:00 po {_pl(sv)} zł/kWh. "
-            f"Po stracie cyklu ({eff:.0%}) zostaje około {_pl(gain)} zł na każdej kWh (próg {_pl(thr)}).",
-            key=f"arb:{key}", level="info")
-
     async def _sources(self, now: datetime) -> None:
         opt = self.rt.optimizer
         today = dt_util.as_local(now).date()

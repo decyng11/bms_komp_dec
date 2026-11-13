@@ -2642,6 +2642,7 @@
               <div class="badge-none" id="badge-none">Żadna funkcja nie jest teraz włączona</div>
             </div>
             <div class="badge-warn" id="warn-sprzedaz-zablokowana"><div class="badge danger on" id="badge-sprzedaz-zablokowana">⛔ Sprzedaż zablokowana (import)</div></div>
+            <div class="badge-warn" id="warn-grid-batt"><div class="badge danger on" id="badge-grid-batt"></div></div>
           </div>
 
           <!-- Przepływ mocy (węzły) -->
@@ -3035,7 +3036,9 @@
               inp.classList.remove('saved-err');
               inp.classList.add('saved-ok');
               setTimeout(() => inp.classList.remove('saved-ok'), 1500);
-              this._showToast(`✅ Zapisano ${inp.value}`);
+              // 00:00 w harmonogramie znaczy „nie ustawiono” — okno z taką godziną nie wystartuje ani się nie zakończy
+              if (inp.value === '00:00') this._showToast('⚠️ 00:00 oznacza „nie ustawiono” — okno nie zadziała. Dla północy wpisz 23:59 (koniec) albo 00:01 (start).', true);
+              else this._showToast(`✅ Zapisano ${inp.value}`);
             } catch (e) {
               inp.classList.remove('saved-ok');
               inp.classList.add('saved-err');
@@ -3522,6 +3525,18 @@
       const sellBlocked = this._isSellBlockedByImport();
       const badgeSellBlock = this._el('badge-sprzedaz-zablokowana');
       if (badgeSellBlock) badgeSellBlock.classList.toggle('on', sellBlocked);
+      {
+        // energia naładowana z sieci, której dom jeszcze nie zużył — dopóki jest w baterii, sprzedaż jest zablokowana
+        const ra = this._rsAttrs(), gb = Number(ra.grid_batt_kwh), wg = this._el('warn-grid-batt'), bg = this._el('badge-grid-batt');
+        const show = isFinite(gb) && gb >= 0.1;
+        if (wg) wg.classList.toggle('on', show);
+        if (bg && show) {
+          const t = `🔌 W baterii ~${gb.toFixed(1).replace('.', ',')} kWh energii z sieci` + (ra.grid_batt_block ? ' — sprzedaż zablokowana, aż dom ją zużyje' : '');
+          if (bg.textContent !== t) bg.textContent = t;
+          bg.classList.toggle('danger', !!ra.grid_batt_block);
+          bg.title = 'Licznik energii naładowanej z sieci: rośnie przy ładowaniu z sieci, maleje, gdy bateria zasila dom. Sprzedaż energii z sieci jest niedozwolona.';
+        }
+      }
       const warnSell = this._el('warn-sprzedaz-zablokowana');
       if (warnSell) warnSell.classList.toggle('on', sellBlocked);
       const btn6k = this._el('btn-script-6000');

@@ -1,3 +1,29 @@
+# EMS komp-dec — w przygotowaniu (po 0.9.4.3, jeszcze niewydane)
+
+## Bezpieczeństwo: zakaz „ładuj z sieci → sprzedaj”
+- **Licznik energii z sieci w baterii**: rośnie, gdy bateria ładuje się przy poborze z sieci, maleje, gdy bateria zasila dom; rozładowanie do sieci go nie zmniejsza i nigdy nie przekracza energii faktycznie zgromadzonej w baterii. Dopóki licznik jest powyżej tolerancji („Blokada arbitrażu”, domyślnie 0,5 kWh; 0 = wył.), sprzedaż z baterii jest zablokowana — z harmonogramu, ręcznie i w trakcie (zabezpieczenie ją zatrzymuje). Zamyka to dwie luki dotychczasowych blokad: nocne doładowanie ≤ 3 kWh przy dużej produkcji PV dzień wcześniej oraz ładowanie zakończone przed północą.
+- **Plan** nie proponuje sprzedaży na godzinę, o której w baterii byłaby jeszcze energia z planowanego ładowania z sieci (uwzględnia, ile dom zdąży jej zużyć).
+- **Znacznik na ekranie głównym**: „W baterii ~X kWh energii z sieci” z informacją o blokadzie; wartość także w podsumowaniu dnia.
+- **Usunięto powiadomienie „Okno arbitrażu jutro”**, które podpowiadało „kup tanio z sieci, sprzedaj drogo”.
+
+## Poprawki
+- **Zestaw wyłączony, a godziny bez zmian**: przy wyłączonym „Harmonogramie cyklicznym” STOP wyłącza zestaw po każdym oknie i gdy plan proponował te same godziny, nikt go nie włączał — okno nie startowało. Teraz auto-stosowanie włącza zestaw, gdy plan przewiduje okno o bieżących godzinach (ładowanie z sieci — także z planu na żywo; sprzedaż — tylko w propozycji dziennej i tylko bez zakazu sprzedaży).
+- **Plan pomija okno ładowania z sieci**: zestaw, który wcześniej włączył sam EMS, jest wyłączany, żeby okno o starych godzinach nie ładowało wbrew planowi (zestawów włączonych ręcznie EMS nie rusza).
+- **Awaryjny STOP**: gdy okno wystartowało z harmonogramu, a jego STOP nie zadziałał w swojej minucie (restart Home Assistanta, przeładowanie integracji), ładowanie z sieci lub sprzedaż są kończone po czasie. Nie dotyczy startów ręcznych ani „Wymuś ładowanie”.
+- **Prognoza PV zawsze środkowa**: suma dnia jest liczona z prognozy godzinowej Solcast (pv_estimate), a nie ze stanu encji, który mógł być ustawiony na wariant pesymistyczny (estimate10) — stąd bywała prognoza 1,5 kWh przy produkcji 4 kWh. Diagnostyka ostrzega, gdy encja pokazuje wariant skrajny.
+- **Auto-stosowanie z planu na żywo**: odstęp 1 h liczy się tylko od faktycznej zmiany (po „trwa ładowanie” ponawia po 30 min); propozycja odrzucona przez zabezpieczenie nie powtarza wpisu w dzienniku częściej niż co 6 h.
+- **Limit przesunięcia** nie blokuje już propozycji dla pustego (wyzerowanego) okna.
+- **„Cofnij”** przywraca także wyzerowane godziny sprzedaży.
+- **Puste okno** (start = stop) nie wykonuje już STARTU i STOPU w tej samej minucie.
+- **00:00 w polu godziny**: panel ostrzega, że oznacza „nie ustawiono” i okno nie zadziała.
+
+## Nowości
+- **Przełącznik „Auto-włączanie zestawów”** (Diagnostyka → Tryby; domyślnie włączony) — wyłącz, jeśli wolisz włączać zestawy ręcznie.
+- **Powiadomienie „Zestaw potrzebny w planie jest wyłączony”**: plan przewiduje okno w ciągu 90 minut, a przełącznik zestawu jest wyłączony.
+- **Diagnostyka → Zaawansowane → „Prognoza PV”**: używane źródło, bieżąca korekta, porównanie Solcast / Forecast.Solar na dziś i jutro oraz przycisk **„Wyzeruj naukę korekty PV”** (po zmianie ustawień źródła prognozy stara korekta zawyżałaby nową prognozę).
+- **Podsumowanie dnia** uzupełnione o plan kontra wykonanie: prognoza PV i produkcja, plan i wykonanie sprzedaży z baterii, ile razy zadziałały zabezpieczenia i automat.
+- **Instrukcja PDF**: dodatek opisujący zmiany od wersji 0.9.4.
+
 # EMS komp-dec — zmiany w 0.9.4.3 (z 0.9.4.2)
 
 ## Poprawki

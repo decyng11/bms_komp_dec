@@ -17,7 +17,7 @@ const js = (body) => (r) => r.fulfill({ contentType: 'application/javascript', b
   ok(/Nie udało się wczytać modułu dodatków/.test(t1) && /nie udało się pobrać bms-extras\.js/.test(t1), 'awaria 404: czytelny komunikat w planie: ' + t1.slice(0, 120));
   ok(await e.q(() => !!__el.shadowRoot.querySelector('#exPlanBox [data-mod-retry="extras"]')), 'awaria 404: przycisk ponowienia w panelu planu');
   await openModes(e);
-  ok(await e.q(() => __el.shadowRoot.querySelectorAll('#dgBody [data-act="mode-sw"]').length === 6), 'awaria 404 dodatków: Diagnostyka → Tryby działa (osobny moduł)');
+  ok(await e.q(() => __el.shadowRoot.querySelectorAll('#dgBody [data-act="mode-sw"]').length === 7), 'awaria 404 dodatków: Diagnostyka → Tryby działa (osobny moduł)');
   await tab(e, 'ems'); await sleep(300);
   await tab(e, 'log'); await sleep(600);
   ok(/Nie udało się wczytać modułu dodatków/.test(await sr(e, '#exReportBox')) && /Nie udało się wczytać modułu dodatków/.test(await sr(e, '#exHealthBox')), 'awaria 404: panele raportu i zdrowia pokazują błąd');

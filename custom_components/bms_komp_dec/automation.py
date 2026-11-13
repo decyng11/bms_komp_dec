@@ -51,6 +51,8 @@ async def async_enable_sets(runtime, hass: HomeAssistant, keys) -> list[str]:
     naładowana więcej niż wyprodukowało PV, tryb burzowy). Samo włączenie niczego nie uruchamia — każdy start sprzedaży
     i tak przechodzi te same blokady w czasie wykonania."""
     out: list[str] = []
+    if not switch_on(hass, "auto_enable_sets", True):
+        return out                                     # użytkownik woli włączać zestawy ręcznie
     done = runtime.state.setdefault("auto_enabled", [])
     for sw_key in sorted({SET_SWITCH[k] for k in keys if k in SET_SWITCH}):
         eid = find_eid(hass, "switch", sw_key)
@@ -116,6 +118,8 @@ async def async_sync_sale_sets(runtime, hass: HomeAssistant, proposals: dict[str
         if t1 and t2 and t1 != t2 and t1 != "00:00":
             n, _err = await apply_times(hass, {k2: t1})
             if n:
+                runtime.state.setdefault("zeroed", {})[k2] = t2      # do cofnięcia
+                runtime._save_state()  # noqa: SLF001
                 runtime.log.add("auto", f"Wyzerowano okno sprzedaży „{label}” ({t1}–{t2} → {t1}–{t1}): brak propozycji", "info")
     if off:
         runtime._save_state()  # noqa: SLF001
@@ -124,9 +128,44 @@ async def async_sync_sale_sets(runtime, hass: HomeAssistant, proposals: dict[str
 
 # --- auto-stosowanie z planu na żywo (okna ładowania z sieci) ---------------------------------------------------
 LIVE_KEYS = ("start_grid_charge", "stop_grid_charge", "start_grid_charge_2", "stop_grid_charge_2")
+LIVE_PAIRS = (("start_grid_charge", "stop_grid_charge"), ("start_grid_charge_2", "stop_grid_charge_2"))
 LIVE_STABLE_S = 1800       # propozycja musi się utrzymać tyle czasu bez zmiany (plan potrafi „przeskakiwać” 11:00↔12:00)
+LIVE_RETRY_S = 6 * 3600   # ta sama propozycja odrzucona przez zabezpieczenie: kolejna próba po 6 h
 LIVE_COOLDOWN_S = 3600     # i nie częściej niż raz na godzinę
 LIVE_NEAR_START_MIN = 10   # nie ruszamy okna, które zaczyna się za chwilę
+
+
+async def _disarm_skipped_grid_sets(runtime, hass: HomeAssistant, props: dict[str, Any]) -> list[str]:
+    """Plan pomija okno ładowania z sieci, a zestaw włączył wcześniej sam EMS → wyłącz go, żeby okno o starych godzinach
+    nie ładowało wbrew planowi. Zestawów włączonych ręcznie nie ruszamy; nie ruszamy też niczego w trakcie ładowania."""
+    out: list[str] = []
+    mine = list(runtime.state.get("auto_enabled") or [])
+    if not mine or runtime.grid_charging_on():
+        return out
+    for k1, k2 in LIVE_PAIRS:
+        sw_key = SET_SWITCH[k1]
+        p1, p2 = props.get(k1), props.get(k2)
+        if sw_key not in mine or not isinstance(p1, dict) or not isinstance(p2, dict):
+            continue
+        if not (p1.get("skip") and p2.get("skip")) or p1.get("confidence") == "low":
+            continue
+        eid = find_eid(hass, "switch", sw_key)
+        st = hass.states.get(eid)
+        if st is None or st.state != "on":
+            continue
+        try:
+            await hass.services.async_call("switch", "turn_off", {"entity_id": eid}, blocking=True)
+        except Exception as err:  # noqa: BLE001
+            _LOGGER.error("EMS: nie udało się wyłączyć %s: %s", eid, err)
+            continue
+        runtime.state["auto_enabled"] = [x for x in runtime.state.get("auto_enabled") or [] if x != sw_key]
+        why = str(p1.get("reason") or "").replace("Pomiń — ", "")[:200]
+        runtime.log.add("auto", f"Wyłączono „{st.attributes.get('friendly_name') or sw_key}” (włączony wcześniej przez EMS): "
+                                f"plan pomija to okno — {why}", "info")
+        out.append(sw_key)
+    if out:
+        runtime._save_state()  # noqa: SLF001
+    return out
 
 
 async def async_live_apply(runtime, hass: HomeAssistant, plan: dict[str, Any] | None, now=None) -> dict[str, Any] | None:
@@ -141,10 +180,23 @@ async def async_live_apply(runtime, hass: HomeAssistant, plan: dict[str, Any] | 
     props = (plan or {}).get("proposals") or {}
     now = now or dt_util.now()
     ts = now.timestamp()
+    # okno ładowania zgodne z planem, ale zestaw wyłączony (np. STOP wyłączył go po poprzednim oknie) → włącz.
+    # Plan starszy niż ostatni STOP tego okna opisuje okno, które właśnie się skończyło — czekamy na świeży plan.
+    gen = dt_util.parse_datetime(str((plan or {}).get("generated_at") or "")) if plan else None
+    fresh = []
+    for pair in LIVE_PAIRS:
+        fired = (getattr(runtime, "fired", None) or {}).get(pair[1])
+        if fired is not None and (gen is None or fired >= gen):
+            continue
+        fresh.append(pair)
+    arm = _plan_window_keys(runtime, hass, props, fresh)
+    if arm:
+        await async_enable_sets(runtime, hass, arm)
+    await _disarm_skipped_grid_sets(runtime, hass, props)
     loc = dt_util.as_local(now)
     cur_min = loc.hour * 60 + loc.minute
     wanted: dict[str, Any] = {}
-    for start_k, stop_k in (("start_grid_charge", "stop_grid_charge"), ("start_grid_charge_2", "stop_grid_charge_2")):
+    for start_k, stop_k in LIVE_PAIRS:
         pair = [props.get(start_k), props.get(stop_k)]
         if not all(isinstance(p, dict) for p in pair):
             continue
@@ -169,10 +221,84 @@ async def async_live_apply(runtime, hass: HomeAssistant, plan: dict[str, Any] | 
         return None
     if ts - float(mem.get("since", ts)) < LIVE_STABLE_S or ts - float(mem.get("last", 0)) < LIVE_COOLDOWN_S:
         return None
-    runtime.state["live_apply"] = {"last": ts}
     runtime.log.add("auto", "Auto-stosowanie z planu na żywo (propozycja stabilna ≥ 30 min): "
                     + ", ".join(f"{k} → {v}" for k, v in sig.items()), "info")
-    return await async_auto_apply(runtime, hass, {"proposals": wanted})
+    res = await async_auto_apply(runtime, hass, {"proposals": wanted})
+    if res.get("applied"):
+        runtime.state["live_apply"] = {"last": ts}             # odstęp 1 h liczymy tylko od faktycznej zmiany
+    else:
+        # nic nie zapisano: gdy system był zajęty (trwa ładowanie/sprzedaż) — ponów za 30 min; gdy propozycję odrzuciło
+        # zabezpieczenie (np. limit przesunięcia) — nie powtarzaj tej samej próby i wpisu w dzienniku częściej niż co 6 h
+        busy = any(str(x).startswith("Auto-stosowanie wstrzymane") for x in res.get("skipped") or [])
+        runtime.state["live_apply"] = {"sig": sig, "since": ts if busy else ts + LIVE_RETRY_S - LIVE_STABLE_S,
+                                       "last": mem.get("last", 0)}
+    return res
+
+
+SET_OFF_NOTIFY_MIN = 90
+
+
+async def async_notify_sets_off(runtime, hass: HomeAssistant, plan: dict[str, Any] | None, now=None) -> list[str]:
+    """Plan przewiduje okno w ciągu 90 min, a zestaw jest wyłączony → powiadomienie (raz na okno). Zwraca zgłoszone zestawy."""
+    props = (plan or {}).get("proposals") or {}
+    loc = dt_util.as_local(now or dt_util.now())
+    cur_min = loc.hour * 60 + loc.minute
+    out: list[str] = []
+    for k1, k2 in [p for p in PAIRS if p[0] in SET_SWITCH]:
+        p1, p2 = props.get(k1), props.get(k2)
+        if not isinstance(p1, dict) or not isinstance(p2, dict):
+            continue
+        if any(p.get("skip") or not p.get("proposed") or p.get("confidence") == "low" for p in (p1, p2)):
+            continue
+        s_m = _minutes(str(p1.get("proposed")))
+        if s_m is None or not 0 < (s_m - cur_min) % 1440 <= SET_OFF_NOTIFY_MIN:
+            continue
+        sw_key = SET_SWITCH[k1]
+        st = hass.states.get(find_eid(hass, "switch", sw_key))
+        if st is None or st.state == "on":
+            continue
+        if sw_key in SALE_SWITCHES and runtime.sell_block_reason(strict_grid=False):
+            continue                                   # sprzedaż i tak jest zakazana — nie ma o czym przypominać
+        label = st.attributes.get("friendly_name") or sw_key
+        same = p1.get("proposed") == _current(hass, k1) and p2.get("proposed") == _current(hass, k2)
+        nkey = f"set_off:{sw_key}:{loc.date().isoformat()}:{p1.get('proposed')}"
+        seen = getattr(runtime, "_set_off_seen", None)
+        if seen is None:
+            seen = runtime._set_off_seen = set()  # noqa: SLF001
+        if nkey in seen:
+            continue                                   # raz na okno (także gdy powiadomienie jest wyłączone w konfiguratorze)
+        if len(seen) > 40:
+            seen.clear()
+        seen.add(nkey)
+        hint = "Włącz przełącznik zestawu" if same else "Zatwierdź propozycję godzin (dzwonek 🔔) i włącz przełącznik zestawu"
+        try:
+            await runtime.monitor.notifier.send(
+                "set_off", "⚠️ EMS: zestaw potrzebny w planie jest wyłączony",
+                f"Plan przewiduje okno {p1.get('proposed')}–{p2.get('proposed')} („{label}”), a zestaw jest wyłączony — "
+                f"okno nie wystartuje. {hint}.", key=nkey, level="warn")
+        except Exception as err:  # noqa: BLE001
+            _LOGGER.debug("EMS: powiadomienie o wyłączonym zestawie nieudane: %s", err)
+        out.append(sw_key)
+    return out
+
+
+def _plan_window_keys(runtime, hass: HomeAssistant, proposals: dict[str, Any], pairs=None) -> set[str]:
+    """Klucze godzin okien, które plan przewiduje i które są już ustawione tak jak w planie (bieżące = proponowane).
+    Zestaw takiego okna trzeba włączyć, nawet gdy godzin nie trzeba zmieniać — przy wyłączonym „Harmonogramie cyklicznym”
+    STOP wyłącza zestaw po każdym oknie, więc bez tego kolejne okno o tych samych godzinach by nie wystartowało."""
+    out: set[str] = set()
+    for k1, k2 in (pairs or [p for p in PAIRS if p[0] in SET_SWITCH]):
+        p1, p2 = proposals.get(k1), proposals.get(k2)
+        if not isinstance(p1, dict) or not isinstance(p2, dict):
+            continue
+        if any(p.get("skip") or not p.get("proposed") or p.get("confidence") == "low" for p in (p1, p2)):
+            continue
+        if p1.get("proposed") != _current(hass, k1) or p2.get("proposed") != _current(hass, k2):
+            continue
+        if inbox.is_rejected(runtime.state, k1, p1.get("proposed")) or inbox.is_rejected(runtime.state, k2, p2.get("proposed")):
+            continue
+        out.update((k1, k2))
+    return out
 
 
 def _plan_confirmed_keys(runtime, proposals: dict[str, Any]) -> set[str]:
@@ -184,6 +310,18 @@ def _plan_confirmed_keys(runtime, proposals: dict[str, Any]) -> set[str]:
         if isinstance(p1, dict) and isinstance(p2, dict) and not p1.get("skip") and not p2.get("skip") and p1.get("proposed") and p2.get("proposed"):
             out.update((k1, k2))
     return out
+
+
+_PAIR_OF = {k: p for p in PAIRS for k in p}
+
+
+def _window_empty(hass: HomeAssistant, key: str) -> bool:
+    """Okno, do którego należy klucz, jest puste: start = stop albo któraś godzina nieustawiona (00:00)."""
+    pair = _PAIR_OF.get(key)
+    if not pair:
+        return False
+    t1, t2 = _current(hass, pair[0]), _current(hass, pair[1])
+    return not t1 or not t2 or t1 == t2 or "00:00" in (t1, t2)
 
 
 def _minutes(hm: str | None) -> int | None:
@@ -268,8 +406,8 @@ async def async_auto_apply(runtime, hass: HomeAssistant, result: dict[str, Any],
             skipped.append(f"{key}: niska pewność propozycji")
             continue
         cur_m, new_m = _minutes(cur), _minutes(proposed)
-        # Zabezpieczenie 2: limit przesunięcia względem aktualnego ustawienia.
-        if max_shift > 0 and cur_m not in (None, 0) and new_m is not None:
+        # Zabezpieczenie 2: limit przesunięcia względem aktualnego ustawienia (puste okno nie ma czego „przesuwać”).
+        if max_shift > 0 and cur_m not in (None, 0) and new_m is not None and not _window_empty(hass, key):
             shift_h = abs(new_m - cur_m) / 60.0
             if shift_h > max_shift:
                 skipped.append(f"{key}: przesunięcie {shift_h:.1f} h > limit {max_shift:.0f} h")
@@ -294,7 +432,7 @@ async def async_auto_apply(runtime, hass: HomeAssistant, result: dict[str, Any],
 
     if not final:
         if not dry_run:
-            await async_enable_sets(runtime, hass, _plan_confirmed_keys(runtime, proposals))
+            await async_enable_sets(runtime, hass, _plan_confirmed_keys(runtime, proposals) | _plan_window_keys(runtime, hass, proposals))
         log.add("auto", "Auto-stosowanie: brak zmian do wprowadzenia"
                 + (f" ({len(skipped)} pominiętych)" if skipped else ""))
         return {"applied": {}, "skipped": skipped, "disabled_sets": disabled_sets}
@@ -307,8 +445,11 @@ async def async_auto_apply(runtime, hass: HomeAssistant, result: dict[str, Any],
         return {"applied": {}, "would_apply": final, "previous": previous, "skipped": skipped, "dry_run": True}
     applied_n, apply_skipped = await apply_times(hass, final)
     skipped.extend(apply_skipped)
-    enabled = await async_enable_sets(runtime, hass, set(final) | _plan_confirmed_keys(runtime, proposals)) if applied_n else []
+    enabled = await async_enable_sets(runtime, hass, (set(final) if applied_n else set()) | _plan_confirmed_keys(runtime, proposals)
+                                      | _plan_window_keys(runtime, hass, proposals))
     runtime.state["last_applied"] = previous
+    if runtime.state.get("zeroed"):            # plan ustawił nowe godziny — stare „wyzerowane” wartości nie są już do cofnięcia
+        runtime.state["zeroed"] = {k: v for k, v in runtime.state["zeroed"].items() if k not in final}
     runtime._save_state()  # noqa: SLF001
     changes = ", ".join(f"{k}: {previous[k]}→{v}" for k, v in final.items())
     if enabled:
@@ -326,7 +467,7 @@ async def async_auto_apply(runtime, hass: HomeAssistant, result: dict[str, Any],
 
 
 async def async_undo_auto_apply(runtime, hass: HomeAssistant) -> dict[str, Any]:
-    prev = runtime.state.get("last_applied") or {}
+    prev = {**(runtime.state.get("zeroed") or {}), **(runtime.state.get("last_applied") or {})}
     if not prev and not runtime.state.get("auto_disabled") and not runtime.state.get("auto_enabled"):
         runtime.log.add("auto", "Cofnięcie: brak zapisanych poprzednich ustawień")
         return {"applied": 0, "skipped": ["brak danych do cofnięcia"]}
@@ -348,6 +489,7 @@ async def async_undo_auto_apply(runtime, hass: HomeAssistant) -> dict[str, Any]:
                 _LOGGER.error("EMS: nie udało się włączyć %s: %s", eid, err)
     runtime.state["auto_disabled"] = []
     runtime.state["last_applied"] = {}
+    runtime.state["zeroed"] = {}
     runtime._save_state()  # noqa: SLF001
     runtime.log.add("auto", f"Cofnięto auto-zastosowane godziny ({applied_n})", "ok")
     return {"applied": applied_n, "skipped": skipped}

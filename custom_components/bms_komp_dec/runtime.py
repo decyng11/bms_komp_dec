@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import math
 from datetime import date, datetime, timedelta, timezone
 from typing import Any
 
@@ -67,6 +68,8 @@ STOP_PARTNER = {
     "stop_grid_charge_2": "start_grid_charge_2",
 }
 
+START_PARTNER = {v: k for k, v in STOP_PARTNER.items()}
+
 # Reguły "start" podlegają filtrowi dni tygodnia/świąt; reguły "stop" zawsze działają
 # (przywracają bezpieczny stan i nic nie kosztują).
 START_KEYS = {
@@ -81,6 +84,11 @@ SOC_DEFAULTS = {
 }
 
 DEFAULT_SELL_BLOCK_W = 2000.0
+# awaryjny STOP: co zapamiętujemy przy starcie z harmonogramu i która komenda kończy okno
+SCHED_START_CMD = {"wlacz_ladowanie_siec": "gc_sched", "sprzedaz_6000w": "sale_sched"}
+SCHED_END_CMD = {"wylacz_ladowanie_siec": "gc_sched", "nadwyzka_9700w": "sale_sched"}
+SCHED_STOP_CMD = {"gc_sched": "wylacz_ladowanie_siec", "sale_sched": "nadwyzka_9700w"}
+SCHED_SETTLE_S = 300       # tyle czekamy, aż falownik potwierdzi start, zanim uznamy, że okno nie trwa
 SELLING_TOKEN = "__sprzedaz__"     # zapamiętany „tryb” przy falownikach bez trybu Export First (Sofar)
 PRICE_HYSTERESIS = 0.02          # PLN/kWh powyżej progu, by uznać cenę za "wróconą do normy"
 GUARD_COOLDOWN_S = 120
@@ -381,6 +389,81 @@ class BmsRuntime:
             return True, (f"ładowanie baterii {c2:.1f} kWh > produkcja PV {p2:.1f} kWh (bilans 2-dniowy)")
         return False, ""
 
+    # ------------------------------------------ energia z sieci w baterii (zakaz „ładuj z sieci → sprzedaj”)
+    GRID_BATT_DEADBAND_W = 100.0     # drobny pobór z sieci przy ładowaniu z PV (szum regulacji falownika) nie liczy się
+    GRID_BATT_MAX_GAP_S = 120.0
+
+    def grid_batt_kwh(self) -> float:
+        """Ile kWh energii naładowanej z sieci jest jeszcze w baterii (dom jej nie zużył)."""
+        try:
+            return max(0.0, float((self.state.get("grid_batt") or {}).get("kwh") or 0.0))
+        except (TypeError, ValueError):
+            return 0.0
+
+    def _track_grid_batt(self, now: datetime) -> None:
+        """Licznik energii z sieci w baterii: rośnie, gdy bateria ładuje się przy poborze z sieci (ładowanie z sieci),
+        maleje, gdy bateria zasila dom (energia z sieci schodzi pierwsza). Sprzedaż do sieci go nie zmniejsza.
+        Nigdy nie przekracza energii faktycznie zgromadzonej w baterii (SOC × pojemność)."""
+        prev = getattr(self, "_gb_ts", None)
+        self._gb_ts = now
+        if prev is None:
+            return
+        dt_s = (now - prev).total_seconds()
+        if dt_s <= 0 or dt_s > self.GRID_BATT_MAX_GAP_S:
+            return
+        bp = (self.coordinator.data or {}).get("battery_power")
+        try:
+            bp = float(bp)
+        except (TypeError, ValueError):
+            return
+        if not math.isfinite(bp) or abs(bp) > 100000:
+            return
+        chg_w = bp * (1 if int(self.battery_sign()["sign"]) >= 0 else -1)     # dodatnia = ładowanie
+        gp = self.grid_power()                                                # dodatnia = pobór z sieci
+        mem = self.state.get("grid_batt")
+        if not isinstance(mem, dict):
+            mem = self.state["grid_batt"] = {"kwh": 0.0}
+        kwh = self.grid_batt_kwh()
+        before = kwh
+        h = dt_s / 3600.0
+        if chg_w > 0:
+            gc = False
+            try:
+                gc = self.grid_charging_on()
+            except Exception:  # noqa: BLE001
+                gc = False
+            if gp is None:
+                from_grid = chg_w if gc else 0.0
+            else:
+                from_grid = min(chg_w, max(0.0, gp - (0.0 if gc else self.GRID_BATT_DEADBAND_W)))
+            kwh += from_grid / 1000.0 * h
+        elif chg_w < 0 and kwh > 0:
+            export = max(0.0, -gp) if gp is not None else 0.0
+            to_house = max(0.0, -chg_w - export)
+            kwh = max(0.0, kwh - to_house / 1000.0 * h)
+        soc = self.soc()
+        if soc is not None:
+            try:
+                cap = float(self.optimizer.config.get(CONF_BATTERY_CAPACITY_KWH, DEFAULT_BATTERY_CAPACITY_KWH))
+                kwh = min(kwh, max(0.0, soc) / 100.0 * cap)
+            except Exception:  # noqa: BLE001
+                pass
+        mem["kwh"] = round(kwh, 4)
+        if abs(kwh - float(mem.get("saved", 0.0) or 0.0)) >= 0.05 or (kwh == 0.0 and before > 0.0):
+            mem["saved"] = mem["kwh"]
+            self._save_state()
+
+    def grid_batt_block(self) -> str | None:
+        """Zakaz sprzedaży, dopóki w baterii jest energia naładowana z sieci (tolerancja = „Blokada arbitrażu”; 0 = wył.)."""
+        tol = number_value(self.hass, "grid_arbitrage_block_kwh", 0.5)
+        if tol <= 0:
+            return None
+        kwh = self.grid_batt_kwh()
+        if kwh > tol:
+            return (f"w baterii jest ~{kwh:.1f} kWh energii naładowanej z sieci (tolerancja {tol:.1f} kWh) — "
+                    f"sprzedaż dopiero, gdy dom ją zużyje")
+        return None
+
     def storm_active(self) -> bool:
         return switch_on(self.hass, "storm_mode", False)
 
@@ -407,6 +490,9 @@ class BmsRuntime:
         blocked, reason = self.arbitrage_status()
         if blocked:
             return f"arbitraż: {reason}"
+        gb = self.grid_batt_block()
+        if gb:
+            return f"arbitraż: {gb}"
         return None
 
     def import_today_kwh(self) -> float | None:
@@ -634,6 +720,8 @@ class BmsRuntime:
                     self.log.add("command", f"{label} ({source}): błąd {eid}={value}: {err}", "error")
                     raise HomeAssistantError(f"{label}: nie udało się ustawić {eid}: {err}") from err
         self.log.add("command", f"{label} ({source})", "ok")
+        if key in SCHED_END_CMD and self.state.pop(SCHED_END_CMD[key], None) is not None:
+            self._save_state()                 # okno zakończone (STOP, zabezpieczenie albo ręcznie) — awaryjny STOP niepotrzebny
         if switch_on(self.hass, "readback_verify", True):
             self._spawn(self._verify(key, label, steps, gen))
 
@@ -775,6 +863,7 @@ class BmsRuntime:
                 self._save_state()
                 self.fired[start_key] = now
                 await self.run_command("wlacz_ladowanie_siec", source=f"harmonogram {start_key} (nadrobienie {cur})", enforce_guard=False)
+                self._mark_sched(start_key, "wlacz_ladowanie_siec", now)
                 await self.monitor.notifier.send(
                     "grid_charge", "🔌 EMS: start ładowania z sieci (w trakcie okna)",
                     f"{cur} — okno {s_hm}–{e_hm} już trwało, więc włączono ładowanie od razu.", key=f"gc:{start_key}", level="info")
@@ -820,6 +909,11 @@ class BmsRuntime:
                 continue
             if t_val[:5] == "00:00" or t_val[:5] not in due:
                 continue
+            pair_key = STOP_PARTNER.get(time_key) or START_PARTNER.get(time_key)
+            if pair_key:
+                p_st = self.hass.states.get(find_eid(self.hass, "time", pair_key))
+                if p_st is not None and str(p_st.state)[:5] == t_val[:5]:
+                    continue                    # puste okno (start = stop, np. wyzerowane przez plan) — nic nie wykonujemy
             if now.fold and not dry_run:        # jesienna zmiana czasu: godzina 02:xx powtarza się, a reguły wykonały się w pierwszym przejściu
                 continue
 
@@ -896,6 +990,7 @@ class BmsRuntime:
                 results.append({"time_key": time_key, "button": button_eid, "fired": False, "error": str(err)})
                 continue
 
+            self._mark_sched(time_key, button_key, now)
             await self._notify_fired(time_key, button_key, now_hm, soc_val)
 
             if button_key == "nadwyzka_9700w" and pr.get("active"):
@@ -1096,6 +1191,66 @@ class BmsRuntime:
         return None
 
     # --------------------------------------------------------------- zabezpieczenia
+    def _mark_sched(self, start_key: str, button_key: str, now: datetime) -> None:
+        """Start okna z harmonogramu (ładowanie z sieci / sprzedaż) — zapamiętany także na czas restartu HA."""
+        slot = SCHED_START_CMD.get(button_key)
+        if slot:
+            self.state[slot] = {"start_key": start_key, "ts": now.timestamp()}
+            self._save_state()
+
+    def _sched_window_open(self, start_key: str, now: datetime) -> bool:
+        """Czy okno zestawu (bieżące godziny Start–Stop) obejmuje teraz? Puste albo nieustawione okno = nie."""
+        stop_key = START_PARTNER.get(start_key)
+        ts = self.hass.states.get(find_eid(self.hass, "time", start_key))
+        te = self.hass.states.get(find_eid(self.hass, "time", stop_key)) if stop_key else None
+        if not ts or not te:
+            return False
+        s_hm, e_hm = str(ts.state)[:5], str(te.state)[:5]
+        if "00:00" in (s_hm, e_hm) or ":" not in s_hm or ":" not in e_hm or s_hm == e_hm:
+            return False
+        cur = dt_util.as_local(now).strftime("%H:%M")
+        return (s_hm <= cur < e_hm) if s_hm < e_hm else (cur >= s_hm or cur < e_hm)
+
+    async def _late_stop(self, now: datetime) -> None:
+        """Awaryjny STOP: okno wystartowało z harmonogramu, a jego STOP nie zadziałał w swojej minucie (restart HA,
+        przeładowanie integracji, chwilowo niedostępna encja) — ładowanie z sieci / sprzedaż trwa po czasie. Kończymy je.
+        Nie dotyczy startów ręcznych („Wymuś ładowanie”, przyciski) — te nie zostawiają znacznika."""
+        for slot, active in (("gc_sched", self.grid_charging_on), ("sale_sched", self.is_selling)):
+            mark = self.state.get(slot)
+            if not isinstance(mark, dict) or not mark.get("start_key"):
+                continue
+            try:
+                on = bool(active())
+            except Exception:  # noqa: BLE001
+                continue
+            age = now.timestamp() - float(mark.get("ts") or 0.0)
+            if not on:
+                if age > SCHED_SETTLE_S:           # okno skończyło się inną drogą (np. zabezpieczenie SOC)
+                    self.state.pop(slot, None)
+                    self._save_state()
+                continue
+            if self._sched_window_open(str(mark["start_key"]), now):
+                continue
+            if slot == "gc_sched" and (switch_on(self.hass, "force_charge_battery", False) or self.in_grid_charge_window(now)):
+                continue                           # trwa „Wymuś ładowanie” albo okno drugiego zestawu
+            if slot == "sale_sched" and any(self._sched_window_open(k, now) and switch_on(self.hass, sw, False)
+                                            for k, sw in (("bateria_sprzedaz_start", "bateria_sprzedaz_1"),
+                                                          ("bateria_sprzedaz_start_2", "bateria_sprzedaz_2"))):
+                continue                           # trwa okno drugiego zestawu sprzedaży
+            if not self._cooldown_ok(f"late_stop:{slot}", now):
+                continue
+            what = "ładowanie z sieci" if slot == "gc_sched" else "sprzedaż z baterii"
+            self.log.add("guard", f"Awaryjny STOP: {what} trwa po zakończeniu okna ({mark['start_key']}) — "
+                                  f"STOP z harmonogramu nie zadziałał, kończę teraz", "warn")
+            try:
+                await self.run_command(SCHED_STOP_CMD[slot], source="zabezpieczenie (STOP po czasie)")
+                await self.monitor.notifier.send(
+                    "guard_action", f"🛡 EMS: awaryjny STOP — {what}",
+                    f"Okno z harmonogramu już się skończyło, a {what} nadal trwało (STOP nie zadziałał o swojej godzinie, "
+                    f"np. przez restart Home Assistanta). Zakończono teraz.", key=f"guard:late:{slot}")
+            except Exception as err:  # noqa: BLE001
+                _LOGGER.error("EMS GUARD: awaryjny STOP (%s) nieudany: %s", slot, err)
+
     def _cooldown_ok(self, name: str, now: datetime) -> bool:
         last = self._guard_last.get(name)
         if last is not None and (now - last).total_seconds() < GUARD_COOLDOWN_S:
@@ -1105,6 +1260,11 @@ class BmsRuntime:
 
     async def enforce_guard(self, now: datetime) -> None:
         soc = self.soc()
+
+        try:
+            await self._late_stop(now)
+        except Exception as err:  # noqa: BLE001
+            _LOGGER.error("EMS GUARD: awaryjny STOP: %s", err)
 
         if self.is_selling():
             reasons: list[str] = []
@@ -1388,6 +1548,10 @@ class BmsRuntime:
         sd = self.state.get("soc_day") or {}
         if sd.get("date") == day.isoformat():
             lines.append(f"SOC: min {float(sd['min']):.0f}%, max {float(sd['max']):.0f}%")
+        try:
+            lines.extend(self._plan_vs_actual_lines(day))
+        except Exception as err:  # noqa: BLE001
+            _LOGGER.debug("EMS: podsumowanie plan vs wykonanie: %s", err)
         cmds = [e for e in self.log.last(300) if e.get("kind") == "command" and e.get("level") == "ok"
                 and str(e.get("ts", "")).startswith(day.isoformat())]
         if cmds:
@@ -1410,6 +1574,37 @@ class BmsRuntime:
         except Exception:  # noqa: BLE001
             pass
         return "\n".join(lines)
+
+    def _plan_vs_actual_lines(self, day) -> list[str]:
+        """Wiersze podsumowania dnia: plan kontra wykonanie (prognoza PV, sprzedaż z baterii), blokady i zmiany automatu,
+        energia z sieci pozostała w baterii."""
+        fmt = lambda v, n=1: f"{v:.{n}f}".replace(".", ",")  # noqa: E731
+        key = day.isoformat()
+        out: list[str] = []
+        rec = self.insights.fc.get(key) or {}
+        pv_fc = rec.get("pv_fc")
+        pv_act = (self.coordinator.data or {}).get("energy_pv_today") if day == dt_util.now().date() else rec.get("pv_act")
+        if pv_act is None:
+            pv_act = rec.get("pv_act")
+        if isinstance(pv_fc, (int, float)) and isinstance(pv_act, (int, float)):
+            diff = f" ({(float(pv_act) - pv_fc) / pv_fc * 100:+.0f}%)" if pv_fc >= 0.5 else ""
+            out.append(f"PV: prognoza {fmt(pv_fc)} kWh, wykonanie {fmt(float(pv_act))} kWh{diff}")
+        plan = (self.state.get("sale_plan") or {}).get(key)
+        act = (self.state.get("sale_actual") or {}).get(key) or {"kwh": 0.0, "rev": 0.0}
+        if plan:
+            out.append(f"Sprzedaż z baterii: plan ~{fmt(plan['kwh'])} kWh / {fmt(plan['gross'], 2)} zł, "
+                       f"w oknach sprzedaży wyeksportowano {fmt(act['kwh'])} kWh / {fmt(act['rev'], 2)} zł")
+        elif act["kwh"] >= 0.05:
+            out.append(f"Sprzedaż z baterii: bez planu, w oknach sprzedaży wyeksportowano {fmt(act['kwh'])} kWh / {fmt(act['rev'], 2)} zł")
+        ents = [e for e in self.log.last(400) if str(e.get("ts", "")).startswith(key)]
+        guards = sum(1 for e in ents if e.get("kind") == "guard" and e.get("level") == "warn")
+        autos = sum(1 for e in ents if e.get("kind") == "auto" and e.get("level") in ("ok", "warn"))
+        if guards or autos:
+            out.append(f"Zabezpieczenia zadziałały: {guards}×, zmiany automatu: {autos}×")
+        gb = self.grid_batt_kwh()
+        if gb >= 0.1 and day == dt_util.now().date():
+            out.append(f"W baterii zostało ~{fmt(gb)} kWh energii z sieci (sprzedaż zablokowana, aż dom ją zużyje)")
+        return out
 
     # --------------------------------------------------------------- tick / listenery
     async def tick(self, now: datetime) -> None:
@@ -1450,8 +1645,9 @@ class BmsRuntime:
     async def _plan_tick(self, now: datetime) -> None:
         await self.refresh_plan()
         try:
-            from .automation import async_live_apply
+            from .automation import async_live_apply, async_notify_sets_off
             await async_live_apply(self, self.hass, self._plan, now)
+            await async_notify_sets_off(self, self.hass, self._plan, now)
         except Exception as err:  # noqa: BLE001
             _LOGGER.error("EMS auto-stosowanie z planu: %s", err, exc_info=True)
 
@@ -1576,6 +1772,10 @@ class BmsRuntime:
             self.ledger.update(now, self.grid_power(), self.sell_price(), self.buy_price(), peak)
         except Exception as err:  # noqa: BLE001
             _LOGGER.debug("EMS ledger: %s", err)
+        try:
+            self._track_grid_batt(now)
+        except Exception as err:  # noqa: BLE001
+            _LOGGER.debug("EMS licznik energii z sieci w baterii: %s", err)
         try:
             self._track_sale(now)
         except Exception as err:  # noqa: BLE001

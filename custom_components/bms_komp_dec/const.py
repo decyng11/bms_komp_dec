@@ -181,6 +181,7 @@ SWITCHES = [
     ("profit_check", "Sprawdzaj opłacalność sprzedaży", "mdi:calculator-variant", False),
     ("dynamic_reserve", "Dynamiczna rezerwa SOC", "mdi:battery-heart-variant", False),
     ("auto_apply", "Automatyczne stosowanie propozycji", "mdi:robot", False),
+    ("auto_enable_sets", "Auto-włączanie zestawów (gdy plan przewiduje okno)", "mdi:toggle-switch", True),
     ("readback_verify", "Weryfikuj wykonanie komend (odczyt zwrotny)", "mdi:check-network", True),
     # --- powiadomienia, tryby specjalne, test na sucho
     ("notifications_enabled", "Powiadomienia EMS", "mdi:bell-ring", True),

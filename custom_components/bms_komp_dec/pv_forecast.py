@@ -96,6 +96,33 @@ def solcast_hourly(hass: HomeAssistant, eid: str | None, target: date, key: str 
     return hourly if any(v is not None for v in hourly) else None
 
 
+SOLCAST_FULL_DAY_H = 20     # tyle godzin musi mieć prognoza godzinowa, by jej suma zastąpiła stan encji
+
+
+def solcast_day_sum(hass: HomeAssistant, eid: str | None, d: date, key: str | None = None) -> float | None:
+    """Suma dnia (kWh) z prognozy godzinowej Solcast (domyślnie środkowej, pv_estimate). None, gdy encja nie ma pełnej
+    doby danych godzinowych. Stan encji Solcast zależy od jej ustawień (może pokazywać wariant pesymistyczny estimate10),
+    a prognoza godzinowa zawsze zawiera wszystkie warianty — dlatego sumę dnia liczymy z niej."""
+    arr = solcast_hourly(hass, eid, d, key)
+    if not arr or sum(1 for v in arr if v is not None) < SOLCAST_FULL_DAY_H:
+        return None
+    return round(sum(v or 0.0 for v in arr), 2)
+
+
+def solcast_variant(hass: HomeAssistant, eid: str | None, d: date) -> str | None:
+    """Który wariant prognozy pokazuje stan encji Solcast: „estimate10” / „estimate90”, gdy wyraźnie odbiega od
+    prognozy środkowej i zgadza się z wariantem skrajnym; None = środkowa albo nie da się ocenić."""
+    state = state_kwh(hass, eid)
+    mid = solcast_day_sum(hass, eid, d)
+    if state is None or mid is None or mid < 0.5 or abs(state - mid) <= 0.1 * mid:
+        return None
+    for key in ("pv_estimate10", "pv_estimate90"):
+        v = solcast_day_sum(hass, eid, d, key)
+        if v is not None and abs(state - v) <= max(0.05, 0.03 * max(v, state)):
+            return key.replace("pv_", "")
+    return None
+
+
 class PvForecast:
     """Wspólne źródło prognozy PV dla planera, rezerwy i karty."""
 
@@ -199,6 +226,9 @@ class PvForecast:
             v = self.fs_daily(d)
             if v is not None:
                 return v
+        v = solcast_day_sum(self.hass, eid, d)      # prognoza środkowa niezależnie od ustawień encji Solcast
+        if v is not None:
+            return v
         v = state_kwh(self.hass, eid)
         if v is None and self.is_fs_entity(eid):
             v = self.fs_daily(d)
@@ -234,7 +264,9 @@ class PvForecast:
             else:
                 v = None
                 for cand in SOLCAST_DAY_ENTITIES[i]:
-                    v = state_kwh(self.hass, cand)
+                    v = solcast_day_sum(self.hass, cand, d)
+                    if v is None:
+                        v = state_kwh(self.hass, cand)
                     if v is not None:
                         break
                 if v is None:
@@ -248,4 +280,15 @@ class PvForecast:
                     break
             daily.append(row)
         out["pv_daily"] = daily
+        out["pv_entity_variant"] = solcast_variant(self.hass, eid_today, today) or solcast_variant(
+            self.hass, eid_tomorrow, today + timedelta(days=1))
+        # porównanie źródeł: Solcast (prognoza środkowa) i Forecast.Solar na dziś i jutro
+        src = []
+        sol = [solcast_day_sum(self.hass, e, today + timedelta(days=i)) for i, e in enumerate((eid_today, eid_tomorrow))]
+        if any(v is not None for v in sol):
+            src.append({"name": "Solcast", "today": sol[0], "tomorrow": sol[1]})
+        fs = [self.fs_daily(today + timedelta(days=i)) for i in (0, 1)]
+        if any(v is not None for v in fs):
+            src.append({"name": "Forecast.Solar", "today": fs[0], "tomorrow": fs[1]})
+        out["pv_sources"] = src
         return out

@@ -224,6 +224,23 @@ class Insights:
     def save(self) -> None:
         self._store.request_save(self._payload)
 
+    def reset_pv_learning(self) -> int:
+        """Kasuje zapamiętane prognozy PV (dzienne i dla horyzontów), z których liczona jest korekta — nauka zaczyna się od
+        zera. Wykonanie (produkcja) i dane godzinowe zostają. Zwraca liczbę dni, z których usunięto prognozy."""
+        n = 0
+        for rec in self.fc.values():
+            if not isinstance(rec, dict):
+                continue
+            hit = False
+            for k in ("pv_fc", "pv_fc_by_h", "pv_adj_by_h"):      # pv_fc_h (kształt godzinowy) zostaje — nie zależy od wariantu
+                if k in rec:
+                    rec.pop(k, None)
+                    hit = True
+            n += 1 if hit else 0
+        self._pv_tune_cache = {}
+        self.save()
+        return n
+
     # ------------------------------------------------------------ pomiar (co ~10 s)
     def set_params(self, **kw: Any) -> None:
         """Parametry baterii do symulacji (pojemność, sprawność, próg, moce) — aktualizowane przez runtime."""

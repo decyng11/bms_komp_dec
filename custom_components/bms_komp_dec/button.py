@@ -23,7 +23,7 @@ async def async_setup_entry(hass, entry, async_add_entities):
 async def _async_setup_bms_entry(hass, entry, async_add_entities):
     coordinator = hass.data["bms_komp_dec"][entry.entry_id]
     async_add_entities([BmsButton(coordinator, k, n, i) for k, n, i in BUTTONS]
-                        + [BmsClearHistoryButton(coordinator)])
+                        + [BmsClearHistoryButton(coordinator), BmsResetPvLearningButton(coordinator)])
 
 
 class BmsButton(BmsBaseEntity, ButtonEntity):
@@ -55,6 +55,26 @@ class BmsClearHistoryButton(BmsBaseEntity, ButtonEntity):
         runtime = getattr(self._coordinator, "runtime", None)
         if runtime is not None:
             runtime.log.add("command", "Wyczyszczono historię zużycia — zbieranie od zera (ręcznie)", "ok")
+        refresh = getattr(self._coordinator, "async_request_refresh", None)
+        if refresh is not None:
+            await refresh()
+
+
+class BmsResetPvLearningButton(BmsBaseEntity, ButtonEntity):
+    """Zeruje naukę korekty prognozy PV (np. po zmianie ustawień źródła prognozy) — korekta wraca do ×1 i uczy się od nowa."""
+
+    def __init__(self, coordinator):
+        super().__init__("wyzeruj_korekte_pv", "Wyzeruj naukę korekty prognozy PV", domain="button")
+        self._coordinator = coordinator
+        self._attr_icon = "mdi:solar-power-variant-outline"
+
+    async def async_press(self) -> None:
+        runtime = getattr(self._coordinator, "runtime", None)
+        if runtime is None or getattr(runtime, "insights", None) is None:
+            raise HomeAssistantError("EMS nie jest jeszcze gotowy — spróbuj za chwilę.")
+        n = runtime.insights.reset_pv_learning()
+        runtime._plan_ts = 0.0  # noqa: SLF001 — plan policzy się od nowa bez starej korekty
+        runtime.log.add("command", f"Wyzerowano naukę korekty prognozy PV (usunięto prognozy z {n} dni) — korekta uczy się od nowa (ręcznie)", "ok")
         refresh = getattr(self._coordinator, "async_request_refresh", None)
         if refresh is not None:
             await refresh()

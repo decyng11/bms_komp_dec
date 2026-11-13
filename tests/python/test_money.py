@@ -93,37 +93,16 @@ async def notify_part():
     await rt.monitor._summaries(at(2026, 11, 7, 21, 5))
     check("wyłączone: nic na telefon, ale wpis w dzienniku mówi dlaczego", not push(hass) and any("wyłączone w konfiguratorze" in e["msg"] for e in rt.log.last(10)), rt.log.last(3))
 
-    # ---- okno arbitrażu
+    # ---- powiadomienie „okno arbitrażu” usunięte: EMS nie podpowiada „kup tanio z sieci → sprzedaj drogo” (niedozwolone)
     hass, c, opt, rt = mkenv()
     sell = [0.30] * 24; sell[19] = 0.95
     buy = [0.70] * 24; buy[3] = 0.20
     opt._read_rce_arrays = lambda: {"2026-11-08": sell}
     opt.buy_hourly_for = lambda d: buy if d.isoformat() == "2026-11-08" else None
     await rt.monitor._prices_tomorrow(at(2026, 11, 7, 15, 0))
-    ar = [x for x in push(hass) if "arbitraż" in x[2]["title"]]
-    # 0,95 × 0,9 − 0,20 = 0,655 zł/kWh ≥ 0,30
-    check("arbitraż: jest powiadomienie z godzinami 03:00 → 19:00 i zyskiem 0,66", len(ar) == 1 and "03:00" in ar[0][2]["message"] and "19:00" in ar[0][2]["message"] and "0,66" in ar[0][2]["message"], [x[2]["message"] for x in ar])
-    check("arbitraż: zdania kończą się kropką, a liczby mają przecinek", "kWh." in ar[0][2]["message"] and "0,95" in ar[0][2]["message"], ar[0][2]["message"])
-    await rt.monitor._prices_tomorrow(at(2026, 11, 7, 15, 10))
-    check("arbitraż: raz na dobę", len([x for x in push(hass) if "arbitraż" in x[2]["title"]]) == 1)
-    hass, c, opt, rt = mkenv()
-    flat = [0.40] * 24; flat[19] = 0.60
-    opt._read_rce_arrays = lambda: {"2026-11-08": flat}
-    opt.buy_hourly_for = lambda d: [0.45] * 24
-    await rt.monitor._prices_tomorrow(at(2026, 11, 7, 15, 0))
-    check("arbitraż: mały spread (zysk < progu) — bez powiadomienia", not [x for x in push(hass) if "arbitraż" in x[2]["title"]])
-    hass, c, opt, rt = mkenv()
-    inv = [0.30] * 24; inv[2] = 0.95        # drogo rano, tanio dopiero po sprzedaży → kolejność godzin ma znaczenie
-    cheap_late = [0.70] * 24; cheap_late[22] = 0.10
-    opt._read_rce_arrays = lambda: {"2026-11-08": inv}
-    opt.buy_hourly_for = lambda d: cheap_late
-    await rt.monitor._prices_tomorrow(at(2026, 11, 7, 15, 0))
-    check("arbitraż: sprzedaż przed zakupem nie liczy się jako okno", not [x for x in push(hass) if "arbitraż" in x[2]["title"]])
-    hass, c, opt, rt = mkenv()
-    opt._read_rce_arrays = lambda: {"2026-11-08": sell}
-    opt.buy_hourly_for = lambda d: None
-    await rt.monitor._prices_tomorrow(at(2026, 11, 7, 15, 0))
-    check("arbitraż: brak cen zakupu — bez powiadomienia i bez błędu", not [x for x in push(hass) if "arbitraż" in x[2]["title"]])
+    check("arbitraż: brak powiadomienia nawet przy dużym spreadzie", not [x for x in push(hass) if "arbitraż" in x[2]["title"]])
+    from custom_components.bms_komp_dec import notify_cfg as _nc
+    check("arbitraż: rodzaj usunięty z katalogu powiadomień", "arbitrage_window" not in _nc.CATALOG)
 
 async def daily_block_part():
     # ---- blokada sprzedaży według energii pobranej z sieci w ciągu dnia

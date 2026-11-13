@@ -519,6 +519,7 @@
         case 'mode-save': this._dgModesSave(t.dataset.k); break;
         case 'press': this._dgPress(t.dataset.eid); break;
         case 'clear-load-hist': this._dgClearLoadHist(); break;
+        case 'reset-pv-learn': this._dgResetPvLearn(); break;
         case 'cfg-g': s.cfgG = t.dataset.g === s.cfgG ? '' : t.dataset.g; this._dgFilterCfg(); break;
         case 'range': s.ch.range = t.dataset.r; this._dgRenderSection(); break;
         case 'preset': this._dgPreset(t.dataset.p); break;
@@ -810,6 +811,31 @@
         [{ id: 'cancel', label: 'Anuluj', cls: 'sec' }, { id: 'ok', label: 'Wyczyść historię', cls: 'red' }], 'Rozumiem, że historia zużycia zostanie trwale skasowana.');
       if (id !== 'ok') return;
       await this._dgApply([{ eid, name: 'Wyczyść historię zużycia', to: 'press' }], 'czyszczenie historii zużycia');
+    },
+    async _dgResetPvLearn() {
+      const eid = this._eid('button', 'wyzeruj_korekte_pv'); const st = this._hass.states[eid];
+      if (!st || st.state === 'unavailable') { this._dgToast('Przycisk niedostępny — zaktualizuj integrację EMS komp-dec.', true); return; }
+      const id = await this._dgModal('Wyzerować naukę korekty prognozy PV?',
+        '<p class="dg-muted">Skasuje zapamiętane prognozy PV z poprzednich dni, z których liczony jest współczynnik korekty. Korekta wróci do ×1 i zacznie uczyć się od nowa (potrzeba ok. 5 dni). Użyj po zmianie ustawień źródła prognozy (np. Solcast przełączony z wariantu pesymistycznego na środkowy) — inaczej stara korekta zawyżałaby nową prognozę. Produkcja z poprzednich dni zostaje.</p>',
+        [{ id: 'cancel', label: 'Anuluj', cls: 'sec' }, { id: 'ok', label: 'Wyzeruj naukę', cls: 'red' }], 'Rozumiem, że korekta prognozy PV zacznie się uczyć od zera.');
+      if (id !== 'ok') return;
+      await this._dgApply([{ eid, name: 'Wyzeruj naukę korekty prognozy PV', to: 'press' }], 'zerowanie nauki korekty PV');
+    },
+    // karta „Prognoza PV”: używane źródło, porównanie źródeł, wariant encji Solcast, zerowanie nauki korekty
+    _dgPvCard() {
+      const a = (this._rsAttrs && this._rsAttrs()) || {};
+      const f = (v) => (typeof v === 'number' && isFinite(v)) ? v.toFixed(1).replace('.', ',') + ' kWh' : '—';
+      const d0 = Array.isArray(a.pv_daily) ? a.pv_daily[0] : null;
+      const src = Array.isArray(a.pv_sources) ? a.pv_sources : [];
+      const rows = src.map((s) => `<tr><td>${dgEsc(s.name)}${s.name === a.pv_forecast_source ? ' <span class="dg-muted">(używane)</span>' : ''}</td><td>${f(s.today)}</td><td>${f(s.tomorrow)}</td></tr>`).join('');
+      const variant = a.pv_entity_variant
+        ? `<div class="dg-warn" id="dgPvVariant">⚠️ Encja Solcast pokazuje wariant ${a.pv_entity_variant === 'estimate10' ? 'pesymistyczny' : 'optymistyczny'} (${dgEsc(a.pv_entity_variant)}). EMS liczy sumę dnia z prognozy środkowej (dane godzinowe), ale w integracji Solcast warto ustawić zwykły „estimate”.</div>` : '';
+      const corr = d0 && typeof d0.factor === 'number' ? `Dziś: surowa ${f(d0.raw)} · korekta ×${d0.factor.toFixed(2).replace('.', ',')} z ${d0.n || 0} dni → ${f(d0.kwh)}.` : 'Korekta: brak danych.';
+      return `<div class="dg-card" id="dgPvCard"><h4>Prognoza PV</h4><div class="sub">Źródło używane przez plan: <b>${dgEsc(a.pv_forecast_source || 'brak')}</b>. ${corr}</div>
+        ${variant}
+        ${rows ? `<table class="dg-tbl" id="dgPvSrc"><thead><tr><th>Źródło (bez korekty)</th><th>Dziś</th><th>Jutro</th></tr></thead><tbody>${rows}</tbody></table>
+          ${src.length > 1 ? '' : '<div class="sub">Dodaj drugą integrację prognozy (Solcast albo Forecast.Solar), aby porównać źródła.</div>'}` : ''}
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px;"><button class="dg-btn red" data-act="reset-pv-learn">♻️ Wyzeruj naukę korekty PV…</button></div></div>`;
     },
     async _dgPress(eid) {
       const st = this._hass.states[eid]; if (!st || st.state === 'unavailable') return;
@@ -1234,6 +1260,7 @@
           ['notifications_enabled', '🔔', 'Powiadomienia', 'Niski SOC, alarm falownika, zmiana parametru po zapisie, brak cen RCE, brak łączności.'],
           ['tabs_top', '⬆️', 'Pasek zakładek na górze', 'Domyślnie pasek zakładek (same ikony) jest przyklejony do dołu ekranu. Włącz, aby wrócić do paska na górze — u wszystkich użytkowników.'],
           ['hide_devices_tab', '🙈', 'Ukryj zakładkę Urządzenia', 'Chowa całą zakładkę „Urządzenia” w panelu u wszystkich użytkowników (dane i sterowanie urządzeń działają dalej).'],
+          ['auto_enable_sets', '🔛', 'Auto-włączanie zestawów', 'Gdy plan przewiduje okno (ładowanie z sieci albo sprzedaż), EMS sam włącza przełącznik zestawu — inaczej okno by nie wystartowało. Wyłącz, jeśli wolisz włączać zestawy ręcznie.'],
           ['auto_apply_dry_run', '🧪', 'Auto-stosowanie: tylko podgląd', 'Automat liczy zmiany i zapisuje je w dzienniku, ale niczego nie wysyła do falownika.'],
         ],
         num: [
@@ -1500,6 +1527,7 @@
       const ov = DG_LS.get('bms_diag_prefix', '');
       return `<div class="dg-card"><h4>Historia zużycia</h4><div class="sub">Dane, z których liczona jest prognoza zużycia domu. Wyczyść, jeśli zawierają nierealne dni — zbieranie rozpocznie się od zera.</div>
         <div style="display:flex;gap:8px;flex-wrap:wrap;"><button class="dg-btn red" data-act="clear-load-hist">🗑 Wyczyść historię zużycia…</button></div></div>
+        ${this._dgPvCard()}
         <div class="dg-card"><h4>Prefiks encji falownika</h4><div class="sub">Aktualny: <b>${dgEsc(this._dgPrefix() || '(brak)')}</b> — ${dgEsc(this._dgPrefixSource())}.${this._dgDevices().length ? ' Wykryte urządzenia Solarman: ' + this._dgDevices().map(d => `<b>${dgEsc(d.prefix || d.dev.slice(0, 6))}</b> (${d.cfg} ustawień, ${d.n} encji)`).join(', ') + '.' : ''} Zmień tylko jeśli encje falownika mają inną nazwę (np. <span class="dg-mono">deye</span> zamiast <span class="dg-mono">inverter</span>).</div>
         <div style="display:flex;gap:8px;flex-wrap:wrap;"><input type="text" id="dgPrefix" value="${dgEsc(ov)}" placeholder="auto" style="flex:1;min-width:160px;" /><button class="dg-btn" data-act="prefix-save">Zapisz</button></div></div>
         <div class="dg-card"><h4>Rejestry Modbus (ekspert)</h4><div class="sub">Odczyt i zapis dowolnego rejestru przez usługi integracji Solarman. <b class="dg-bad">Zapis w złym rejestrze może uszkodzić falownik lub baterię.</b> Używaj tylko według dokumentacji producenta.</div>
