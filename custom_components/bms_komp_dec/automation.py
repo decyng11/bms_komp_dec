@@ -6,6 +6,7 @@ import re
 from typing import Any
 
 from homeassistant.core import HomeAssistant
+from homeassistant.util import dt as dt_util
 
 from . import inbox
 from .const import TIMES
@@ -119,6 +120,59 @@ async def async_sync_sale_sets(runtime, hass: HomeAssistant, proposals: dict[str
     if off:
         runtime._save_state()  # noqa: SLF001
     return off
+
+
+# --- auto-stosowanie z planu na żywo (okna ładowania z sieci) ---------------------------------------------------
+LIVE_KEYS = ("start_grid_charge", "stop_grid_charge", "start_grid_charge_2", "stop_grid_charge_2")
+LIVE_STABLE_S = 1800       # propozycja musi się utrzymać tyle czasu bez zmiany (plan potrafi „przeskakiwać” 11:00↔12:00)
+LIVE_COOLDOWN_S = 3600     # i nie częściej niż raz na godzinę
+LIVE_NEAR_START_MIN = 10   # nie ruszamy okna, które zaczyna się za chwilę
+
+
+async def async_live_apply(runtime, hass: HomeAssistant, plan: dict[str, Any] | None, now=None) -> dict[str, Any] | None:
+    """Auto-stosowanie propozycji okien ładowania z sieci z planu na żywo, a nie tylko raz dziennie o 16:00.
+
+    Bez tego propozycja, która pojawia się w ciągu doby (nowa prognoza, nowy dzień), czekała do 16:00.
+    Zabezpieczenia: włączone auto-stosowanie (i nie tryb podglądu), propozycja stabilna ≥ 30 min, ≥ 1 h od poprzedniego
+    zastosowania, nie ruszamy okna zaczynającego się za < 10 min; dalej standardowe zabezpieczenia async_auto_apply
+    (trwa ładowanie/sprzedaż, limit przesunięcia, spójność par, odrzucone propozycje, niska pewność)."""
+    if not switch_on(hass, "auto_apply", False) or switch_on(hass, "auto_apply_dry_run", False):
+        return None
+    props = (plan or {}).get("proposals") or {}
+    now = now or dt_util.now()
+    ts = now.timestamp()
+    loc = dt_util.as_local(now)
+    cur_min = loc.hour * 60 + loc.minute
+    wanted: dict[str, Any] = {}
+    for start_k, stop_k in (("start_grid_charge", "stop_grid_charge"), ("start_grid_charge_2", "stop_grid_charge_2")):
+        pair = [props.get(start_k), props.get(stop_k)]
+        if not all(isinstance(p, dict) for p in pair):
+            continue
+        if any(p.get("skip") or not p.get("proposed") or p.get("confidence") == "low" for p in pair):
+            continue
+        if all(p.get("proposed") == _current(hass, k) for p, k in zip(pair, (start_k, stop_k))):
+            continue
+        if any(inbox.is_rejected(runtime.state, k, p.get("proposed")) for p, k in zip(pair, (start_k, stop_k))):
+            continue
+        cs = _minutes(_current(hass, start_k))
+        if cs is not None and 0 < (cs - cur_min) % 1440 <= LIVE_NEAR_START_MIN:
+            continue
+        wanted[start_k], wanted[stop_k] = pair
+    sig = {k: str(p.get("proposed")) for k, p in wanted.items()}
+    mem = runtime.state.get("live_apply") or {}
+    if not sig:
+        if mem.get("sig"):
+            runtime.state["live_apply"] = {"last": mem.get("last", 0)}
+        return None
+    if mem.get("sig") != sig:
+        runtime.state["live_apply"] = {"sig": sig, "since": ts, "last": mem.get("last", 0)}
+        return None
+    if ts - float(mem.get("since", ts)) < LIVE_STABLE_S or ts - float(mem.get("last", 0)) < LIVE_COOLDOWN_S:
+        return None
+    runtime.state["live_apply"] = {"last": ts}
+    runtime.log.add("auto", "Auto-stosowanie z planu na żywo (propozycja stabilna ≥ 30 min): "
+                    + ", ".join(f"{k} → {v}" for k, v in sig.items()), "info")
+    return await async_auto_apply(runtime, hass, {"proposals": wanted})
 
 
 def _plan_confirmed_keys(runtime, proposals: dict[str, Any]) -> set[str]:

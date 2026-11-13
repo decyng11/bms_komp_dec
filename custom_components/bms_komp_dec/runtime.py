@@ -1449,6 +1449,11 @@ class BmsRuntime:
 
     async def _plan_tick(self, now: datetime) -> None:
         await self.refresh_plan()
+        try:
+            from .automation import async_live_apply
+            await async_live_apply(self, self.hass, self._plan, now)
+        except Exception as err:  # noqa: BLE001
+            _LOGGER.error("EMS auto-stosowanie z planu: %s", err, exc_info=True)
 
     def battery_params(self) -> dict[str, float]:
         """Pojemność, sprawność, próg rozładowania i moce — do symulacji „bateria bez planera”."""

@@ -1,3 +1,8 @@
+# EMS komp-dec — w przygotowaniu (po 0.9.4.2, jeszcze niewydane)
+
+## Poprawki
+- **Auto-stosowanie okien ładowania z sieci także w ciągu doby**: dotąd auto-stosowanie działało tylko raz dziennie o 16:00, więc propozycja zmiany godzin pojawiająca się o innej porze (nowa prognoza, nowa doba) nie była stosowana, mimo włączonego auto-stosowania. Teraz plan na żywo stosuje zmiany okien ładowania (noc i zestaw 2), gdy propozycja utrzymuje się ≥ 30 min bez zmiany (plan potrafi przeskakiwać np. 11:00 ↔ 12:00), nie częściej niż raz na godzinę i nie dla okna startującego za < 10 min. Obowiązują wszystkie dotychczasowe zabezpieczenia (trwa ładowanie/sprzedaż, limit przesunięcia, odrzucone propozycje, niska pewność, tryb „tylko podgląd”). Sprzedaż z baterii nadal tylko w propozycji dziennej.
+
 # EMS komp-dec — zmiany w 0.9.4.2 (z 0.9.4.1)
 
 ## Zmiany
