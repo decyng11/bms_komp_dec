@@ -4,7 +4,6 @@ Wpisy trzymamy w runtime.state["overrides"]: {id, kind, start, end (znaczniki cz
 Wygasają same; maksymalnie 48 h do przodu."""
 from __future__ import annotations
 
-from typing import Any
 
 KINDS = {
     "charge": "ładuj z sieci",
