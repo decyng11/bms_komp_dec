@@ -182,6 +182,7 @@ SWITCHES = [
     ("dynamic_reserve", "Dynamiczna rezerwa SOC", "mdi:battery-heart-variant", False),
     ("auto_apply", "Automatyczne stosowanie propozycji", "mdi:robot", False),
     ("auto_enable_sets", "Auto-włączanie zestawów (gdy plan przewiduje okno)", "mdi:toggle-switch", True),
+    ("grid_stop_at_target", "Kończ ładowanie z sieci po osiągnięciu celu z planu", "mdi:battery-check", True),
     ("readback_verify", "Weryfikuj wykonanie komend (odczyt zwrotny)", "mdi:check-network", True),
     # --- powiadomienia, tryby specjalne, test na sucho
     ("notifications_enabled", "Powiadomienia EMS", "mdi:bell-ring", True),
@@ -193,6 +194,9 @@ SWITCHES = [
     ("sale_power_fit", "Obniżaj moc sprzedaży do zapasu energii", "mdi:flash-triangle", True),
     ("device_control", "Sterowanie urządzeniami (włączanie przełączników)", "mdi:power-socket-eu", False),
     ("hide_devices_tab", "Ukryj zakładkę Urządzenia w panelu", "mdi:eye-off-outline", False),
+    ("simple_mode", "Tryb prosty panelu (trzy pytania zamiast pełnych ustawień)", "mdi:school-outline", False),
+    ("sell_enabled", "Sprzedawaj energię z baterii (wyłączone = plan nie sprzedaje)", "mdi:battery-arrow-down-outline", True),
+    ("grid_charge_enabled", "Ładuj baterię z sieci w tanich godzinach (wyłączone = nigdy)", "mdi:power-plug-battery-outline", True),
     ("tabs_top", "Pasek zakładek na górze (zamiast na dole)", "mdi:dock-top", False),
     ("brand_test_mode", "Sofar: tryb próbny (komendy tylko w dzienniku)", "mdi:flask-outline", True),
 ]
@@ -308,6 +312,7 @@ RUNTIME_SENSORS = [
     ("devices", "EMS Urządzenia", None, "mdi:power-plug"),
     ("savings", "EMS Oszczędność (miesiąc, wobec braku baterii)", "PLN", "mdi:piggy-bank"),
     ("forecast_accuracy", "EMS Trafność prognozy PV (błąd 30 dni)", "%", "mdi:bullseye-arrow"),
+    ("plan_view", "EMS Widok planu (dlaczego, tabela, nadpisania, historia SOC)", None, "mdi:table-clock"),
 ]
 
 PLATFORMS = ["sensor", "binary_sensor", "switch", "button", "number", "time"]

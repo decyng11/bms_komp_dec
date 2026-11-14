@@ -76,6 +76,7 @@
         this._safe(() => this._exPlan());
         this._safe(() => this._exLog());
         this._safe(() => this._exWiz());
+        this._safe(() => this._exPlus());
       },
       _exLog() {
         if (this._activeTab !== 'log') return;
@@ -702,6 +703,238 @@
         } catch (e) {
           this._showToast('❌ Nie udało się skopiować — ' + exErr(e), true);
         }
+      },
+    });
+
+    // =====================================================================
+    //  NOWOŚCI: nadpisanie planu, tabela planu godzina po godzinie, historia SOC (zakładka EMS)
+    //           porównanie taryf i symulacja roczna (zakładka Zysk i log)
+    //  Dane liczy integracja (sensor „Widok planu”, usługi analysis_get/analysis_set, override_set/override_clear).
+    // =====================================================================
+    const PLUS_CSS = `
+      .px-note { font-size:11px; color:var(--muted); line-height:1.5; margin-top:8px; }
+      .px-row { display:flex; flex-wrap:wrap; gap:8px; align-items:center; padding:8px 0; border-bottom:1px solid var(--line); }
+      .px-row:last-child { border-bottom:none; }
+      .px-row .nm { flex:1; min-width:150px; font-size:13px; color:var(--text); }
+      .px-row .nm small { display:block; font-size:11px; color:var(--muted); }
+      .px-row select, .px-row input { background:var(--surface); color:var(--text); border:1px solid var(--line); border-radius:10px; padding:7px 8px; font-size:13px; }
+      .px-row input[type=number] { width:84px; }
+      .px-row input[type=text] { width:120px; }
+      .px-ovr { display:flex; justify-content:space-between; align-items:center; gap:10px; padding:8px 12px; margin-bottom:8px; border-radius:12px; background:rgba(10,132,255,.12); font-size:13px; color:var(--text); }
+      .px-tbl-wrap { overflow-x:auto; -webkit-overflow-scrolling:touch; }
+      table.px-tbl { width:100%; border-collapse:collapse; font-size:12px; min-width:520px; }
+      table.px-tbl th { text-align:right; font-weight:500; color:var(--muted); padding:6px 6px; border-bottom:1px solid var(--line); white-space:nowrap; }
+      table.px-tbl td { text-align:right; padding:5px 6px; border-bottom:1px solid var(--line); color:var(--text2); white-space:nowrap; }
+      table.px-tbl th:first-child, table.px-tbl td:first-child, table.px-tbl th:nth-child(2), table.px-tbl td:nth-child(2) { text-align:left; }
+      table.px-tbl tr.day td { background:var(--surface); color:var(--text); font-weight:600; text-align:left; }
+      table.px-tbl tr.peak td:first-child { box-shadow: inset 3px 0 0 var(--orange); }
+      table.px-tbl tr.tot td { font-weight:600; color:var(--text); border-bottom:none; }
+      .px-act { display:inline-block; padding:2px 8px; border-radius:999px; font-size:11px; }
+      .px-act.grid { background:rgba(10,132,255,.16); color:#0a84ff; }
+      .px-act.sell { background:rgba(255,159,10,.18); color:var(--orange); }
+      .px-act.pv { background:rgba(48,209,88,.16); color:var(--green); }
+      .px-act.home { background:var(--surface); color:var(--text2); }
+      .px-act.idle { background:transparent; color:var(--muted); }
+      .px-neg { color:var(--green); } .px-pos { color:var(--red); }
+      .px-hist svg { width:100%; height:auto; display:block; }
+      .px-best td { font-weight:600; color:var(--green) !important; }
+    `;
+    const pxKind = { charge: 'Ładuj z sieci', no_sell: 'Nie sprzedawaj z baterii', no_grid: 'Nie ładuj z sieci' };
+    const pxDayLabel = (iso) => {
+      const t = new Date(); const p = (d) => d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+      const tm = new Date(t.getTime() + 86400000);
+      if (iso === p(t)) return 'Dziś'; if (iso === p(tm)) return 'Jutro'; return iso;
+    };
+    const pxZl = (v, sign) => { const n = exNum(v); if (n === null) return '—'; const a = Math.abs(n).toFixed(2).replace('.', ','); return (sign ? (n > 0 ? '+' : n < 0 ? '−' : '') : (n < 0 ? '−' : '')) + a + ' zł'; };
+    const pxPrice = (v) => (exNum(v) === null ? '—' : exNum(v).toFixed(2).replace('.', ','));
+
+    Object.assign(BmsPanel.prototype, {
+      _exPx() {
+        const s = this._exS();
+        if (!s.px) s.px = { ovr: { charge: { h: 2, t: 80 }, no_sell: { h: 4 }, no_grid: { h: 8 } }, an: { data: null, at: 0, loading: false, err: '' } };
+        return s.px;
+      },
+      _exPlus() {
+        const root = this.shadowRoot; if (!root) return;
+        if (!root.getElementById('exPlusStyle')) { const st = document.createElement('style'); st.id = 'exPlusStyle'; st.textContent = PLUS_CSS; root.appendChild(st); }
+        if (this._activeTab === 'ems') {
+          this._safe(() => this._exOvr());
+          this._safe(() => this._exTable());
+          this._safe(() => this._exHist());
+        }
+        if (this._activeTab === 'log') this._safe(() => this._exAnalysis());
+      },
+
+      // ------------------------------------------------------------ ręczne nadpisanie planu (14)
+      _exOvr() {
+        const box = this._el('exOvrBox'); if (!box) return;
+        const px = this._exPx();
+        const a = this._pvAttrs ? this._pvAttrs() : {};
+        const list = Array.isArray(a.overrides) ? a.overrides : [];
+        const key = JSON.stringify([list.map(o => o.id), TC('text')]);
+        if (box.dataset.exKey === key) return;
+        box.dataset.exKey = key;
+        const sel = (k, opts, cur) => `<select data-px-h="${k}">${opts.map(h => `<option value="${h}" ${Number(cur) === h ? 'selected' : ''}>${h} h</option>`).join('')}</select>`;
+        const row = (k, name, hint, opts, extra) => `<div class="px-row"><div class="nm">${exEsc(name)}<small>${exEsc(hint)}</small></div>${sel(k, opts, px.ovr[k].h)}${extra || ''}<button class="btn" data-px-set="${k}" style="padding:7px 14px;">Ustaw</button></div>`;
+        box.innerHTML = (list.length ? list.map(o => `<div class="px-ovr"><span>🧭 ${exEsc(o.text || pxKind[o.kind] || o.kind)}</span><button class="btn" data-px-del="${exEsc(o.id)}" style="padding:5px 12px;">Usuń</button></div>`).join('')
+            + (list.length > 1 ? '<div style="text-align:right;margin-bottom:6px;"><button class="btn" data-px-del="*" style="padding:5px 12px;">Usuń wszystkie</button></div>' : '') : '')
+          + row('charge', 'Ładuj z sieci teraz', 'Do wybranego poziomu SOC, potem ładowanie samo się kończy.', [1, 2, 3, 4, 6, 8],
+            `<span style="font-size:12px;color:var(--muted);">do</span><input type="number" min="5" max="100" step="5" value="${exEsc(px.ovr.charge.t)}" data-px-t="charge" /><span style="font-size:12px;color:var(--muted);">%</span>`)
+          + row('no_sell', 'Nie sprzedawaj z baterii', 'Plan nie sprzeda energii z baterii przez ten czas.', [2, 4, 8, 12, 24, 48])
+          + row('no_grid', 'Nie ładuj z sieci', 'Plan i harmonogram nie włączą ładowania z sieci przez ten czas.', [4, 8, 12, 24, 48])
+          + '<div class="px-note">Nadpisanie wygasa samo, a „nie sprzedawaj” i „nie ładuj z sieci” obowiązują w całym czasie ich trwania (plan nie proponuje wtedy sprzedaży / ładowania z sieci). Zabezpieczenia (zakaz sprzedaży energii z sieci, minimalny SOC) działają nadal.</div>';
+        if (!box.dataset.exBound) {
+          box.dataset.exBound = '1';
+          box.addEventListener('change', (ev) => {
+            const h = ev.target && ev.target.dataset && ev.target.dataset.pxH, t = ev.target && ev.target.dataset && ev.target.dataset.pxT;
+            if (h) px.ovr[h].h = Number(ev.target.value);
+            if (t) px.ovr[t].t = Number(ev.target.value);
+          });
+          box.addEventListener('click', async (ev) => {
+            const set = ev.target.closest && ev.target.closest('[data-px-set]'), del = ev.target.closest && ev.target.closest('[data-px-del]');
+            try {
+              if (set) {
+                const k = set.dataset.pxSet, d = { kind: k, hours: px.ovr[k].h };
+                if (k === 'charge') d.target = px.ovr.charge.t;
+                set.disabled = true;
+                await exCall(this, 'override_set', d);
+                this._showToast('✅ Nadpisanie ustawione');
+              } else if (del) {
+                await exCall(this, 'override_clear', del.dataset.pxDel === '*' ? {} : { id: del.dataset.pxDel });
+                this._showToast('✅ Usunięto nadpisanie');
+              } else return;
+              box.dataset.exKey = '';
+              setTimeout(() => this._exPlus(), 1200);
+            } catch (e) { this._showToast('❌ ' + exErr(e), true); if (set) set.disabled = false; }
+          });
+        }
+      },
+
+      // ------------------------------------------------------------ tabela planu (13)
+      _exTable() {
+        const box = this._el('exTblBox'); if (!box) return;
+        const a = this._pvAttrs ? this._pvAttrs() : {};
+        const rows = Array.isArray(a.table) ? a.table : [];
+        const key = JSON.stringify([a.generated_at, rows.length, TC('text')]);
+        if (box.dataset.exKey === key) return;
+        box.dataset.exKey = key;
+        if (!rows.length) { box.innerHTML = '<div class="chart-empty">Plan jeszcze nie jest policzony albo nie ma danych (SOC, prognozy).</div>'; return; }
+        let day = '', html = '';
+        rows.forEach((r) => {
+          if (r.day !== day) { day = r.day; html += `<tr class="day"><td colspan="8">${exEsc(pxDayLabel(day))}</td></tr>`; }
+          const c = exNum(r.cost);
+          html += `<tr class="${r.peak ? 'peak' : ''}"><td>${String(r.h).padStart(2, '0')}:00</td><td><span class="px-act ${exEsc(r.action)}">${exEsc(r.label)}</span></td>`
+            + `<td>${pxPrice(r.buy)}</td><td>${pxPrice(r.sell)}</td><td>${exFmt(r.pv, 1)}</td><td>${exFmt(r.load, 1)}</td><td>${exFmt(r.soc, 0, '%')}</td>`
+            + `<td class="${c < -0.005 ? 'px-neg' : c > 0.005 ? 'px-pos' : ''}">${pxZl(c, true)}</td></tr>`;
+        });
+        const t = a.table_totals || {};
+        box.innerHTML = `<div class="px-tbl-wrap"><table class="px-tbl"><thead><tr><th>Godz.</th><th>Akcja</th><th>Kup zł</th><th>Sprz. zł</th><th>PV kWh</th><th>Dom kWh</th><th>SOC</th><th>Koszt</th></tr></thead><tbody>${html}`
+          + `<tr class="tot"><td colspan="2">Razem</td><td colspan="4" style="text-align:left;">pobór ${exFmt(t.import_kwh, 1)} kWh · oddanie ${exFmt(t.export_kwh, 1)} kWh</td><td></td><td class="${exNum(t.cost) < 0 ? 'px-neg' : 'px-pos'}">${pxZl(t.cost, true)}</td></tr></tbody></table></div>`
+          + '<div class="px-note">Szacunek z planu (bez strat i opłat stałych): koszt = pobór z sieci × cena zakupu − oddanie × cena sprzedaży; minus = przychód. Pomarańczowy pasek = godziny szczytu taryfy. Plan obejmuje najbliższe ~30 godzin.</div>';
+      },
+
+      // ------------------------------------------------------------ historia SOC (20)
+      _exHist() {
+        const box = this._el('exHistBox'); if (!box) return;
+        const a = this._pvAttrs ? this._pvAttrs() : {};
+        const days = Array.isArray(a.soc_history) ? a.soc_history : [];
+        const key = JSON.stringify([days.map(d => [d.date, (d.soc || []).filter(v => v !== null).length, d.soc && d.soc[23]]), TC('text')]);
+        if (box.dataset.exKey === key) return;
+        box.dataset.exKey = key;
+        if (!days.length || days.every(d => d.empty)) { box.innerHTML = '<div class="chart-empty">Historia SOC zbiera się od uruchomienia tej wersji integracji — pierwsze dane pojawią się po kilku godzinach.</div>'; return; }
+        const W = 840, H = 230, L = 34, R = 6, T = 10, B = 28, n = days.length * 24;
+        const pw = (W - L - R) / n, y = (v) => T + (H - T - B) * (1 - v / 100);
+        let bands = '', pts = [], plan = [], lbl = '', hover = '', gap = false;
+        days.forEach((d, di) => {
+          const x0 = L + di * 24 * pw;
+          if (di) bands += `<line x1="${x0}" x2="${x0}" y1="${T}" y2="${H - B}" stroke="var(--line)" />`;
+          lbl += `<text x="${x0 + 12 * pw}" y="${H - 10}" text-anchor="middle" font-size="11" fill="var(--muted)">${exEsc(d.date.slice(8, 10) + '.' + d.date.slice(5, 7))}</text>`;
+          for (let h = 0; h < 24; h++) {
+            const x = x0 + h * pw, soc = d.soc && d.soc[h], g = d.grid && d.grid[h], s = d.sale && d.sale[h];
+            if (g || s) bands += `<rect x="${x}" y="${T}" width="${pw}" height="${H - T - B}" fill="${g ? 'rgba(10,132,255,.22)' : 'rgba(255,159,10,.26)'}" />`;
+            if (typeof soc === 'number') { pts.push((gap || !pts.length ? 'M' : 'L') + (x + pw / 2).toFixed(1) + ' ' + y(soc).toFixed(1)); gap = false; } else gap = true;
+            const p = d.plan && d.plan[h]; if (typeof p === 'number') plan.push((plan.length ? 'L' : 'M') + (x + pw / 2).toFixed(1) + ' ' + y(p).toFixed(1));
+            hover += `<rect x="${x}" y="${T}" width="${pw}" height="${H - T - B}" fill="transparent"><title>${exEsc(d.date)} ${String(h).padStart(2, '0')}:00 — SOC ${typeof soc === 'number' ? soc.toFixed(0) + '%' : 'brak danych'}${g ? ' · ładowanie z sieci' : ''}${s ? ' · sprzedaż z baterii' : ''}</title></rect>`;
+          }
+        });
+        const grid = [0, 25, 50, 75, 100].map(v => `<line x1="${L}" x2="${W - R}" y1="${y(v)}" y2="${y(v)}" stroke="var(--line)" stroke-dasharray="${v === 0 || v === 100 ? '' : '3 4'}"/><text x="${L - 4}" y="${y(v) + 4}" text-anchor="end" font-size="10" fill="var(--muted)">${v}</text>`).join('');
+        box.innerHTML = `<div class="px-hist"><svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Historia poziomu baterii z ostatnich dni">${grid}${bands}<path d="${plan.join(' ')}" fill="none" stroke="var(--muted)" stroke-width="1.5" stroke-dasharray="5 4" opacity=".8"/><path d="${pts.join(' ')}" fill="none" stroke="var(--green)" stroke-width="2.2" stroke-linejoin="round"/>${lbl}${hover}</svg></div>`
+          + '<div class="ex-leg"><span><i class="line" style="background:var(--green)"></i>SOC rzeczywisty</span><span><i class="line" style="background:var(--muted)"></i>plan z rana (tylko dziś)</span><span><i style="background:rgba(10,132,255,.4)"></i>ładowanie z sieci</span><span><i style="background:rgba(255,159,10,.45)"></i>sprzedaż z baterii</span></div>'
+          + '<div class="px-note">Okna oznaczone z liczników godzinowych (pobór ≥ 0,3 kWh przy ładowaniu baterii; oddanie ≥ 0,3 kWh przy rozładowaniu baterii) — to oszacowanie, nie zapis komend.</div>';
+      },
+
+      // ------------------------------------------------------------ porównanie taryf i symulacja roczna (11, 12)
+      async _exAnLoad() {
+        const s = this._exPx().an;
+        if (s.loading) return;
+        s.loading = true;
+        try { s.data = exResp(await exCall(this, 'analysis_get', {})) || {}; s.err = ''; }
+        catch (e) { s.err = exErr(e); }
+        finally { s.loading = false; s.at = Date.now(); }
+        this._el('exTarBox') && (this._el('exTarBox').dataset.exKey = ''); this._el('exSimBox') && (this._el('exSimBox').dataset.exKey = '');
+        this._exAnalysis();
+      },
+      _exAnalysis() {
+        const tb = this._el('exTarBox'), sb = this._el('exSimBox'); if (!tb && !sb) return;
+        const an = this._exPx().an;
+        if (!an.loading && Date.now() - an.at > 300000) this._exAnLoad();
+        const key = JSON.stringify([an.at, an.err, TC('text')]);
+        if (tb && tb.dataset.exKey !== key) { tb.dataset.exKey = key; tb.innerHTML = this._exTarHtml(); this._exAnBind(tb); }
+        if (sb && sb.dataset.exKey !== key) { sb.dataset.exKey = key; sb.innerHTML = this._exSimHtml(); this._exAnBind(sb); }
+      },
+      _exAnBind(box) {
+        if (box.dataset.exBound) return;
+        box.dataset.exBound = '1';
+        box.addEventListener('click', async (ev) => {
+          const b = ev.target.closest && ev.target.closest('[data-px-an]'); if (!b) return;
+          const val = (id) => { const e = this._el(id); const v = e ? String(e.value).trim().replace(',', '.') : ''; return v === '' ? null : v; };
+          const num = (id) => { const v = val(id); return v === null ? null : Number(v); };
+          try {
+            let d = {};
+            if (b.dataset.pxAn === 'tariff') {
+              d = { g11: num('pxG11'), dyn_markup: num('pxDyn') };
+              const zp = num('pxZp'), zo = num('pxZo');
+              d.zone = (zp && zo) ? { peak: zp, off: zo, windows: val('pxZw') || '6-13,15-22', weekend_offpeak: true, holiday_offpeak: true } : null;
+            } else d = { invest_pv: num('pxIp'), invest_batt: num('pxIb') };
+            b.disabled = true;
+            await exCall(this, 'analysis_set', d);
+            this._showToast('✅ Zapisano');
+            this._exPx().an.at = 0; this._exAnLoad();
+          } catch (e) { this._showToast('❌ ' + exErr(e), true); b.disabled = false; }
+        });
+      },
+      _exTarHtml() {
+        const an = this._exPx().an;
+        if (!an.data) return an.err ? `<div class="chart-empty" style="color:var(--red);">Nie udało się wczytać: ${exEsc(an.err)}</div>` : '<div class="chart-empty">Ładowanie…</div>';
+        const t = an.data.tariff || {}, cfg = t.cfg || {}, z = cfg.zone || {};
+        const rows = (t.rows || []).map(r => `<tr class="${t.best === r.key ? 'px-best' : ''}"><td style="text-align:left;white-space:normal;">${exEsc(r.name)}</td><td>${pxZl(r.cost)}</td><td>${pxZl(r.per_month)}</td><td class="${r.diff_month < 0 ? 'px-neg' : r.diff_month > 0 ? 'px-pos' : ''}">${r.key === 'actual' ? '—' : pxZl(r.diff_month, true)}</td></tr>`).join('');
+        const head = t.days ? `Ten sam pobór z sieci (${exFmt(t.import_kwh, 0)} kWh z ostatnich ${t.days} dób) przy różnych taryfach:` : 'Za mało danych godzinowych — porównanie pojawi się po kilku dobach pracy.';
+        const inp = (id, v, ph, w) => `<input type="text" inputmode="decimal" id="${id}" value="${v == null ? '' : exEsc(String(v).replace('.', ','))}" placeholder="${ph}" ${w ? `style="width:${w}px"` : ''} />`;
+        return `<div style="font-size:12px;color:var(--text2);margin-bottom:8px;">${head}</div>`
+          + (rows ? `<div class="px-tbl-wrap"><table class="px-tbl" style="min-width:420px;"><thead><tr><th style="text-align:left;">Taryfa</th><th>Okres</th><th>Miesiąc</th><th>Różnica / mies.</th></tr></thead><tbody>${rows}</tbody></table></div>` : '')
+          + (t.best ? '<div class="ex-sum" style="margin-top:8px;"><span class="ex-chip ok">💡 Przy tym poborze tańsza byłaby zielona pozycja — sprawdź też opłaty stałe i to, że EMS inaczej planowałby ładowanie.</span></div>' : '')
+          + '<div class="px-row"><div class="nm">Jedna stawka (G11)<small>cena całodobowa, zł/kWh</small></div>' + inp('pxG11', cfg.g11, 'np. 0,95', 90) + '</div>'
+          + '<div class="px-row"><div class="nm">Taryfa strefowa<small>cena w szczycie / poza, okna szczytu</small></div>' + inp('pxZp', z.peak, 'szczyt', 70) + inp('pxZo', z.off, 'poza', 70) + inp('pxZw', z.windows, '6-13,15-22', 110) + '</div>'
+          + '<div class="px-row"><div class="nm">Dynamiczna<small>narzut do ceny giełdowej (RCE), zł/kWh</small></div>' + inp('pxDyn', cfg.dyn_markup, 'np. 0,45', 90) + '</div>'
+          + '<div style="text-align:right;margin-top:6px;"><button class="btn" data-px-an="tariff" style="padding:8px 16px;">Zapisz i przelicz</button></div>'
+          + `<div class="px-note">${exEsc(t.note || '')} Ceny wpisz z własnej oferty; puste pole = pozycja nie jest pokazywana.</div>`;
+      },
+      _exSimHtml() {
+        const an = this._exPx().an;
+        if (!an.data) return an.err ? `<div class="chart-empty" style="color:var(--red);">Nie udało się wczytać: ${exEsc(an.err)}</div>` : '<div class="chart-empty">Ładowanie…</div>';
+        const sim = an.data.sim, cfg = an.data.cfg || {};
+        const inp = (id, v, ph) => `<input type="text" inputmode="decimal" id="${id}" value="${v == null ? '' : exEsc(String(v))}" placeholder="${ph}" style="width:110px" />`;
+        const form = '<div class="px-row"><div class="nm">Nakłady (do liczenia zwrotu)<small>instalacja PV i bateria, zł</small></div>' + inp('pxIp', cfg.invest_pv, 'PV zł') + inp('pxIb', cfg.invest_batt, 'bateria zł')
+          + '<button class="btn" data-px-an="invest" style="padding:7px 14px;">Zapisz</button></div>';
+        if (!sim) return '<div class="chart-empty">Za mało pełnych dób z danymi godzinowymi (potrzeba co najmniej 3) — symulacja pojawi się po kilku dniach pracy.</div>' + form;
+        const rows = (sim.scenarios || []).map(s => `<tr class="${s.key === 'ems' ? 'px-best' : ''}"><td style="text-align:left;white-space:normal;">${exEsc(s.name)}</td><td>${pxZl(s.period)}</td><td>${pxZl(s.year)}</td></tr>`).join('');
+        const sv = sim.savings_year || {}, pb = sim.payback || {};
+        const yrs = (v) => exFmt(v, 1) + ' lat';
+        return `<div class="px-tbl-wrap"><table class="px-tbl" style="min-width:380px;"><thead><tr><th style="text-align:left;">Scenariusz (koszt energii)</th><th>${exEsc(String(sim.days))} dób</th><th>Rocznie</th></tr></thead><tbody>${rows}</tbody></table></div>`
+          + `<div class="ex-sum" style="margin-top:10px;"><span class="ex-chip ok">☀️ PV oszczędza ~${pxZl(sv.pv)} / rok</span><span class="ex-chip ok">🔋 bateria ~${pxZl(sv.battery)}</span><span class="ex-chip ok">🤖 EMS ~${pxZl(sv.ems)}</span><span class="ex-chip">razem ~${pxZl(sv.total)} / rok</span></div>`
+          + (Object.keys(pb).length ? `<div class="ex-sum"><span class="ex-chip">${pb.pv_years != null ? '⏱ zwrot PV: ' + yrs(pb.pv_years) : ''}</span><span class="ex-chip">${pb.battery_years != null ? '⏱ zwrot baterii (z EMS): ' + yrs(pb.battery_years) : ''}</span><span class="ex-chip">${pb.total_years != null ? '⏱ całość: ' + yrs(pb.total_years) : ''}</span></div>` : '')
+          + (sim.extrapolated ? '<div class="ex-sum"><span class="ex-chip warn">⚠ mniej niż rok danych — wynik roczny to ekstrapolacja; zimą i latem wyjdzie inaczej</span></div>' : '')
+          + form + `<div class="px-note">${exEsc(sim.note || '')} „Prosta strategia” to symulacja baterii bez planera (ładuje się z nadwyżki PV, rozładowuje na dom). Nie uwzględnia opłat stałych, zmian cen ani degradacji.</div>`;
       },
     });
 

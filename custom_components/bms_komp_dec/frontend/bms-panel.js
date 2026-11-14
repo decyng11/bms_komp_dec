@@ -231,6 +231,25 @@
     @media (prefers-reduced-motion: reduce) { .active-badges .badge.on:not(.soon)::before { animation: none; } }
     .badge-warn { display: none; padding: 0 4px; margin-bottom: 8px; }
     .badge-warn.on { display: block; }
+    .why-box { margin: 6px 0 4px; padding: 12px 16px; border-radius: 16px; background: var(--card); border: 1px solid var(--line); }
+    .why-h { display: flex; gap: 10px; align-items: flex-start; font-size: 14px; line-height: 1.45; color: var(--text); }
+    .why-i { font-size: 20px; line-height: 1.2; flex: none; }
+    .why-d { margin: 8px 0 0 30px; padding: 0; list-style: none; font-size: 12px; color: var(--muted); line-height: 1.5; }
+    .why-d li::before { content: "• "; }
+    .simple-wrap { margin-top: 6px; }
+    .sm-card { background: var(--card); border: 1px solid var(--line); border-radius: 18px; padding: 16px; margin-bottom: 12px; }
+    .sm-q { font-size: 15px; font-weight: 600; color: var(--text); margin-bottom: 4px; }
+    .sm-h { font-size: 12px; color: var(--muted); line-height: 1.5; margin-bottom: 10px; }
+    .sm-seg { display: inline-flex; padding: 3px; background: var(--seg-bg); border-radius: 999px; }
+    .sm-seg button { border: none; background: transparent; color: var(--muted); padding: 8px 22px; border-radius: 999px; cursor: pointer; font-size: 14px; font-weight: 600; }
+    .sm-seg button.active { background: var(--accent, #0f6e56); color: #fff; }
+    .sm-tariff { font-size: 14px; color: var(--text); }
+    .sm-auto { display: grid; gap: 4px; font-size: 13px; color: var(--text2); margin: 8px 0 12px; }
+    .sm-auto .ok { color: var(--green); } .sm-auto .off { color: var(--muted); }
+    .sm-foot { font-size: 11px; color: var(--muted); line-height: 1.5; text-align: center; margin: 4px 0 10px; }
+    .app.simple .tab[data-tab="charts"], .app.simple .tab[data-tab="log"], .app.simple .tab[data-tab="dev"] { display: none !important; }
+    .app.simple .weather-global { display: none; }
+    .app.simple [data-tab-content="ems"] > :not(#simpleWrap) { display: none !important; }
     .badge { padding: 5px 10px; border-radius: 16px; background: var(--surface); color: var(--muted); font-size: 12px; font-weight: 600; transition: all 0.3s; border: 1px solid var(--line); }
     .badge.on { background: rgba(16,185,129,0.15); color: #10b981; border-color: #10b981; box-shadow: 0 0 8px rgba(16,185,129,0.3); }
     .badge.danger.on { background: rgba(244,63,94,0.15); color: #f43f5e; border-color: #f43f5e; box-shadow: 0 0 8px rgba(244,63,94,0.4); }
@@ -2515,6 +2534,14 @@
           <div class="chart-card full" style="padding:14px 16px;"><div id="exSavBox"><div class="chart-empty">Ładowanie…</div></div></div>
         </div>
         <div class="section">
+          <div class="section-title">🧾 Porównanie taryf na Twoim poborze</div>
+          <div class="chart-card full" style="padding:14px 16px;"><div id="exTarBox"><div class="chart-empty">Ładowanie…</div></div></div>
+        </div>
+        <div class="section">
+          <div class="section-title">📆 Symulacja roczna i zwrot z inwestycji</div>
+          <div class="chart-card full" style="padding:14px 16px;"><div id="exSimBox"><div class="chart-empty">Ładowanie…</div></div></div>
+        </div>
+        <div class="section">
           <div class="section-title">🎯 Trafność prognoz</div>
           <div class="chart-card full" style="padding:14px 16px;"><div id="exAccBox"><div class="chart-empty">Ładowanie…</div></div></div>
         </div>
@@ -2628,6 +2655,7 @@
         </div>
 
         <div class="tab-content" data-tab-content="main">
+          <div class="why-box" id="whyBox" style="display:none;" aria-live="polite"></div>
           <!-- Aktywne funkcje przeniesione pod pogodę -->
           <div class="section" style="margin-top:6px;">
             <div class="section-title">Aktywne funkcje</div>
@@ -2742,9 +2770,22 @@
         <div class="tab-content" data-tab-content="dev" style="display:none;"><div id="devRoot"></div></div>
 
         <div class="tab-content" data-tab-content="ems" style="display:none;">
+          <div class="simple-wrap" id="simpleWrap" style="display:none;"></div>
           <div class="section" style="margin-top:6px;">
             <div class="section-title">📈 Plan na najbliższe 24 h</div>
             <div class="chart-card full" style="padding:14px 16px;"><div id="exPlanBox"><div class="chart-empty">Ładowanie planu…</div></div></div>
+          </div>
+          <div class="section">
+            <div class="section-title">🗓 Plan godzina po godzinie</div>
+            <div class="chart-card full" style="padding:14px 16px;"><div id="exTblBox"><div class="chart-empty">Ładowanie…</div></div></div>
+          </div>
+          <div class="section">
+            <div class="section-title">🧭 Ręczne nadpisanie planu</div>
+            <div class="chart-card full" style="padding:14px 16px;"><div id="exOvrBox"><div class="chart-empty">Ładowanie…</div></div></div>
+          </div>
+          <div class="section">
+            <div class="section-title">🔋 Historia poziomu baterii (7 dni)</div>
+            <div class="chart-card full" style="padding:14px 16px;"><div id="exHistBox"><div class="chart-empty">Ładowanie…</div></div></div>
           </div>
 
           <div class="section">
@@ -3608,7 +3649,90 @@
         if (val && inp.value !== val) inp.value = val;
       });
 
+      this._safe(() => { this._renderWhy(); this._applySimple(); });
       if (this._activeTab === 'main') this._drawPowerflow();
+    }
+
+    // sensor „Widok planu” (dlaczego, tabela planu, nadpisania, historia SOC) — liczy integracja
+    _pvAttrs() {
+      const s = this._hass && this._hass.states[this._eid('sensor', 'plan_view')];
+      return (s && s.attributes) || {};
+    }
+
+    // „Dlaczego?”: jedno zdanie o tym, co EMS teraz robi i z jakiego powodu (+ powody poboczne)
+    _renderWhy() {
+      const box = this._el('whyBox'); if (!box) return;
+      const w = this._pvAttrs().why;
+      if (!w || !w.text) { if (box.style.display !== 'none') box.style.display = 'none'; return; }
+      const key = JSON.stringify([w.kind, w.text, w.details]);
+      if (box.dataset.k !== key) {
+        const ICON = { sell: '💰', grid: '🔌', pv: '☀️', full: '🔋', home: '🏠', storm: '⛈', vacation: '🏖', idle: '⏸' };
+        const det = Array.isArray(w.details) ? w.details : [];
+        box.dataset.k = key;
+        box.innerHTML = `<div class="why-h"><span class="why-i">${ICON[w.kind] || 'ℹ️'}</span><span class="why-t">${bmsEsc(w.text)}</span></div>`
+          + (det.length ? `<ul class="why-d">${det.map(x => `<li>${bmsEsc(x)}</li>`).join('')}</ul>` : '');
+      }
+      if (box.style.display === 'none') box.style.display = '';
+    }
+
+    // Tryb prosty (przełącznik w Diagnostyce → Tryby): zakładki Wykresy / Zysk i log / Urządzenia znikają,
+    // zakładka EMS zamienia się w trzy pytania
+    _simpleOn() { return this._st(this._eid('switch', 'simple_mode')) === 'on'; }
+    _applySimple() {
+      const root = this.shadowRoot, app = root && root.querySelector('.app'); if (!app) return;
+      const on = this._simpleOn();
+      if (app.classList.contains('simple') !== on) {
+        app.classList.toggle('simple', on);
+        root.querySelectorAll('.tab[data-tab="ems"] .tl, .tab[data-tab="ems"] .tls').forEach((e) => { e.textContent = on ? 'Ustawienia' : 'EMS'; });
+        const sw = this._el('simpleWrap'); if (sw) sw.style.display = on ? '' : 'none';
+        if (on && ['charts', 'log', 'dev'].includes(this._activeTab)) { const m = root.querySelector('.tab[data-tab="main"]'); if (m) m.click(); }
+        if (!on && sw) { sw.innerHTML = ''; sw.dataset.k = ''; }
+      }
+      if (on) this._renderSimple();
+    }
+    _renderSimple() {
+      const w = this._el('simpleWrap'); if (!w) return;
+      const ra = this._rsAttrs();
+      const sw = (k) => this._st(this._eid('switch', k));
+      const AUTO = [['auto_apply', 'Automatyczne stosowanie propozycji planu'], ['auto_enable_sets', 'Auto-włączanie zestawów'],
+        ['profit_check', 'Sprawdzanie opłacalności sprzedaży'], ['dynamic_reserve', 'Dynamiczna rezerwa baterii'],
+        ['pv_forecast_correction', 'Korekta prognozy PV z historii'], ['live_load_correction', 'Korekta planu o bieżące zużycie']];
+      const dyn = ra.tariff_mode === 'dynamic' || ra.tariff_dynamic === true;
+      const tariff = dyn ? 'dynamiczna — ceny godzinowe' : `strefowa — szczyt ${bmsEsc(ra.tariff_label || '—')}`;
+      const fp = (v) => (isFinite(Number(v)) && v !== null && v !== '') ? Number(v).toFixed(2).replace('.', ',') + ' zł/kWh' : '—';
+      const seg = (k) => { const on = sw(k) === 'on', un = sw(k) === 'unavailable' || sw(k) === '';
+        return `<div class="sm-seg"><button type="button" data-simple-sw="${k}" data-v="on" class="${on ? 'active' : ''}" ${un ? 'disabled' : ''}>Tak</button><button type="button" data-simple-sw="${k}" data-v="off" class="${!on && !un ? 'active' : ''}" ${un ? 'disabled' : ''}>Nie</button></div>`; };
+      const auto = AUTO.filter(([k]) => sw(k) !== '' && sw(k) !== 'unavailable');
+      const offN = auto.filter(([k]) => sw(k) !== 'on').length;
+      const profit = Number(this._st(this._eid('sensor', 'profit_today')));
+      const key = JSON.stringify([tariff, ra.price_buy, ra.price_sell, sw('sell_enabled'), sw('grid_charge_enabled'), auto.map(([k]) => sw(k)), isFinite(profit) ? profit.toFixed(2) : null]);
+      if (w.dataset.k === key) return;
+      w.dataset.k = key;
+      w.innerHTML = `
+        <div class="sm-card"><div class="sm-q">Jaką masz taryfę?</div><div class="sm-tariff">${tariff}</div>
+          <div class="sm-h">Kupno teraz ${fp(ra.price_buy)} · sprzedaż ${fp(ra.price_sell)}. EMS wykrył taryfę sam; zmienisz ją w konfiguracji integracji (Ustawienia → Urządzenia i usługi → EMS komp-dec → Konfiguruj).</div></div>
+        <div class="sm-card"><div class="sm-q">Sprzedawać energię z baterii w drogich godzinach?</div>
+          <div class="sm-h">Tak: EMS sprzeda tylko tyle, ile opłaca się sprzedać, i zostawi rezerwę na noc. Nie: bateria służy wyłącznie domowi, a do sieci idzie sama nadwyżka z PV.</div>${seg('sell_enabled')}</div>
+        <div class="sm-card"><div class="sm-q">Ładować baterię z sieci, gdy prąd jest tani?</div>
+          <div class="sm-h">Tak: EMS dokupi energię w najtańszych godzinach, jeśli to się opłaca przy dzisiejszych cenach i prognozie PV. Nie: bateria ładuje się tylko z PV.</div>${seg('grid_charge_enabled')}</div>
+        <div class="sm-card"><div class="sm-q">Resztę ustawia EMS</div>
+          <div class="sm-auto">${auto.map(([k, n]) => `<div class="${sw(k) === 'on' ? 'ok' : 'off'}">${sw(k) === 'on' ? '✓' : '○'} ${n}</div>`).join('')}</div>
+          ${offN ? `<button type="button" class="btn" data-simple-auto="1" style="padding:10px 16px;">Włącz zalecaną automatykę (${offN})</button>` : '<div class="sm-h" style="margin:0;">Wszystko włączone — nic więcej nie musisz ustawiać.</div>'}</div>
+        ${isFinite(profit) ? `<div class="sm-card"><div class="sm-q">Dziś: ${profit >= 0 ? '+' : '−'}${Math.abs(profit).toFixed(2).replace('.', ',')} zł</div><div class="sm-h" style="margin:0;">Bilans sprzedaży i zakupów energii z sieci od północy.</div></div>` : ''}
+        <div class="sm-foot">Tryb prosty wyłączysz w Diagnostyce → Tryby i powiadomienia (administrator).</div>`;
+      if (!w.dataset.bound) {
+        w.dataset.bound = '1';
+        w.addEventListener('click', (ev) => {
+          const b = ev.target && ev.target.closest ? ev.target.closest('[data-simple-sw],[data-simple-auto]') : null; if (!b || b.disabled) return;
+          if (b.dataset.simpleSw) {
+            this._call('switch', b.dataset.v === 'on' ? 'turn_on' : 'turn_off', { entity_id: this._eid('switch', b.dataset.simpleSw) });
+          } else {
+            let n = 0;
+            AUTO.forEach(([k]) => { const st = this._st(this._eid('switch', k)); if (st && st !== 'unavailable' && st !== 'on') { n++; this._call('switch', 'turn_on', { entity_id: this._eid('switch', k) }); } });
+            if (n) this._showToast(`Włączono ${n} funkcji automatyki`);
+          }
+        });
+      }
     }
 
     // Funkcja włączona: z oknem godzin (jeśli ma) — „teraz” trwa w oknie, „soon” dopiero będzie aktywna.
@@ -4643,7 +4767,7 @@
 
   // Dodatki (bms-extras.js): plan 24 h, raport miesięczny, zdrowie baterii, kreator instalacji.
   // Placeholdery w karcie: #exPlanBox, #exWizBox (zakładka EMS) oraz #exReportBox, #exHealthBox (Zysk i log).
-  const EX_BOXES = ['exPlanBox', 'exWizBox', 'exReportBox', 'exHealthBox', 'exSavBox', 'exAccBox'];
+  const EX_BOXES = ['exPlanBox', 'exWizBox', 'exReportBox', 'exHealthBox', 'exSavBox', 'exAccBox', 'exTblBox', 'exOvrBox', 'exHistBox', 'exTarBox', 'exSimBox'];
   const EX_STUBS = {
     _exRender() { /* bez modułu nic do rysowania */ },
     _exFail() {

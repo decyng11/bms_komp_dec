@@ -44,6 +44,9 @@ from . import report as report_mod
 from .reserve import compute_reserve
 from .inverter_floor import floor_profile
 from .watch import WriteWatch
+from . import overrides as ovr_mod
+from . import planview
+from . import analysis as analysis_mod
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -121,6 +124,10 @@ class BmsRuntime:
         self.hass = hass
         self.coordinator = coordinator
         self.optimizer = optimizer
+        try:
+            optimizer.block_fn = self.blocked_kinds          # plan nie proponuje tego, co jest zablokowane (tryb prosty / nadpisania)
+        except Exception:  # noqa: BLE001
+            pass
         self.log = DecisionLog(hass)
         self.ledger = Ledger(hass)
         self.stats = BatteryStats(hass)
@@ -159,6 +166,9 @@ class BmsRuntime:
             "storm_until": None,               # znacznik czasu końca trybu burzowego
             "vacation_since": None,
             "report_sent": None,               # „RRRR-MM” ostatnio wysłanego raportu miesięcznego
+            "overrides": [],                   # ręczne nadpisania planu (overrides.py)
+            "analysis_cfg": {},                # ceny alternatyw i nakłady do analiz (analysis.py)
+            "control_test": None,              # wynik ostatniego testu sterowania falownikiem
         }
         self._sign = SignLearner()
 
@@ -476,6 +486,11 @@ class BmsRuntime:
         strict_grid=True: brak odczytu mocy sieci również blokuje (start z harmonogramu)."""
         if self.storm_active():
             return "tryb burzowy — energia zostaje w baterii (rezerwa 100%)"
+        if not switch_on(self.hass, "sell_enabled", True):
+            return "sprzedaż z baterii wyłączona w ustawieniach (przełącznik „Sprzedawaj z baterii”)"
+        ov = self.override_active(dt_util.now(), "no_sell")
+        if ov:
+            return f"ręczne nadpisanie: nie sprzedawaj do {self._hm(ov[0]['end'])}"
         grid = self.grid_power()
         limit = number_value(self.hass, "grid_import_sell_block_w", DEFAULT_SELL_BLOCK_W)
         if limit > 0:
@@ -838,7 +853,7 @@ class BmsRuntime:
         """Okno ładowania z sieci już trwa, a jego START nie zadziałał (np. zatwierdzono propozycję o 05:13 dla okna 05:00–06:00,
         albo restart HA w trakcie okna) — włącz ładowanie teraz, raz na okno. Reguły czasowe łapią tylko dokładną minutę startu."""
         day_ok = self.day_info(now)[0]
-        if not day_ok:
+        if not day_ok or "grid" in self.blocked_kinds():
             return
         for start_key, stop_key, sw_key in self.GC_WINDOWS:
             try:
@@ -949,6 +964,10 @@ class BmsRuntime:
                 if not (is_stop and started_recently):
                     lg("EMS SCHEDULE: SKIP %s — przełącznik %s = %s", time_key, switch_eid, sw_state)
                     continue
+
+            if button_key == "wlacz_ladowanie_siec" and "grid" in self.blocked_kinds():
+                self._log_skip(time_key, now_hm, self.blocked_kinds()["grid"])
+                continue
 
             # --- zabezpieczenia startu sprzedaży
             if button_key == "sprzedaz_6000w":
@@ -1265,6 +1284,10 @@ class BmsRuntime:
             await self._late_stop(now)
         except Exception as err:  # noqa: BLE001
             _LOGGER.error("EMS GUARD: awaryjny STOP: %s", err)
+        try:
+            await self._stop_at_target(now)
+        except Exception as err:  # noqa: BLE001
+            _LOGGER.error("EMS GUARD: koniec ładowania po osiągnięciu celu: %s", err)
 
         if self.is_selling():
             reasons: list[str] = []
@@ -1315,6 +1338,208 @@ class BmsRuntime:
                                                  "więc falownik nie ładowałby baterii. Prąd został przywrócony.", key="guard:gc_unblock")
             except Exception as err:  # noqa: BLE001
                 _LOGGER.error("EMS GUARD: błąd przywracania prądu ładowania: %s", err)
+
+    # ------------------------------------------ ręczne nadpisania planu (14)
+    @staticmethod
+    def _hm(ts: float) -> str:
+        return dt_util.as_local(datetime.fromtimestamp(float(ts), tz=timezone.utc)).strftime("%H:%M")
+
+    def override_list(self, now: datetime | None = None) -> list[dict]:
+        ts = (now or dt_util.now()).timestamp()
+        return ovr_mod.prune(list(self.state.get("overrides") or []), ts)
+
+    def override_active(self, now: datetime, kind: str | None = None) -> list[dict]:
+        return ovr_mod.active(self.override_list(now), now.timestamp(), kind)
+
+    def override_text(self, o: dict) -> str:
+        what = {"charge": "ładuję z sieci", "no_sell": "nie sprzedaję", "no_grid": "nie ładuję z sieci"}.get(o.get("kind"), "?")
+        tgt = f" (do {o['target']:.0f}%)" if o.get("target") else ""
+        return f"Ręczne nadpisanie: {what}{tgt} do {self._hm(o['end'])}."
+
+    def override_add(self, kind: str, start_ts: float, end_ts: float, target: float | None = None) -> list[dict]:
+        now = dt_util.now()
+        items = ovr_mod.add(self.override_list(now), kind, start_ts, end_ts, now.timestamp(), target)
+        self.state["overrides"] = items
+        self.state.pop("ovr_charge_done", None)
+        self._save_state()
+        self.log.add("command", f"Nadpisanie planu: {ovr_mod.KINDS[kind]} {self._hm(start_ts)}–{self._hm(end_ts)}"
+                                + (f", cel {target:.0f}%" if target else "") + " (ręcznie)", "ok")
+        self._plan_ts = 0.0                                  # plan i propozycje liczą się od nowa z uwzględnieniem nadpisania
+        return items
+
+    def override_remove(self, oid: str | None) -> list[dict]:
+        self.state["overrides"] = ovr_mod.remove(self.override_list(), oid)
+        self._save_state()
+        self.log.add("command", "Usunięto nadpisanie planu" + (" (wszystkie)" if oid is None else "") + " (ręcznie)", "ok")
+        self._plan_ts = 0.0
+        return self.state["overrides"]
+
+    def blocked_kinds(self) -> dict[str, str]:
+        """Co plan ma teraz pomijać: {"sell"|"grid": powód} — z przełączników trybu prostego albo z ręcznych nadpisań."""
+        out: dict[str, str] = {}
+        now = dt_util.now()
+        kinds = {o.get("kind"): o for o in self.override_list(now)}
+        if not switch_on(self.hass, "sell_enabled", True):
+            out["sell"] = "sprzedaż z baterii wyłączona w ustawieniach"
+        elif "no_sell" in kinds:
+            out["sell"] = f"ręczne nadpisanie „nie sprzedawaj” do {self._hm(kinds['no_sell']['end'])}"
+        if not switch_on(self.hass, "grid_charge_enabled", True):
+            out["grid"] = "ładowanie z sieci wyłączone w ustawieniach"
+        elif "no_grid" in kinds:
+            out["grid"] = f"ręczne nadpisanie „nie ładuj z sieci” do {self._hm(kinds['no_grid']['end'])}"
+        return out
+
+    async def override_tick(self, now: datetime) -> None:
+        """Wykonuje nadpisania: „ładuj z sieci” (z opcjonalnym celem SOC) i „nie ładuj z sieci”; po wygaśnięciu sprząta."""
+        items = self.override_list(now)
+        if len(items) != len(self.state.get("overrides") or []):
+            self.state["overrides"] = items
+            self._save_state()
+        ts = now.timestamp()
+        flag = self.state.get("ovr_charge_on")
+        ch = ovr_mod.active(items, ts, "charge")
+        try:
+            gc_on = bool(self.grid_charging_on())
+        except Exception:  # noqa: BLE001
+            return
+        if ch:
+            o = ch[0]
+            soc = self.soc()
+            tgt = o.get("target")
+            reached = tgt is not None and soc is not None and soc >= float(tgt)
+            if reached or (soc is not None and soc >= 100):
+                if gc_on and flag and self._cooldown_ok("ovr_stop", now):
+                    self.log.add("guard", f"Nadpisanie „ładuj z sieci”: SOC {soc:.0f}% osiągnął cel — kończę ładowanie", "ok")
+                    await self.run_command("wylacz_ladowanie_siec", source="nadpisanie (cel osiągnięty)")
+                self.state.pop("ovr_charge_on", None)
+                self.state["ovr_charge_done"] = o["id"]
+                self._save_state()
+            elif not gc_on and self.state.get("ovr_charge_done") != o["id"]:
+                if self.is_selling():
+                    return
+                if self._cooldown_ok("ovr_start", now):
+                    try:
+                        await self.run_command("wlacz_ladowanie_siec", source="ręczne nadpisanie")
+                        self.state["ovr_charge_on"] = o["id"]
+                        self._save_state()
+                    except Exception as err:  # noqa: BLE001
+                        _LOGGER.error("EMS nadpisanie: start ładowania nieudany: %s", err)
+            elif gc_on and not flag:
+                self.state["ovr_charge_on"] = o["id"]      # ładowanie już trwa (np. okno z harmonogramu) — przejmujemy cel
+                self._save_state()
+        elif flag:
+            self.state.pop("ovr_charge_on", None)
+            self.state.pop("ovr_charge_done", None)
+            self._save_state()
+            if gc_on and not self.in_grid_charge_window(now) and not switch_on(self.hass, "force_charge_battery", False):
+                self.log.add("guard", "Nadpisanie „ładuj z sieci” wygasło — kończę ładowanie", "ok")
+                await self.run_command("wylacz_ladowanie_siec", source="nadpisanie (koniec okna)")
+        if ovr_mod.active(items, ts, "no_grid") and gc_on and self._cooldown_ok("ovr_nogrid", now):
+            self.log.add("guard", "Nadpisanie „nie ładuj z sieci” — przerywam ładowanie z sieci", "warn")
+            try:
+                await self.run_command("wylacz_ladowanie_siec", source="nadpisanie (nie ładuj z sieci)")
+            except Exception as err:  # noqa: BLE001
+                _LOGGER.error("EMS nadpisanie: stop ładowania nieudany: %s", err)
+
+    # ------------------------------------------ koniec ładowania z sieci po osiągnięciu celu z planu (6)
+    TARGET_MAX_AGE_S = 6 * 3600
+
+    async def _stop_at_target(self, now: datetime) -> None:
+        """Okno ładowania z sieci trwa, a bateria osiągnęła cel z planu — kończymy ładowanie od razu (nie dopiero o STOP):
+        reszta okna to płacenie za energię, której plan nie potrzebuje."""
+        if not switch_on(self.hass, "grid_stop_at_target", True):
+            return
+        if self.state.get("ovr_charge_on") or switch_on(self.hass, "force_charge_battery", False):
+            return                                    # ręczne ładowanie ma własny cel / trwa do wyłączenia
+        try:
+            if not self.grid_charging_on() or not self.in_grid_charge_window(now):
+                return
+        except Exception:  # noqa: BLE001
+            return
+        tp = self.state.get("grid_target_plan") or {}
+        try:
+            target = float(tp.get("target"))
+            age = now.timestamp() - datetime.fromisoformat(str(tp.get("at"))).timestamp()
+        except (TypeError, ValueError):
+            return
+        soc = self.soc()
+        if soc is None or age > self.TARGET_MAX_AGE_S or not 20 <= target < 99:
+            return
+        if soc < target:
+            return
+        if not self._cooldown_ok("stop_at_target", now):
+            return
+        cur = dt_util.as_local(now).strftime("%H:%M")
+        for start_key, stop_key, sw_key in self.GC_WINDOWS:           # okno uznajemy za „załatwione” — nadrabianie go nie wznowi
+            ts_, te_ = (self.hass.states.get(find_eid(self.hass, "time", k)) for k in (start_key, stop_key))
+            if ts_ and te_:
+                s_hm, e_hm = str(ts_.state)[:5], str(te_.state)[:5]
+                if (s_hm <= cur < e_hm) if s_hm < e_hm else (cur >= s_hm or cur < e_hm):
+                    self.state.setdefault("gc_catchup", {})[start_key] = f"{dt_util.as_local(now).date().isoformat()} {s_hm}-{e_hm}"
+        self._save_state()
+        self.log.add("guard", f"Cel ładowania z sieci osiągnięty (SOC {soc:.0f}% ≥ {target:.0f}% z planu) — kończę ładowanie przed końcem okna", "ok")
+        try:
+            await self.run_command("wylacz_ladowanie_siec", source="cel ładowania osiągnięty")
+        except Exception as err:  # noqa: BLE001
+            _LOGGER.error("EMS GUARD: koniec ładowania po osiągnięciu celu: %s", err)
+
+    # ------------------------------------------ widoki dla panelu (13, 17, 20)
+    def next_window_text(self, now: datetime) -> str | None:
+        """Najbliższe zaplanowane okno (ładowanie z sieci / sprzedaż) — zdanie do „Dlaczego?”."""
+        cur = dt_util.as_local(now).strftime("%H:%M")
+        best = None
+        for (a, b, sw), label in (((self.GC_WINDOWS[0]), "ładowanie z sieci"), ((self.GC_WINDOWS[1]), "ładowanie z sieci"),
+                                  (("bateria_sprzedaz_start", "bateria_sprzedaz_stop", "bateria_sprzedaz_1"), "sprzedaż"),
+                                  (("bateria_sprzedaz_start_2", "bateria_sprzedaz_stop_2", "bateria_sprzedaz_2"), "sprzedaż")):
+            st = self.hass.states.get(find_eid(self.hass, "switch", sw))
+            ts_, te_ = (self.hass.states.get(find_eid(self.hass, "time", k)) for k in (a, b))
+            if not st or st.state != "on" or not ts_ or not te_:
+                continue
+            s_hm, e_hm = str(ts_.state)[:5], str(te_.state)[:5]
+            if "00:00" in (s_hm, e_hm) or s_hm == e_hm or ":" not in s_hm:
+                continue
+            if s_hm > cur and (best is None or s_hm < best[0]):
+                best = (s_hm, e_hm, label)
+        return f"Najbliższe okno dziś: {best[2]} {best[0]}–{best[1]}." if best else None
+
+    def why_now(self, now: datetime | None = None) -> dict[str, Any]:
+        return planview.why_now(self, now or dt_util.now())
+
+    def plan_table(self) -> dict[str, Any]:
+        cap = float(self.optimizer.config.get(CONF_BATTERY_CAPACITY_KWH, DEFAULT_BATTERY_CAPACITY_KWH))
+        return planview.plan_table((self._plan or {}).get("curve"), cap)
+
+    def soc_history(self, days: int = 7) -> list[dict[str, Any]]:
+        today = dt_util.now().date()
+        keys = [(today - timedelta(days=i)).isoformat() for i in range(days)]
+        plans = {k: (self.insights.fc.get(k) or {}).get("soc_plan") for k in keys}
+        return planview.soc_history({k: self.insights._buckets(k) for k in keys}, plans, days, today)  # noqa: SLF001
+
+    def analysis_payload(self) -> dict[str, Any]:
+        cfg = analysis_mod.clean_cfg(self.state.get("analysis_cfg"))
+        today = dt_util.now().date()
+        keys = [(today - timedelta(days=i)).isoformat() for i in range(1, 62)]
+        buckets = {k: self.insights._buckets(k) for k in keys}  # noqa: SLF001
+        avg = None
+        try:
+            tot = self.ledger.sums(today, "total")
+            if tot["import_kwh"] > 0.5 and tot["cost"] > 0:
+                avg = tot["cost"] / tot["import_kwh"]
+        except Exception:  # noqa: BLE001
+            pass
+        return {"tariff": analysis_mod.tariff_compare(buckets, cfg, today),
+                "sim": analysis_mod.year_sim(dict(self.insights.days), cfg, avg), "cfg": cfg}
+
+    def analysis_set(self, data: dict) -> dict[str, Any]:
+        cur = dict(self.state.get("analysis_cfg") or {})
+        for k, v in (data or {}).items():
+            if v is None or v == "":
+                cur.pop(k, None)
+            else:
+                cur[k] = v
+        self.state["analysis_cfg"] = analysis_mod.clean_cfg(cur)
+        self._save_state()
+        return self.state["analysis_cfg"]
 
     # --------------------------------------------- niskie/ujemne ceny (funkcja 1)
     async def price_reaction_tick(self, now: datetime) -> None:
@@ -1447,6 +1672,12 @@ class BmsRuntime:
                                   **{x: p[x] for x in ("gain_pln", "required", "confidence", "sale_kwh", "sale_gross_pln", "sale_day") if x in p}}
                               for k, p in (res.get("proposals") or {}).items()},
             }
+            for kind, why in self.blocked_kinds().items():
+                pref = {"sell": ("bateria_sprzedaz_",), "grid": ("start_grid_charge", "stop_grid_charge")}[kind]
+                for k, p in self._plan["proposals"].items():
+                    if k.startswith(pref) and p.get("proposed") and not p.get("skip"):
+                        p["skip"] = True
+                        p["reason"] = f"Pomiń — {why}. " + p["reason"]
             blk = self.daily_import_block()
             if blk:       # dziś pobrano z sieci za dużo — plan nie obiecuje sprzedaży, której zabezpieczenie i tak nie wykona
                 for k, p in self._plan["proposals"].items():
@@ -1612,6 +1843,7 @@ class BmsRuntime:
             ("snapshot", None),
             ("tryby", self.modes_tick),
             ("ceny", self.price_reaction_tick),
+            ("nadpisania", self.override_tick),
             ("harmonogram", self.process_rules),
             ("zabezpieczenia", self.enforce_guard),
             ("kontrola zapisu", self.watch.tick),

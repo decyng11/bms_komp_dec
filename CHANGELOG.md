@@ -17,6 +17,19 @@
 - **Puste okno** (start = stop) nie wykonuje już STARTU i STOPU w tej samej minucie.
 - **00:00 w polu godziny**: panel ostrzega, że oznacza „nie ustawiono” i okno nie zadziała.
 
+## Nowe funkcje (wybrane z listy pomysłów)
+- **„Dlaczego?” na ekranie głównym**: jedno zdanie o tym, co EMS teraz robi i z jakiego powodu (np. „nie sprzedaję, bo w baterii jest ~2,1 kWh energii z sieci”), plus powody poboczne i najbliższe okno.
+- **Tabela planu godzina po godzinie** (zakładka EMS): akcja, ceny zakupu i sprzedaży, PV, zużycie, SOC i szacunkowy koszt każdej godziny (~30 h do przodu) wraz z sumą.
+- **Ręczne nadpisanie planu** (zakładka EMS; administrator): „ładuj z sieci” (do wybranego SOC), „nie sprzedawaj z baterii”, „nie ładuj z sieci” — na 1–48 h, wygasa samo. Zabezpieczenia (zakaz sprzedaży energii z sieci, minimalny SOC) działają nadal; plan nie proponuje w tym czasie zablokowanego rodzaju.
+- **Koniec ładowania z sieci po osiągnięciu celu**: gdy bateria dojdzie do poziomu z planu, ładowanie kończy się od razu, a nie dopiero o godzinie STOP (przełącznik „Kończ ładowanie z sieci po celu”, domyślnie włączony; nie dotyczy „Wymuś ładowanie”).
+- **Historia poziomu baterii**: wykres 7 dób z zaznaczonymi oknami ładowania z sieci i sprzedaży oraz planem z rana (zakładka EMS).
+- **Porównanie taryf** na własnym poborze (zakładka Zysk i log): ten sam pobór z sieci co do godziny przy jednej stawce, taryfie strefowej i dynamicznej (giełda + narzut) — ceny wpisujesz sam.
+- **Symulacja roczna i zwrot z inwestycji** (zakładka Zysk i log): koszt energii bez PV i baterii / samo PV / PV + bateria bez planera / z EMS, oszczędność rocznie z podziałem na PV, baterię i EMS oraz zwrot nakładów. Wynik przeliczany na rok — przy mniej niż rocznych danych oznaczony jako ekstrapolacja.
+- **Test sterowania falownikiem** (Diagnostyka → Zaawansowane, przycisk i usługa `control_test`): zmienia prąd ładowania o jeden krok, czeka na odczyt zwrotny i zawsze przywraca wartość.
+- **Tryb prosty panelu** (Diagnostyka → Tryby; domyślnie wyłączony): zakładki Wykresy / Zysk i log / Urządzenia znikają, a „EMS” zamienia się w „Ustawienia” z trzema pytaniami — wykryta taryfa, sprzedawać z baterii, ładować z sieci — i przyciskiem „Włącz zalecaną automatykę”.
+- Nowe przełączniki w Diagnostyce → Tryby: **„Sprzedawaj z baterii”** i **„Ładuj z sieci w tanich godzinach”** (domyślnie włączone; wyłączone = plan nie proponuje, a okna z harmonogramu są blokowane).
+- Nowe usługi: `override_set`, `override_clear`, `analysis_get`, `analysis_set`, `control_test`; nowy sensor „EMS Widok planu”.
+
 ## Nowości
 - **Przełącznik „Auto-włączanie zestawów”** (Diagnostyka → Tryby; domyślnie włączony) — wyłącz, jeśli wolisz włączać zestawy ręcznie.
 - **Powiadomienie „Zestaw potrzebny w planie jest wyłączony”**: plan przewiduje okno w ciągu 90 minut, a przełącznik zestawu jest wyłączony.

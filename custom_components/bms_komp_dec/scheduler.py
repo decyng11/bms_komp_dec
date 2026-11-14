@@ -878,6 +878,7 @@ class ScheduleOptimizer:
             proposals.update(self._suggest_battery_sell(ctx))
             proposals.update(self._suggest_pv_block(ctx))
         self._prune_proposals(proposals, ctx)
+        self._apply_blocks(proposals, ctx)
         try:
             curve = self._plan_curve(ctx)
         except Exception as err:  # noqa: BLE001
@@ -906,6 +907,25 @@ class ScheduleOptimizer:
             "proposals": proposals,
             "assumptions": self._assumptions(ctx),
         }
+
+    def _apply_blocks(self, proposals: dict, ctx: dict) -> None:
+        """Przełączniki trybu prostego i ręczne nadpisania: zablokowanego rodzaju (sprzedaż / ładowanie z sieci) plan nie
+        proponuje i nie pokazuje w krzywej."""
+        fn = getattr(self, "block_fn", None)
+        try:
+            blocked = dict(fn()) if fn else {}
+        except Exception:  # noqa: BLE001
+            blocked = {}
+        if "sell" in blocked:
+            for keys in (("bateria_sprzedaz_start", "bateria_sprzedaz_stop"), ("bateria_sprzedaz_start_2", "bateria_sprzedaz_stop_2")):
+                self._skip_pair(proposals, keys, f"Pomiń — {blocked['sell']}.")
+            ctx["sold"] = set()
+            ctx["sale_windows"] = []
+        if "grid" in blocked:
+            for keys in (("start_grid_charge", "stop_grid_charge"), ("start_grid_charge_2", "stop_grid_charge_2")):
+                self._skip_pair(proposals, keys, f"Pomiń — {blocked['grid']}.")
+            ctx["grid_hours"], ctx["grid_targets"], ctx["grid_kwh"] = set(), {}, 0.0
+            ctx["midday_hours"] = set()
 
     @staticmethod
     def _min_of(hhmm: str | None) -> int | None:

@@ -132,7 +132,7 @@ const { seed, curve, REPORT, HEALTH, tab, sr, openModes, openSec } = T;
   await openModes(e);
   const dgq = (f, ...a) => e.q(f, ...a);
   ok(await dgq(() => !/Ładowanie modułu/.test(__el.shadowRoot.getElementById('diagRoot').textContent) && __el.shadowRoot.getElementById('diagRoot').querySelectorAll('.chart-empty').length === 0), 'Diagnostyka: po załadowaniu modułu nie zostaje napis „Ładowanie modułu…”');
-  ok(await dgq(() => __el.shadowRoot.querySelectorAll('#dgBody [data-act="mode-sw"]').length === 7 && __el.shadowRoot.querySelectorAll('#dgBody input[data-mode-num]').length === 2), 'tryby (Diagnostyka): 5 przełączników i 2 pola liczbowe');
+  ok(await dgq(() => __el.shadowRoot.querySelectorAll('#dgBody [data-act="mode-sw"]').length === 11 && __el.shadowRoot.querySelectorAll('#dgBody input[data-mode-num]').length === 2), 'tryby (Diagnostyka): 11 przełączników i 2 pola liczbowe');
   ok(/Tryb burzowy/.test(await sr(e, '#dgBody')) && /Tryb urlopowy/.test(await sr(e, '#dgBody')) && /Powiadomienia/.test(await sr(e, '#dgBody')) && /Auto-stosowanie: tylko podgląd/.test(await sr(e, '#dgBody')), 'tryby (Diagnostyka): nazwy i opisy');
   ok(await dgq(() => __el.shadowRoot.querySelector('[data-act="mode-sw"][data-k="storm_mode"]').classList.contains('green') && !__el.shadowRoot.querySelector('[data-act="mode-sw"][data-k="auto_apply_dry_run"]').classList.contains('green')), 'tryby (Diagnostyka): stan przycisków zgodny ze stanem encji');
   await e.q(() => { window.__calls.length = 0; __el.shadowRoot.querySelector('[data-act="mode-sw"][data-k="auto_apply_dry_run"]').click(); }); await sleep(100);

@@ -23,7 +23,7 @@ async def async_setup_entry(hass, entry, async_add_entities):
 async def _async_setup_bms_entry(hass, entry, async_add_entities):
     coordinator = hass.data["bms_komp_dec"][entry.entry_id]
     async_add_entities([BmsButton(coordinator, k, n, i) for k, n, i in BUTTONS]
-                        + [BmsClearHistoryButton(coordinator), BmsResetPvLearningButton(coordinator)])
+                        + [BmsClearHistoryButton(coordinator), BmsResetPvLearningButton(coordinator), BmsControlTestButton(coordinator)])
 
 
 class BmsButton(BmsBaseEntity, ButtonEntity):
@@ -78,3 +78,21 @@ class BmsResetPvLearningButton(BmsBaseEntity, ButtonEntity):
         refresh = getattr(self._coordinator, "async_request_refresh", None)
         if refresh is not None:
             await refresh()
+
+
+class BmsControlTestButton(BmsBaseEntity, ButtonEntity):
+    """Test sterowania falownikiem: zmienia prąd ładowania o jeden krok, czeka na odczyt zwrotny i przywraca wartość."""
+
+    def __init__(self, coordinator):
+        super().__init__("test_sterowania", "Testuj sterowanie falownikiem", domain="button")
+        self._coordinator = coordinator
+        self._attr_icon = "mdi:check-network-outline"
+
+    async def async_press(self) -> None:
+        runtime = getattr(self._coordinator, "runtime", None)
+        if runtime is None:
+            raise HomeAssistantError("EMS nie jest jeszcze gotowy — spróbuj za chwilę.")
+        from .ctltest import run as ctl_run
+        res = await ctl_run(runtime)
+        if not res.get("ok"):
+            raise HomeAssistantError("Test sterowania: " + str(res.get("detail")))

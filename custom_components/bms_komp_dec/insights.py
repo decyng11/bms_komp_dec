@@ -111,7 +111,7 @@ def day_costs(buckets: list[list | None], *, cap_kwh: float, eff: float, floor_p
     e_min = cap * min(100.0, max(0.0, floor_pct)) / 100.0
     e = cap * min(100.0, max(0.0, soc0 if soc0 is not None else 50.0)) / 100.0
     e = max(e_min, min(cap, e))
-    out = {"actual": 0.0, "nobat": 0.0, "simple": 0.0, "hours": 0,
+    out = {"actual": 0.0, "nobat": 0.0, "simple": 0.0, "nopv": 0.0, "hours": 0,
            "load_kwh": 0.0, "pv_kwh": 0.0, "import_kwh": 0.0, "export_kwh": 0.0,
            "nobat_import_kwh": 0.0, "simple_import_kwh": 0.0}
     for b in buckets:
@@ -128,6 +128,7 @@ def day_costs(buckets: list[list | None], *, cap_kwh: float, eff: float, floor_p
         out["export_kwh"] += b[EXP]
         # rzeczywistość
         out["actual"] += b[IMP] * buy - b[EXP] * sell
+        out["nopv"] += load * buy                       # bez PV i bez baterii: całe zużycie z sieci
         # bez baterii
         net = load - pv
         imp0, exp0 = max(0.0, net), max(0.0, -net)

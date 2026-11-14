@@ -129,7 +129,7 @@ class BmsRuntimeSensor(BmsBaseEntity, SensorEntity):
         "prices_sell_today", "prices_sell_tomorrow", "prices_buy_today", "prices_buy_tomorrow",
         "price_sell_entity", "price_buy_entity", "price_sell_source", "price_buy_source", "tariff_mode", "tariff_dynamic",
         "pv_forecast_source", "pv_hourly_today", "pv_hourly_tomorrow", "pv_daily", "pv_sources", "assumptions",
-        "devices", "power_total", "accuracy",
+        "devices", "power_total", "accuracy", "table", "overrides", "soc_history", "why", "control_test",
     })
 
     def __init__(self, coordinator, key, name, unit, icon):
@@ -191,6 +191,8 @@ class BmsRuntimeSensor(BmsBaseEntity, SensorEntity):
             return rt.insights.savings()["month"]["vs_nobat"]
         if self._key == "forecast_accuracy":
             return rt.insights.accuracy(getattr(rt.coordinator, "load_forecast", None))["pv"]["mape"]
+        if self._key == "plan_view":
+            return rt.why_now(dt_util.now())["kind"]
         return None
 
     @staticmethod
@@ -352,6 +354,13 @@ class BmsRuntimeSensor(BmsBaseEntity, SensorEntity):
                     "month_vs_simple": sv["month"]["vs_simple"], "year_vs_nobat": sv["year"]["vs_nobat"],
                     "year_vs_simple": sv["year"]["vs_simple"], "month_cost": sv["month"]["actual"],
                     "days_counted": sv["total"]["days"], "since": sv["since"]}
+        if self._key == "plan_view":
+            now = dt_util.now()
+            pt = rt.plan_table()
+            return {"why": rt.why_now(now), "table": pt["rows"], "table_totals": pt["totals"],
+                    "overrides": [dict(o, text=rt.override_text(o)) for o in rt.override_list(now)],
+                    "soc_history": rt.soc_history(7), "control_test": rt.state.get("control_test"),
+                    "generated_at": (rt.plan() or {}).get("generated_at")}
         if self._key == "forecast_accuracy":
             ac = rt.insights.accuracy(getattr(rt.coordinator, "load_forecast", None))
             return {"pv_bias": ac["pv"]["bias"], "pv_days": ac["pv"]["n"], "load_mape": ac["load"]["mape"],

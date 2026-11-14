@@ -520,6 +520,7 @@
         case 'press': this._dgPress(t.dataset.eid); break;
         case 'clear-load-hist': this._dgClearLoadHist(); break;
         case 'reset-pv-learn': this._dgResetPvLearn(); break;
+        case 'ctl-test': this._dgCtlTest(); break;
         case 'cfg-g': s.cfgG = t.dataset.g === s.cfgG ? '' : t.dataset.g; this._dgFilterCfg(); break;
         case 'range': s.ch.range = t.dataset.r; this._dgRenderSection(); break;
         case 'preset': this._dgPreset(t.dataset.p); break;
@@ -820,6 +821,30 @@
         [{ id: 'cancel', label: 'Anuluj', cls: 'sec' }, { id: 'ok', label: 'Wyzeruj naukę', cls: 'red' }], 'Rozumiem, że korekta prognozy PV zacznie się uczyć od zera.');
       if (id !== 'ok') return;
       await this._dgApply([{ eid, name: 'Wyzeruj naukę korekty prognozy PV', to: 'press' }], 'zerowanie nauki korekty PV');
+    },
+    // karta „Test sterowania”: zmienia prąd ładowania o jeden krok, czeka na odczyt zwrotny i przywraca wartość
+    _dgCtlCard() {
+      const a = (this._pvAttrs && this._pvAttrs()) || {}; const r = a.control_test;
+      let st = '<div class="sub">Test jeszcze nie był uruchomiony.</div>';
+      if (r && r.detail) {
+        let when = ''; try { when = new Date(r.ts).toLocaleString('pl-PL'); } catch (e) { /* brak daty */ }
+        st = `<div class="${r.ok ? 'dg-ok' : 'dg-warn'}" id="dgCtlRes">${r.ok ? '✅' : '❌'} ${dgEsc(r.detail)}${when ? ` <span class="dg-muted">(${dgEsc(when)})</span>` : ''}</div>`;
+      }
+      return `<div class="dg-card" id="dgCtlCard"><h4>Test sterowania falownikiem</h4><div class="sub">Sprawdza całą drogę komendy: EMS → Home Assistant → falownik → odczyt zwrotny. Zmienia „maksymalny prąd ładowania baterii” o jeden krok (±1 A), czeka, aż falownik potwierdzi, i zawsze przywraca poprzednią wartość. Nie przełącza trybów pracy, nie rusza sprzedaży ani ładowania z sieci. Trwa do ~1 minuty.</div>
+        ${st}<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px;"><button class="dg-btn" data-act="ctl-test">🔧 Testuj sterowanie…</button></div></div>`;
+    },
+    async _dgCtlTest() {
+      const id = await this._dgModal('Przetestować sterowanie falownikiem?',
+        '<p class="dg-muted">EMS na chwilę zmieni prąd ładowania baterii o jeden krok i przywróci go. Najlepiej uruchamiać, gdy nic nie jest pilne. Test trwa do ~1 minuty.</p>',
+        [{ id: 'cancel', label: 'Anuluj', cls: 'sec' }, { id: 'ok', label: 'Testuj', cls: '' }]);
+      if (id !== 'ok') return;
+      this._dgToast('Test trwa…');
+      try {
+        const res = await this._hass.callWS({ type: 'call_service', domain: 'bms_komp_dec', service: 'control_test', service_data: {}, return_response: true });
+        const r = (res && res.response !== undefined) ? res.response : res;
+        this._dgToast(r && r.ok ? '✅ Sterowanie działa' : '❌ ' + ((r && r.detail) || 'test nieudany'), !(r && r.ok));
+      } catch (e) { this._dgToast('❌ ' + (e && e.message ? e.message : e), true); }
+      this._dgRenderSection();
     },
     // karta „Prognoza PV”: używane źródło, porównanie źródeł, wariant encji Solcast, zerowanie nauki korekty
     _dgPvCard() {
@@ -1261,6 +1286,10 @@
           ['tabs_top', '⬆️', 'Pasek zakładek na górze', 'Domyślnie pasek zakładek (same ikony) jest przyklejony do dołu ekranu. Włącz, aby wrócić do paska na górze — u wszystkich użytkowników.'],
           ['hide_devices_tab', '🙈', 'Ukryj zakładkę Urządzenia', 'Chowa całą zakładkę „Urządzenia” w panelu u wszystkich użytkowników (dane i sterowanie urządzeń działają dalej).'],
           ['auto_enable_sets', '🔛', 'Auto-włączanie zestawów', 'Gdy plan przewiduje okno (ładowanie z sieci albo sprzedaż), EMS sam włącza przełącznik zestawu — inaczej okno by nie wystartowało. Wyłącz, jeśli wolisz włączać zestawy ręcznie.'],
+          ['simple_mode', '🎓', 'Tryb prosty panelu', 'Panel pokazuje trzy pytania (taryfa, sprzedaż z baterii, ładowanie z sieci) zamiast pełnych ustawień; zakładki Wykresy, Zysk i log i Urządzenia znikają. Dla osób, które nie chcą wchodzić w szczegóły. Dotyczy wszystkich użytkowników panelu.'],
+          ['sell_enabled', '💰', 'Sprzedawaj z baterii', 'Wyłączone: plan nie proponuje sprzedaży z baterii, a ewentualne okna sprzedaży są blokowane — do sieci idzie tylko nadwyżka z PV.'],
+          ['grid_charge_enabled', '🔌', 'Ładuj z sieci w tanich godzinach', 'Wyłączone: plan nie proponuje ładowania z sieci, a okna z harmonogramu nie startują (przycisk „Wymuś ładowanie” nadal działa).'],
+          ['grid_stop_at_target', '🎯', 'Kończ ładowanie z sieci po celu', 'Gdy bateria osiągnie poziom z planu, ładowanie z sieci kończy się od razu, a nie dopiero o godzinie STOP okna — resztę okna nie płacisz za energię, której plan nie potrzebuje.'],
           ['auto_apply_dry_run', '🧪', 'Auto-stosowanie: tylko podgląd', 'Automat liczy zmiany i zapisuje je w dzienniku, ale niczego nie wysyła do falownika.'],
         ],
         num: [
@@ -1528,6 +1557,7 @@
       return `<div class="dg-card"><h4>Historia zużycia</h4><div class="sub">Dane, z których liczona jest prognoza zużycia domu. Wyczyść, jeśli zawierają nierealne dni — zbieranie rozpocznie się od zera.</div>
         <div style="display:flex;gap:8px;flex-wrap:wrap;"><button class="dg-btn red" data-act="clear-load-hist">🗑 Wyczyść historię zużycia…</button></div></div>
         ${this._dgPvCard()}
+        ${this._dgCtlCard()}
         <div class="dg-card"><h4>Prefiks encji falownika</h4><div class="sub">Aktualny: <b>${dgEsc(this._dgPrefix() || '(brak)')}</b> — ${dgEsc(this._dgPrefixSource())}.${this._dgDevices().length ? ' Wykryte urządzenia Solarman: ' + this._dgDevices().map(d => `<b>${dgEsc(d.prefix || d.dev.slice(0, 6))}</b> (${d.cfg} ustawień, ${d.n} encji)`).join(', ') + '.' : ''} Zmień tylko jeśli encje falownika mają inną nazwę (np. <span class="dg-mono">deye</span> zamiast <span class="dg-mono">inverter</span>).</div>
         <div style="display:flex;gap:8px;flex-wrap:wrap;"><input type="text" id="dgPrefix" value="${dgEsc(ov)}" placeholder="auto" style="flex:1;min-width:160px;" /><button class="dg-btn" data-act="prefix-save">Zapisz</button></div></div>
         <div class="dg-card"><h4>Rejestry Modbus (ekspert)</h4><div class="sub">Odczyt i zapis dowolnego rejestru przez usługi integracji Solarman. <b class="dg-bad">Zapis w złym rejestrze może uszkodzić falownik lub baterię.</b> Używaj tylko według dokumentacji producenta.</div>

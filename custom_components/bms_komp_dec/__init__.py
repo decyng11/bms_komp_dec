@@ -41,6 +41,7 @@ _SERVICES = (
     "watch_write", "watch_status", "watch_clear", "health_check", "monthly_report", "get_plan",
     "diag_store_get_all", "diag_store_set", "diag_store_delete",
     "notify_settings_get", "notify_settings_set", "notify_test", "inbox_action", "devices_get", "devices_set", "devices_discover", "insights_get", "self_test",
+    "override_set", "override_clear", "analysis_get", "analysis_set", "control_test",
 )
 _SUGGEST_HOUR = 16   # RCE na jutro jest publikowane po południu — wcześniej propozycja bazowała na starych danych
 
@@ -418,6 +419,54 @@ def _register_services(hass: HomeAssistant) -> None:
         from .selftest import run as selftest_run
         return await selftest_run(rt)
 
+    async def handle_override_set(call):
+        await _require_admin(hass, call)
+        rt = _need_runtime(hass)
+        kind = str(call.data.get("kind") or "")
+        now = dt_util.now()
+        try:
+            if call.data.get("start") or call.data.get("end"):
+                st = dt_util.parse_datetime(str(call.data.get("start"))) if call.data.get("start") else now
+                en = dt_util.parse_datetime(str(call.data.get("end")))
+                if st is None or en is None:
+                    raise ValueError("nieprawidłowy czas (oczekiwano RRRR-MM-DDTGG:MM)")
+                st, en = dt_util.as_local(st).timestamp(), dt_util.as_local(en).timestamp()
+            else:
+                hours = float(call.data.get("hours") or 0)
+                if hours <= 0:
+                    raise ValueError("podaj liczbę godzin (hours) albo start i end")
+                st, en = now.timestamp(), now.timestamp() + hours * 3600
+            tgt = call.data.get("target")
+            items = rt.override_add(kind, st, en, None if tgt in (None, "") else float(tgt))
+        except (ValueError, TypeError) as err:
+            raise HomeAssistantError(f"Nadpisanie: {err}") from err
+        await rt.override_tick(now)
+        return {"overrides": [dict(o, text=rt.override_text(o)) for o in items]}
+
+    async def handle_override_clear(call):
+        await _require_admin(hass, call)
+        rt = _need_runtime(hass)
+        items = rt.override_remove(call.data.get("id") or None)
+        await rt.override_tick(dt_util.now())
+        return {"overrides": items}
+
+    async def handle_analysis_get(call):
+        rt = _need_runtime(hass)
+        return rt.analysis_payload()
+
+    async def handle_analysis_set(call):
+        await _require_admin(hass, call)
+        rt = _need_runtime(hass)
+        data = {k: call.data.get(k) for k in ("g11", "zone", "dyn_markup", "invest_pv", "invest_batt") if k in call.data}
+        rt.analysis_set(data)
+        return rt.analysis_payload()
+
+    async def handle_control_test(call):
+        await _require_admin(hass, call)
+        rt = _need_runtime(hass)
+        from .ctltest import run as ctl_run
+        return await ctl_run(rt)
+
     async def handle_devices_discover(call):
         await _require_admin(hass, call)
         rt = _need_runtime(hass)
@@ -429,6 +478,11 @@ def _register_services(hass: HomeAssistant) -> None:
         ("devices_discover", handle_devices_discover, SupportsResponse.ONLY),
         ("insights_get", handle_insights_get, SupportsResponse.ONLY),
         ("self_test", handle_self_test, SupportsResponse.ONLY),
+        ("override_set", handle_override_set, SupportsResponse.OPTIONAL),
+        ("override_clear", handle_override_clear, SupportsResponse.OPTIONAL),
+        ("analysis_get", handle_analysis_get, SupportsResponse.ONLY),
+        ("analysis_set", handle_analysis_set, SupportsResponse.OPTIONAL),
+        ("control_test", handle_control_test, SupportsResponse.OPTIONAL),
         ("devices_set", handle_devices_set, SupportsResponse.OPTIONAL),
         ("notify_settings_get", handle_notify_get, SupportsResponse.ONLY),
         ("notify_settings_set", handle_notify_set, SupportsResponse.OPTIONAL),

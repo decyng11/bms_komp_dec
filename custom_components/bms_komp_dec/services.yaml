@@ -235,3 +235,84 @@ insights_get:
 self_test:
   name: Autotest
   description: Sprawdza na żywo falownik, prognozę PV, ceny, wykrywanie zaniku sieci, urządzenia i plan (administrator, tylko odczyt).
+
+override_set:
+  name: Nadpisz plan na wybrane godziny
+  description: Ręczne, wygasające nadpisanie planu — „ładuj z sieci”, „nie sprzedawaj z baterii” albo „nie ładuj z sieci” (administrator).
+  fields:
+    kind:
+      name: Rodzaj
+      required: true
+      example: no_sell
+      selector:
+        select:
+          options: [charge, no_sell, no_grid]
+    hours:
+      name: Godziny od teraz
+      required: false
+      example: 2
+      selector:
+        number: {min: 0.5, max: 48, step: 0.5}
+    start:
+      name: Początek
+      required: false
+      selector:
+        datetime: {}
+    end:
+      name: Koniec
+      required: false
+      selector:
+        datetime: {}
+    target:
+      name: Docelowy SOC (tylko „charge”)
+      required: false
+      selector:
+        number: {min: 5, max: 100}
+
+override_clear:
+  name: Usuń nadpisania planu
+  description: Usuwa jedno nadpisanie (id) albo wszystkie (administrator).
+  fields:
+    id:
+      name: Identyfikator
+      required: false
+      selector:
+        text: {}
+
+analysis_get:
+  name: Analizy: porównanie taryf i symulacja roczna
+  description: Zwraca porównanie taryf na własnym poborze i symulację roczną z szacunkiem zwrotu inwestycji.
+
+analysis_set:
+  name: Analizy: zapisz ceny i nakłady
+  description: Ceny alternatywnych taryf i nakłady na PV/baterię do analiz (administrator).
+  fields:
+    g11:
+      name: Cena G11 (zł/kWh)
+      required: false
+      selector:
+        number: {min: 0, max: 5, step: 0.01}
+    zone:
+      name: Taryfa strefowa
+      required: false
+      selector:
+        object: {}
+    dyn_markup:
+      name: Narzut do ceny giełdowej (zł/kWh)
+      required: false
+      selector:
+        number: {min: 0, max: 5, step: 0.01}
+    invest_pv:
+      name: Nakład na PV (zł)
+      required: false
+      selector:
+        number: {min: 0, max: 1000000}
+    invest_batt:
+      name: Nakład na baterię (zł)
+      required: false
+      selector:
+        number: {min: 0, max: 1000000}
+
+control_test:
+  name: Testuj sterowanie falownikiem
+  description: Zmienia prąd ładowania o jeden krok, czeka na odczyt zwrotny i przywraca wartość (administrator).
