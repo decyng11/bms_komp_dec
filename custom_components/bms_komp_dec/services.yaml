@@ -280,11 +280,11 @@ override_clear:
         text: {}
 
 analysis_get:
-  name: Analizy: porównanie taryf i symulacja roczna
+  name: "Analizy: porównanie taryf i symulacja roczna"
   description: Zwraca porównanie taryf na własnym poborze i symulację roczną z szacunkiem zwrotu inwestycji.
 
 analysis_set:
-  name: Analizy: zapisz ceny i nakłady
+  name: "Analizy: zapisz ceny i nakłady"
   description: Ceny alternatywnych taryf i nakłady na PV/baterię do analiz (administrator).
   fields:
     g11:
