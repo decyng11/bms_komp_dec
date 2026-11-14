@@ -2679,6 +2679,7 @@
           </div>
           <div class="section">
             <div class="section-title">Plan dnia</div>
+            <div id="exMainBox"></div>
             <div class="eta-grid" id="etaBox" style="margin-bottom:10px;"></div>
             <div class="chart-card full" style="padding:6px 20px 12px;"><div id="planBox"></div></div>
           </div>
@@ -3508,6 +3509,10 @@
         const w = this._st(this._eid('number', 'vacation_load_w'));
         items.push(['', `🏖 <b>Tryb urlopowy</b> — plan zakłada stałe zużycie domu${w ? ' ' + this._esc(Math.round(Number(w))) + ' W' : ''}.`]);
       }
+      // dane integracji: brak połączenia z falownikiem / nieaktualny plan
+      if (!this._findEntity(ENTITY_FALLBACKS.soc)) items.push(['bad', '⚠ <b>Brak danych z falownika</b> — sprawdź połączenie (Diagnostyka → Łączność).']);
+      const gen = Date.parse(String(this._pvAttrs().generated_at || '')) / 1000;
+      if (isFinite(gen) && gen > 0 && nowS - gen > 3600) items.push(['warn', `⚠ <b>Plan nieaktualny od ${Math.floor((nowS - gen) / 3600)} h</b> — EMS nie odświeżył planu; sprawdź Diagnostykę.`]);
       const key = JSON.stringify(items);
       if (key === this._sbKey) return;
       this._sbKey = key;
@@ -3520,6 +3525,8 @@
       this._safe(() => this._renderPriceBar());
       this._safe(() => this._renderFloorAlert());
       this._safe(() => this._renderStatusBanner());
+      // ekran główny korzysta z dodatków (rachunek dnia, wykres SOC, przyciski nadpisań) — ładujemy moduł, gdy integracja podaje „Widok planu”
+      if (this._activeTab === 'main' && !MODULES.extras.ready && Object.keys(this._pvAttrs()).length) this._safe(() => this._exEnsure());
       this._safe(() => this._exRender());
       this._safe(() => this._renderWeather());
       this._safe(() => this._renderLoadConsumptionChart());
@@ -3897,16 +3904,16 @@
       const V = this._flowVariant || (cw > 0 && cw < 520 ? 'A' : '0');                    // '0' = bez zmian; A = przycięcie, B = większe, C = oba (telefon)
       const big = V === 'B' || V === 'C', crop = V === 'A' || V === 'C';
       const lh = big ? 20 : 16;
-      const key = [V, Math.round(pv / 10), Math.round(load / 10), Math.round(grid / 10), Math.round(batt / 10), Math.round(soc), THEME.mode, Object.values(D).map(v => v === null ? 'x' : v.toFixed(1)).join(',')].join('|');
+      const key = [V, Math.round(pv / 10), Math.round(load / 10), Math.round(grid / 10), Math.round(batt / 10), Math.round(soc), THEME.mode, String(this._rsAttrs().inverter_floor), String((this._pvAttrs().table || []).length), Object.values(D).map(v => v === null ? 'x' : v.toFixed(1)).join(',')].join('|');
       if (key === this._lastFlowKey) return;     // animacja jest w CSS — przerysowujemy tylko przy zmianie
       this._lastFlowKey = key;
 
       const TH = 20;                                         // poniżej 20 W traktujemy jako brak przepływu
-      const H = { x: 300, y: big ? 165 : 150 };
+      const H = { x: 300, y: (big ? 165 : 150) + 40 };       // środek niżej: linia PV zaczyna się pod napisami, a nie przecina ich
       const dx = V === 'C' ? 28 : 0;
-      const N = { pv: { x: 300, y: 45 }, home: { x: 115 + dx, y: H.y }, grid: { x: 485 - dx, y: H.y }, batt: { x: 300, y: big ? 308 : 268 } };
+      const N = { pv: { x: 300, y: 45 }, home: { x: 115 + dx, y: H.y }, grid: { x: 485 - dx, y: H.y }, batt: { x: 300, y: (big ? 308 : 268) + 40 } };
       const R = big ? { pv: 38, home: 38, grid: 38, batt: 52 } : { pv: 32, home: 32, grid: 32, batt: 44 };
-      const vb = (crop ? (V === 'C' ? '52 0 496 ' : '45 0 510 ') : '0 0 600 ') + (big ? 400 : 340);
+      const vb = (crop ? (V === 'C' ? '52 0 496 ' : '45 0 510 ') : '0 0 600 ') + (big ? 440 : 380);
       const cl = (a, b, r) => {                              // punkt na odcinku a→b przesunięty o r od a
         const dx = b.x - a.x, dy = b.y - a.y, d = Math.hypot(dx, dy) || 1;
         return { x: a.x + dx / d * r, y: a.y + dy / d * r };
@@ -3921,7 +3928,7 @@
       let lines = '';
       flows.forEach(f => {
         const n = N[f.k];
-        const a = cl(n, H, R[f.k] + 4), b = cl(H, n, 12);
+        const a = f.k === 'pv' ? { x: n.x, y: n.y + R.pv + 21 + (dayTxt.pv ? 2 : 1) * lh + 8 } : cl(n, H, R[f.k] + 4), b = cl(H, n, 12);
         const p = f.dir >= 0 ? `M${a.x.toFixed(1)} ${a.y.toFixed(1)} L${b.x.toFixed(1)} ${b.y.toFixed(1)}`
                              : `M${b.x.toFixed(1)} ${b.y.toFixed(1)} L${a.x.toFixed(1)} ${a.y.toFixed(1)}`;
         const sw = f.dir === 0 ? 2 : Math.min(7, 3 + f.w / 1500);
@@ -3930,6 +3937,22 @@
           : `<path d="${p}" class="nf-line" stroke="${f.c}" stroke-width="${sw.toFixed(1)}"/>`;
       });
 
+      // kreska rezerwy (próg odcięcia falownika) i znacznik planowanego SOC na koniec dnia — na pierścieniu baterii
+      const pvA = this._pvAttrs();
+      const flr = Number(this._rsAttrs().inverter_floor);
+      const tRows = Array.isArray(pvA.table) ? pvA.table : [];
+      const endRow = tRows.filter(r => r && r.day === this._todayKey() && r.h === 23).pop();
+      const tgt = endRow ? Number(endRow.soc) : NaN;
+      const ang = (pct) => (pct / 100 * 360 - 90) * Math.PI / 180, rr = R.batt - 6;
+      let marks = '';
+      if (isFinite(flr) && flr > 0 && flr < 100) {
+        const a1 = ang(flr);
+        marks += `<line x1="${(N.batt.x + (rr - 7) * Math.cos(a1)).toFixed(1)}" y1="${(N.batt.y + (rr - 7) * Math.sin(a1)).toFixed(1)}" x2="${(N.batt.x + (rr + 7) * Math.cos(a1)).toFixed(1)}" y2="${(N.batt.y + (rr + 7) * Math.sin(a1)).toFixed(1)}" stroke="#ff3b30" stroke-width="3" stroke-linecap="round"><title>Rezerwa (próg odcięcia falownika) ${Math.round(flr)}%</title></line>`;
+      }
+      if (isFinite(tgt) && tgt > 0 && tgt <= 100) {
+        const a2 = ang(tgt), cx = N.batt.x + rr * Math.cos(a2), cy = N.batt.y + rr * Math.sin(a2);
+        marks += `<rect x="${(cx - 4.5).toFixed(1)}" y="${(cy - 4.5).toFixed(1)}" width="9" height="9" rx="2" fill="#af52de" stroke="var(--card)" stroke-width="1.5" transform="rotate(45 ${cx.toFixed(1)} ${cy.toFixed(1)})"><title>Plan: ${Math.round(tgt)}% na koniec dnia</title></rect>`;
+      }
       const circ = 2 * Math.PI * (R.batt - 6);
       const socCol = soc < 20 ? '#ff3b30' : soc < 40 ? '#ff9500' : '#34c759';
       const node = (k, icon, fill, stroke) => `<circle cx="${N[k].x}" cy="${N[k].y}" r="${R[k]}" fill="${fill}" stroke="${stroke}" stroke-width="2.5"/>
@@ -3948,6 +3971,7 @@
         <circle cx="${N.batt.x}" cy="${N.batt.y}" r="${R.batt}" class="nf-bg"/>
         <circle cx="${N.batt.x}" cy="${N.batt.y}" r="${R.batt - 6}" fill="none" class="nf-track" stroke-width="8"/>
         <circle cx="${N.batt.x}" cy="${N.batt.y}" r="${R.batt - 6}" fill="none" stroke="${socCol}" stroke-width="8" stroke-linecap="round" stroke-dasharray="${(circ * soc / 100).toFixed(1)} ${circ.toFixed(1)}" transform="rotate(-90 ${N.batt.x} ${N.batt.y})"/>
+        ${marks}
         <text x="${N.batt.x}" y="${N.batt.y + (big ? 9 : 7)}" text-anchor="middle" class="nf-soc">${Math.round(soc)}%</text>
         ${lab('pv', this._fmtW(pv), 'produkcja PV', R.pv + 20)}
         ${lab('home', this._fmtW(load), 'dom', R.home + 20)}
@@ -4585,7 +4609,7 @@
   // =====================================================================
   // Wersja tego pliku (ustawiana skryptem pakującym z manifest.json). Każdy moduł niesie tę samą w install.version:
   // gdy się różnią, przeglądarka podała starą kopię modułu z pamięci podręcznej.
-  const CARD_VERSION = '0.9.4.3';
+  const CARD_VERSION = '0.9.5';
   const MOD_TIMEOUT_MS = 20000;
   const MODULES = {
     diag:   { file: 'bms-diag.js',   global: '__bmsDiagInstall',   contract: 1, label: 'Diagnostyki', p: null, ready: false, err: '', got: '' },
@@ -4767,7 +4791,7 @@
 
   // Dodatki (bms-extras.js): plan 24 h, raport miesięczny, zdrowie baterii, kreator instalacji.
   // Placeholdery w karcie: #exPlanBox, #exWizBox (zakładka EMS) oraz #exReportBox, #exHealthBox (Zysk i log).
-  const EX_BOXES = ['exPlanBox', 'exWizBox', 'exReportBox', 'exHealthBox', 'exSavBox', 'exAccBox', 'exTblBox', 'exOvrBox', 'exHistBox', 'exTarBox', 'exSimBox'];
+  const EX_BOXES = ['exPlanBox', 'exWizBox', 'exReportBox', 'exHealthBox', 'exSavBox', 'exAccBox', 'exTblBox', 'exOvrBox', 'exHistBox', 'exTarBox', 'exSimBox'];  // exMainBox (ekran główny) celowo poza listą: ma własny pusty stan
   const EX_STUBS = {
     _exRender() { /* bez modułu nic do rysowania */ },
     _exFail() {

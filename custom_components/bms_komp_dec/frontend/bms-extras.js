@@ -738,6 +738,20 @@
       .px-neg { color:var(--green); } .px-pos { color:var(--red); }
       .px-hist svg { width:100%; height:auto; display:block; }
       .px-best td { font-weight:600; color:var(--green) !important; }
+      .mp-bill { display:grid; grid-template-columns:repeat(auto-fit,minmax(120px,1fr)); gap:8px; margin-bottom:10px; }
+      .mp-bill > div { padding:9px 12px; border-radius:14px; background:var(--card); border:1px solid var(--line); }
+      .mp-bill small { display:block; font-size:11px; color:var(--muted); }
+      .mp-bill b { font-size:18px; font-variant-numeric:tabular-nums; color:var(--text); }
+      .mp-bill b.pos { color:var(--green); } .mp-bill b.neg { color:var(--red); }
+      .mp-chart { padding:10px 14px 6px; border-radius:14px; background:var(--card); border:1px solid var(--line); margin-bottom:10px; }
+      .mp-chart svg { width:100%; height:auto; display:block; }
+      .mp-leg { display:flex; gap:14px; flex-wrap:wrap; font-size:11px; color:var(--muted); margin-top:4px; }
+      .mp-acts { display:flex; gap:8px; flex-wrap:wrap; margin-bottom:10px; }
+      .mp-acts .btn { padding:8px 14px; font-size:13px; }
+      .mp-acts .btn.on { background:var(--accent); color:#fff; }
+      .mp-chips { display:flex; gap:6px; flex-wrap:wrap; margin-bottom:10px; }
+      .mp-chip { display:inline-flex; gap:8px; align-items:center; padding:5px 6px 5px 12px; border-radius:999px; background:rgba(10,132,255,.12); font-size:12px; }
+      .mp-chip button { border:0; background:transparent; color:var(--muted); font-size:14px; cursor:pointer; padding:0 6px; }
     `;
     const pxKind = { charge: 'Ładuj z sieci', no_sell: 'Nie sprzedawaj z baterii', no_grid: 'Nie ładuj z sieci' };
     const pxDayLabel = (iso) => {
@@ -763,6 +777,78 @@
           this._safe(() => this._exHist());
         }
         if (this._activeTab === 'log') this._safe(() => this._exAnalysis());
+        this._safe(() => this._exMain());
+      },
+
+      // ------------------------------------------------------------ ekran główny: rachunek dnia, SOC rzeczywisty i plan, przyciski nadpisań
+      _exMain() {
+        const box = this._el('exMainBox'); if (!box || this._activeTab !== 'main') return;
+        const a = this._pvAttrs ? this._pvAttrs() : {};
+        const ps = this._hass.states[this._eid('sensor', 'profit_today')];
+        const pa = (ps && ps.attributes) || {};
+        const day = (pa.sums && pa.sums.day) || null;
+        const sv = pa.extras && pa.extras.day && pa.extras.day.savings;
+        const hist = Array.isArray(a.soc_history) ? a.soc_history : [];
+        const today = hist.length ? hist[hist.length - 1] : null;
+        const ovr = Array.isArray(a.overrides) ? a.overrides : [];
+        const fl = Number(this._rsAttrs().inverter_floor);
+        const force = this._st(this._eid('switch', 'force_charge_battery')) === 'on';
+        const hasNoSell = ovr.some(o => o.kind === 'no_sell'), hasNoGrid = ovr.some(o => o.kind === 'no_grid');
+        const nowH = new Date().getHours();
+        const key = JSON.stringify([day, sv, today && [today.soc, today.plan], ovr.map(o => o.id), fl, force, nowH]);
+        if (box.dataset.exKey === key) return;
+        box.dataset.exKey = key;
+        const zl = (v) => { const n = exNum(v); return n === null ? '—' : (n < 0 ? '−' : '') + Math.abs(n).toFixed(2).replace('.', ',') + ' zł'; };
+        const tile = (l, v, cls) => `<div><small>${exEsc(l)}</small><b class="${cls || ''}">${v}</b></div>`;
+        let bill = '';
+        if (day) {
+          const net = exNum(day.net), sav = sv && exNum(sv.saving);
+          bill = '<div class="mp-bill">'
+            + (sav !== null && sav !== undefined ? tile('Dziś oszczędzone', (sav >= 0 ? '+' : '') + zl(sav), sav >= 0 ? 'pos' : 'neg') : '')
+            + tile('Sprzedałem dziś', zl(day.revenue), 'pos')
+            + tile('Kupiłem dziś', zl(day.cost))
+            + (sv && exNum(sv.without_cost) !== null ? tile('Bez PV i baterii byłoby', zl(sv.without_cost)) : (net !== null ? tile('Saldo dziś', zl(net), net >= 0 ? 'pos' : 'neg') : ''))
+            + '</div>';
+        }
+        let chart = '';
+        const act = today && Array.isArray(today.soc) ? today.soc : null, plan = today && Array.isArray(today.plan) ? today.plan : null;
+        if (act && act.some(v => v !== null)) {
+          const W = 1000, Hh = 120, X = (h) => 24 + h * (W - 40) / 23, Y = (v) => 8 + (100 - Math.max(0, Math.min(100, v))) * (Hh - 24) / 100;
+          const path = (arr, from, to) => { let d = '', pen = false; for (let h = from; h <= to && h < arr.length; h++) { const v = exNum(arr[h]); if (v === null) { pen = false; continue; } d += (pen ? 'L' : 'M') + X(h).toFixed(1) + ' ' + Y(v).toFixed(1); pen = true; } return d; };
+          let lastAct = -1; act.forEach((v, h) => { if (v !== null && h <= nowH) lastAct = h; });
+          const grid = [0, 25, 50, 75, 100].map(v => `<line x1="24" x2="${W - 16}" y1="${Y(v).toFixed(1)}" y2="${Y(v).toFixed(1)}" stroke="var(--line)" stroke-width="1"/>`).join('');
+          const hours = [0, 4, 8, 12, 16, 20, 23].map(h => `<text x="${X(h).toFixed(1)}" y="${Hh - 2}" font-size="12" text-anchor="middle" fill="var(--muted)">${String(h).padStart(2, '0')}:00</text>`).join('');
+          const flLine = isFinite(fl) && fl > 0 && fl < 100 ? `<line x1="24" x2="${W - 16}" y1="${Y(fl).toFixed(1)}" y2="${Y(fl).toFixed(1)}" stroke="#ff3b30" stroke-width="1.5" stroke-dasharray="5 5" opacity=".7"/><text x="28" y="${(Y(fl) - 4).toFixed(1)}" font-size="12" fill="var(--muted)">rezerwa ${Math.round(fl)}%</text>` : '';
+          chart = `<div class="mp-chart"><svg viewBox="0 0 ${W} ${Hh}" role="img" aria-label="Poziom baterii dziś: rzeczywisty i z planu">${grid}${flLine}`
+            + (plan ? `<path d="${path(plan, 0, 23)}" fill="none" stroke="#0a84ff" stroke-width="2.5" stroke-dasharray="6 5" stroke-linecap="round"/>` : '')
+            + `<path d="${path(act, 0, 23)}" fill="none" stroke="var(--text)" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>`
+            + (lastAct >= 0 ? `<line x1="${X(nowH).toFixed(1)}" x2="${X(nowH).toFixed(1)}" y1="4" y2="${Hh - 16}" stroke="var(--muted)" stroke-dasharray="3 3"/>` : '')
+            + `${hours}</svg><div class="mp-leg"><span>━ rzeczywisty poziom baterii</span>${plan ? '<span style="color:#0a84ff">╌ plan z rana</span>' : ''}</div></div>`;
+        }
+        const chips = ovr.length ? '<div class="mp-chips">' + ovr.map(o => `<span class="mp-chip">🧭 ${exEsc(o.text || pxKind[o.kind] || o.kind)}<button type="button" data-mp-del="${exEsc(o.id)}" aria-label="Usuń nadpisanie" title="Usuń">✕</button></span>`).join('') + '</div>' : '';
+        const acts = `<div class="mp-acts"><button class="btn${force ? ' on' : ''}" type="button" data-mp="force">⚡ ${force ? 'Wymuszone ładowanie (wyłącz)' : 'Wymuś ładowanie'}</button>`
+          + `<button class="btn${hasNoSell ? ' on' : ''}" type="button" data-mp="no_sell">🚫 Nie sprzedawaj przez 4 h</button>`
+          + `<button class="btn${hasNoGrid ? ' on' : ''}" type="button" data-mp="no_grid">🔌 Nie ładuj z sieci przez 8 h</button>`
+          + `<button class="btn" type="button" data-mp="more">Wszystkie nadpisania…</button></div>`;
+        box.innerHTML = bill + chart + chips + acts;
+        if (!box.dataset.exBound) {
+          box.dataset.exBound = '1';
+          box.addEventListener('click', async (ev) => {
+            const t = ev.target.closest && ev.target.closest('[data-mp],[data-mp-del]'); if (!t) return;
+            try {
+              if (t.dataset.mpDel) { await exCall(this, 'override_clear', { id: t.dataset.mpDel }); this._showToast('✅ Usunięto nadpisanie'); }
+              else if (t.dataset.mp === 'force') { await this._toggle('switch', 'force_charge_battery'); return; }
+              else if (t.dataset.mp === 'more') { const tab = this.shadowRoot.querySelector('.tab[data-tab="ems"]'); if (tab) tab.click(); return; }
+              else {
+                const cur = (this._pvAttrs().overrides || []).find(o => o.kind === t.dataset.mp);
+                if (cur) { await exCall(this, 'override_clear', { id: cur.id }); this._showToast('✅ Usunięto nadpisanie'); }
+                else { await exCall(this, 'override_set', { kind: t.dataset.mp, hours: t.dataset.mp === 'no_sell' ? 4 : 8 }); this._showToast('✅ Nadpisanie ustawione'); }
+              }
+              box.dataset.exKey = '';
+              setTimeout(() => this._exMain(), 1200);
+            } catch (e) { this._showToast('❌ ' + exErr(e), true); }
+          });
+        }
       },
 
       // ------------------------------------------------------------ ręczne nadpisanie planu (14)
@@ -940,6 +1026,6 @@
 
   };
   install.contract = 1;
-  install.version = '0.9.4.3';
+  install.version = '0.9.5';
   window.__bmsExtrasInstall = install;
 })();

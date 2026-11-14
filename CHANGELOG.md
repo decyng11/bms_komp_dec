@@ -1,4 +1,10 @@
-# EMS komp-dec — w przygotowaniu (po 0.9.4.3, jeszcze niewydane)
+# EMS komp-dec — zmiany w 0.9.5 (z 0.9.4.3)
+
+## Odświeżony ekran główny
+- **Schemat przepływu**: środek przesunięty niżej — linia od PV zaczyna się pod napisami i nie przecina ich. Na pierścieniu baterii **czerwona kreska rezerwy** (próg odcięcia falownika) i **fioletowy znacznik planowanego poziomu na koniec dnia**.
+- **„Plan dnia”**: rachunek dnia (oszczędzone dziś, sprzedałem, kupiłem, ile byłoby bez PV i baterii), wykres poziomu baterii — rzeczywisty i plan z rana, z linią rezerwy — oraz przyciski: „Wymuś ładowanie”, „Nie sprzedawaj przez 4 h”, „Nie ładuj z sieci przez 8 h” i „Wszystkie nadpisania…”. Aktywne nadpisania widać jako znaczniki z krzyżykiem.
+- **Baner alertów** pokazuje też brak danych z falownika oraz plan nieodświeżany dłużej niż godzinę (poza dotychczasowymi alarmami).
+- Moduł dodatków ładuje się teraz także na ekranie głównym (gdy integracja podaje „Widok planu”).
 
 ## Bezpieczeństwo: zakaz „ładuj z sieci → sprzedaj”
 - **Licznik energii z sieci w baterii**: rośnie, gdy bateria ładuje się przy poborze z sieci, maleje, gdy bateria zasila dom; rozładowanie do sieci go nie zmniejsza i nigdy nie przekracza energii faktycznie zgromadzonej w baterii. Dopóki licznik jest powyżej tolerancji („Blokada arbitrażu”, domyślnie 0,5 kWh; 0 = wył.), sprzedaż z baterii jest zablokowana — z harmonogramu, ręcznie i w trakcie (zabezpieczenie ją zatrzymuje). Zamyka to dwie luki dotychczasowych blokad: nocne doładowanie ≤ 3 kWh przy dużej produkcji PV dzień wcześniej oraz ładowanie zakończone przed północą.
