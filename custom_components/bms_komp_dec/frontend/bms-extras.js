@@ -746,9 +746,6 @@
       .mp-chart { padding:10px 14px 6px; border-radius:14px; background:var(--card); border:1px solid var(--line); margin-bottom:10px; }
       .mp-chart svg { width:100%; height:auto; display:block; }
       .mp-leg { display:flex; gap:14px; flex-wrap:wrap; font-size:11px; color:var(--muted); margin-top:4px; }
-      .mp-acts { display:flex; gap:8px; flex-wrap:wrap; margin-bottom:10px; }
-      .mp-acts .btn { padding:8px 14px; font-size:13px; }
-      .mp-acts .btn.on { background:var(--accent); color:#fff; }
       .mp-chips { display:flex; gap:6px; flex-wrap:wrap; margin-bottom:10px; }
       .mp-chip { display:inline-flex; gap:8px; align-items:center; padding:5px 6px 5px 12px; border-radius:999px; background:rgba(10,132,255,.12); font-size:12px; }
       .mp-chip button { border:0; background:transparent; color:var(--muted); font-size:14px; cursor:pointer; padding:0 6px; }
@@ -792,10 +789,8 @@
         const today = hist.length ? hist[hist.length - 1] : null;
         const ovr = Array.isArray(a.overrides) ? a.overrides : [];
         const fl = Number(this._rsAttrs().inverter_floor);
-        const force = this._st(this._eid('switch', 'force_charge_battery')) === 'on';
-        const hasNoSell = ovr.some(o => o.kind === 'no_sell'), hasNoGrid = ovr.some(o => o.kind === 'no_grid');
         const nowH = new Date().getHours();
-        const key = JSON.stringify([day, sv, today && [today.soc, today.plan], ovr.map(o => o.id), fl, force, nowH]);
+        const key = JSON.stringify([day, sv, today && [today.soc, today.plan], ovr.map(o => o.id), fl, nowH]);
         if (box.dataset.exKey === key) return;
         box.dataset.exKey = key;
         const zl = (v) => { const n = exNum(v); return n === null ? '—' : (n < 0 ? '−' : '') + Math.abs(n).toFixed(2).replace('.', ',') + ' zł'; };
@@ -826,24 +821,13 @@
             + `${hours}</svg><div class="mp-leg"><span>━ rzeczywisty poziom baterii</span>${plan ? '<span style="color:#0a84ff">╌ plan z rana</span>' : ''}</div></div>`;
         }
         const chips = ovr.length ? '<div class="mp-chips">' + ovr.map(o => `<span class="mp-chip">🧭 ${exEsc(o.text || pxKind[o.kind] || o.kind)}<button type="button" data-mp-del="${exEsc(o.id)}" aria-label="Usuń nadpisanie" title="Usuń">✕</button></span>`).join('') + '</div>' : '';
-        const acts = `<div class="mp-acts"><button class="btn${force ? ' on' : ''}" type="button" data-mp="force">⚡ ${force ? 'Wymuszone ładowanie (wyłącz)' : 'Wymuś ładowanie'}</button>`
-          + `<button class="btn${hasNoSell ? ' on' : ''}" type="button" data-mp="no_sell">🚫 Nie sprzedawaj przez 4 h</button>`
-          + `<button class="btn${hasNoGrid ? ' on' : ''}" type="button" data-mp="no_grid">🔌 Nie ładuj z sieci przez 8 h</button>`
-          + `<button class="btn" type="button" data-mp="more">Wszystkie nadpisania…</button></div>`;
-        box.innerHTML = bill + chart + chips + acts;
+        box.innerHTML = bill + chart + chips;
         if (!box.dataset.exBound) {
           box.dataset.exBound = '1';
           box.addEventListener('click', async (ev) => {
-            const t = ev.target.closest && ev.target.closest('[data-mp],[data-mp-del]'); if (!t) return;
+            const t = ev.target.closest && ev.target.closest('[data-mp-del]'); if (!t) return;
             try {
-              if (t.dataset.mpDel) { await exCall(this, 'override_clear', { id: t.dataset.mpDel }); this._showToast('✅ Usunięto nadpisanie'); }
-              else if (t.dataset.mp === 'force') { await this._toggle('switch', 'force_charge_battery'); return; }
-              else if (t.dataset.mp === 'more') { const tab = this.shadowRoot.querySelector('.tab[data-tab="ems"]'); if (tab) tab.click(); return; }
-              else {
-                const cur = (this._pvAttrs().overrides || []).find(o => o.kind === t.dataset.mp);
-                if (cur) { await exCall(this, 'override_clear', { id: cur.id }); this._showToast('✅ Usunięto nadpisanie'); }
-                else { await exCall(this, 'override_set', { kind: t.dataset.mp, hours: t.dataset.mp === 'no_sell' ? 4 : 8 }); this._showToast('✅ Nadpisanie ustawione'); }
-              }
+              await exCall(this, 'override_clear', { id: t.dataset.mpDel }); this._showToast('✅ Usunięto nadpisanie');
               box.dataset.exKey = '';
               setTimeout(() => this._exMain(), 1200);
             } catch (e) { this._showToast('❌ ' + exErr(e), true); }

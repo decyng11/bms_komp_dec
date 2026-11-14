@@ -2,7 +2,7 @@
 
 ## Odświeżony ekran główny
 - **Schemat przepływu**: środek przesunięty niżej — linia od PV zaczyna się pod napisami i nie przecina ich. Na pierścieniu baterii **czerwona kreska rezerwy** (próg odcięcia falownika) i **fioletowy znacznik planowanego poziomu na koniec dnia**.
-- **„Plan dnia”**: rachunek dnia (oszczędzone dziś, sprzedałem, kupiłem, ile byłoby bez PV i baterii), wykres poziomu baterii — rzeczywisty i plan z rana, z linią rezerwy — oraz przyciski: „Wymuś ładowanie”, „Nie sprzedawaj przez 4 h”, „Nie ładuj z sieci przez 8 h” i „Wszystkie nadpisania…”. Aktywne nadpisania widać jako znaczniki z krzyżykiem.
+- **„Plan dnia”**: rachunek dnia (oszczędzone dziś, sprzedałem, kupiłem, ile byłoby bez PV i baterii), wykres poziomu baterii — rzeczywisty i plan z rana, z linią rezerwy. Aktywne nadpisania widać jako znaczniki z krzyżykiem (ustawia się je w zakładce EMS).
 - **Baner alertów** pokazuje też brak danych z falownika oraz plan nieodświeżany dłużej niż godzinę (poza dotychczasowymi alarmami).
 - Moduł dodatków ładuje się teraz także na ekranie głównym (gdy integracja podaje „Widok planu”).
 

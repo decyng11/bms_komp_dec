@@ -21,21 +21,19 @@ const sleep = (ms) => new Promise(r => setTimeout(r, ms));
   }, { pv: { why: { kind: 'idle', text: 'ok', details: [] }, table: rows, overrides: [{ id: 'x1', kind: 'no_sell', text: 'Nie sprzedawaj do 18:00' }], soc_history: [{ date: today, soc, grid: Array(24).fill(0), sale: Array(24).fill(0), plan: Array(24).fill(60), empty: false }], generated_at: new Date().toISOString() } });
   await e.page.waitForFunction(() => !!__el.shadowRoot.querySelector('#exMainBox .mp-bill'), null, { timeout: 10000 });
   await sleep(300);
-  const m = await e.q(() => { const b = __el.shadowRoot.getElementById('exMainBox'); return { bill: b.querySelector('.mp-bill').textContent, svg: !!b.querySelector('.mp-chart svg'), paths: b.querySelectorAll('.mp-chart path').length, chips: b.querySelectorAll('.mp-chip').length, btns: b.querySelectorAll('[data-mp]').length, noSellOn: b.querySelector('[data-mp="no_sell"]').classList.contains('on') }; });
+  const m = await e.q(() => { const b = __el.shadowRoot.getElementById('exMainBox'); return { bill: b.querySelector('.mp-bill').textContent, svg: !!b.querySelector('.mp-chart svg'), paths: b.querySelectorAll('.mp-chart path').length, chips: b.querySelectorAll('.mp-chip').length, btns: b.querySelectorAll('[data-mp]').length }; });
   ok(/4,20 zł/.test(m.bill) && /1,10 zł/.test(m.bill) && /6,05 zł/.test(m.bill), 'rachunek dnia: oszczędzone, sprzedałem, bez PV: ' + m.bill);
   ok(m.svg && m.paths === 2, 'wykres SOC: linia rzeczywista i plan');
-  ok(m.chips === 1 && m.btns === 4 && m.noSellOn, 'przyciski: 4, aktywne nadpisanie jako znacznik');
+  ok(m.chips === 1 && m.btns === 0, 'ekran główny: bez przycisków, aktywne nadpisanie jako znacznik');
   await sleep(2500);
   const fm = await e.q(() => { const s = __el.shadowRoot.getElementById('nodesBox'); return { tick: !!s.querySelector('line[stroke="#ff3b30"]'), tgt: !!s.querySelector('rect[fill="#af52de"]') }; });
   ok(fm.tick && fm.tgt, 'pierścień baterii: kreska rezerwy i znacznik celu dnia');
   // linia PV nie przecina napisów pod słońcem
   const geo = await e.q(() => { const s = __el.shadowRoot.getElementById('nodesBox'); const lines = Array.from(s.querySelectorAll('path.nf-line')); const txt = Array.from(s.querySelectorAll('text')).filter(t => /produkcja PV|dziś/.test(t.textContent)); const pv = lines.find(l => /^M300/.test(l.getAttribute('d'))); const y0 = pv ? Math.min(...pv.getAttribute('d').match(/[\d.]+ ([\d.]+)/g).map(x => parseFloat(x.split(' ')[1]))) : null; const ys = txt.map(t => parseFloat(t.getAttribute('y'))); return { y0, maxTxt: ys.length ? Math.max(...ys) : null }; });
   ok(geo.y0 === null || geo.maxTxt === null || geo.y0 > geo.maxTxt, 'linia PV zaczyna się pod napisami: ' + JSON.stringify(geo));
-  // klik: nie sprzedawaj -> usuwa istniejące, „nie ładuj z sieci” -> ustawia
-  await e.q(() => __el.shadowRoot.querySelector('#exMainBox [data-mp="no_sell"]').click()); await sleep(300);
-  await e.q(() => __el.shadowRoot.querySelector('#exMainBox [data-mp="no_grid"]').click()); await sleep(300);
+  await e.q(() => __el.shadowRoot.querySelector('#exMainBox [data-mp-del="x1"]').click()); await sleep(300);
   const calls = await e.q(() => window.__wsCalls);
-  ok(calls.some(c => c[0] === 'override_clear' && c[1].id === 'x1') && calls.some(c => c[0] === 'override_set' && c[1].kind === 'no_grid' && c[1].hours === 8), 'przyciski wołają usługi: ' + JSON.stringify(calls));
+  ok(calls.some(c => c[0] === 'override_clear' && c[1].id === 'x1'), 'krzyżyk usuwa nadpisanie: ' + JSON.stringify(calls));
   // alert: brak danych z falownika
   await e.q(() => { for (const k of ['sensor.bms_soc', 'sensor.inverter_battery', 'sensor.inverter_battery_soc']) if (__states[k]) __states[k].state = 'unavailable'; __el.hass = __mk(); });
   await sleep(400);
