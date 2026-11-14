@@ -1,3 +1,7 @@
+# EMS komp-dec — w przygotowaniu (po 0.9.5.1, jeszcze niewydane)
+
+- **Ekran główny**: usunięta osobna karta „Bateria · ładuje się / do rozładowania” w „Planie dnia” — jej treść (zgromadzona energia, zapas do rezerwy, czas do rezerwy lub pełnego naładowania) jest w pasku wskaźników pod schematem. Pole ręcznego wpisania pojemności baterii (gdy integracja jej nie poda) przeniesione do tego paska. Usunięta też sekcja „Porównanie taryf na Twoim poborze” w zakładce Zysk i log (symulacja roczna zostaje). Znikło przy tym ostrzeżenie „bateria dojdzie do progu przed startem ładowania z sieci” i opis „przed słońcem”.
+
 # EMS komp-dec — zmiany w 0.9.5.1 (z 0.9.5)
 
 ## Ekran główny: karta „Magazyn energii” połączona ze schematem

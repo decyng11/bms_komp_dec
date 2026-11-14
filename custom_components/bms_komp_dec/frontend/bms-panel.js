@@ -392,6 +392,8 @@
     .nf-t { width: 8px; height: 8px; background: #af52de; border-radius: 2px; transform: rotate(45deg); }
     .nf-chips { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; padding: 4px 10px 6px; }
     .nf-chip { border: 1px solid var(--line); border-radius: 14px; padding: 8px 10px; min-width: 0; }
+    .nf-cap { font-size: 12px; color: var(--muted); display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+    .nf-cap input { width: 90px; }
     .nf-chip small { display: block; font-size: 11px; color: var(--muted); }
     .nf-chip b { font-size: 15px; font-variant-numeric: tabular-nums; }
     @media (max-width: 560px) { .nf-chips { grid-template-columns: repeat(2, 1fr); } }
@@ -2543,10 +2545,6 @@
           <div class="chart-card full" style="padding:14px 16px;"><div id="exSavBox"><div class="chart-empty">Ładowanie…</div></div></div>
         </div>
         <div class="section">
-          <div class="section-title">🧾 Porównanie taryf na Twoim poborze</div>
-          <div class="chart-card full" style="padding:14px 16px;"><div id="exTarBox"><div class="chart-empty">Ładowanie…</div></div></div>
-        </div>
-        <div class="section">
           <div class="section-title">📆 Symulacja roczna i zwrot z inwestycji</div>
           <div class="chart-card full" style="padding:14px 16px;"><div id="exSimBox"><div class="chart-empty">Ładowanie…</div></div></div>
         </div>
@@ -2689,7 +2687,6 @@
           <div class="section">
             <div class="section-title">Plan dnia</div>
             <div id="exMainBox"></div>
-            <div class="eta-grid" id="etaBox" style="margin-bottom:10px;"></div>
             <div class="chart-card full" style="padding:6px 20px 12px;"><div id="planBox"></div></div>
           </div>
         </div>
@@ -3545,7 +3542,6 @@
       this._safe(() => this._renderPriceTable());
       this._safe(() => this._renderPlan());
       this._safe(() => this._renderInbox());
-      this._safe(() => this._renderEta());
       this._safe(() => this._dgSyncTab());
       this._safe(() => this._devTabSync());
       this._safe(() => this._tabsPosSync());
@@ -3913,7 +3909,7 @@
       const V = this._flowVariant || (cw > 0 && cw < 520 ? 'A' : '0');                    // '0' = bez zmian; A = przycięcie, B = większe, C = oba (telefon)
       const big = V === 'B' || V === 'C', crop = V === 'A' || V === 'C';
       const lh = big ? 20 : 16;
-      const key = [V, Math.round(pv / 10), Math.round(load / 10), Math.round(grid / 10), Math.round(batt / 10), Math.round(soc), THEME.mode, String(this._rsAttrs().inverter_floor), String(this._rsAttrs().capacity_kwh), String((this._pvAttrs().table || []).length), Object.values(D).map(v => v === null ? 'x' : v.toFixed(1)).join(',')].join('|');
+      const key = [V, Math.round(pv / 10), Math.round(load / 10), Math.round(grid / 10), Math.round(batt / 10), Math.round(soc), THEME.mode, String(this._rsAttrs().inverter_floor), String(this._rsAttrs().capacity_kwh), (() => { try { return localStorage.getItem('bms_panel_capacity') || ''; } catch (e) { return ''; } })(), String((this._pvAttrs().table || []).length), Object.values(D).map(v => v === null ? 'x' : v.toFixed(1)).join(',')].join('|');
       if (key === this._lastFlowKey) return;     // animacja jest w CSS — przerysowujemy tylko przy zmianie
       this._lastFlowKey = key;
 
@@ -3996,6 +3992,13 @@
         <rect class="nf-hit" data-k="grid" x="${N.grid.x - 60}" y="${N.grid.y - R.grid - 2}" width="120" height="${R.grid * 2 + 4 + 40}"/>
         <rect class="nf-hit" data-k="batt" x="${N.batt.x - R.batt - 2}" y="${N.batt.y - R.batt - 2}" width="${R.batt * 2 + 4 + 150}" height="${R.batt * 2 + 4}"/>
       </svg>` + this._flowChips({ soc, batt, load, pv, grid, flr, tgt });
+      const ci = box.querySelector('#capInput');
+      if (ci) ci.addEventListener('change', () => {
+        const v = parseFloat(String(ci.value).replace(',', '.'));
+        try { if (v > 0) localStorage.setItem('bms_panel_capacity', String(v)); else localStorage.removeItem('bms_panel_capacity'); } catch (e) { /* ignoruj */ }
+        this._lastFlowKey = null;
+        this._drawPowerflow();
+      });
     }
 
     // pasek wskaźników pod schematem: zgromadzone / do rezerwy / przy tym tempie / straty falownika (+ legenda znaczników pierścienia)
@@ -4017,6 +4020,7 @@
         else { const h = usable / (Math.max(o.load, 100) / 1000); pace = `do ${Math.round(FL)}% ok. ${this._fmtAt(h)}`; paceTip = `przy obecnym zużyciu domu ${this._fmtW(Math.max(o.load, 100))} (bez PV)`; }
         c += chip('Zgromadzone', `~ ${f1(kwh)} kWh`) + chip(`Do rezerwy ${Math.round(FL)}%`, `${f1(usable)} kWh`) + chip('Przy tym tempie', pace, paceTip);
       }
+      if (!(cap > 0)) c += `<div class="nf-cap" style="grid-column:1/-1;">Integracja nie podała pojemności baterii — wpisz ją, a pokażę zgromadzoną energię i czas do rezerwy: <input type="number" id="capInput" min="1" max="200" step="0.1" placeholder="kWh"> kWh</div>`;
       // straty z bilansu mocy (PV + sieć − dom − bateria); to szacunek, a nie pomiar falownika
       const loss = o.pv + o.grid - o.load - o.batt;
       if (isFinite(loss) && (o.pv > 50 || Math.abs(o.batt) > 50)) c += chip('Straty falownika (szac.)', `${Math.max(0, Math.round(loss))} W`, 'Szacunek z bilansu mocy: PV + sieć − dom − bateria');
@@ -4410,121 +4414,6 @@
       return best || { none: true };
     }
 
-    _renderEta() {
-      const box = this._el('etaBox');
-      if (!box) return;
-      const soc = this._num('soc');
-      const battRaw = this._num('battery_power');
-      const batt = INVERT_BATTERY_SIGN ? -battRaw : battRaw;     // >0 ładowanie, <0 rozładowanie
-      const load = Math.max(0, this._num('load_power'));
-      const rs = this._hass.states[this._eid('sensor', 'reserve_soc')];
-      let cap = rs && rs.attributes ? parseFloat(rs.attributes.capacity_kwh) : NaN;
-      // próg odcięcia: z falownika (SOC wyłączenia + aktywny program ToU, albo wpisany ręcznie) — integracja wystawia go w atrybutach;
-      // bez niego (starszy backend, brak encji falownika) przyjmujemy 20% i mówimy o tym w opisie
-      const ra = (rs && rs.attributes) || {};
-      const flNow = Number(ra.inverter_floor);
-      const flHourly = Array.isArray(ra.inverter_floor_hourly) && ra.inverter_floor_hourly.length === 24 ? ra.inverter_floor_hourly.map(Number) : null;
-      const fromInv = isFinite(flNow) && flNow > 0 && flNow < 100;
-      const FLOOR = fromInv ? flNow : 20;
-      const floorFn = fromInv && flHourly && flHourly.every(x => isFinite(x) && x >= 0 && x < 100) ? (h => flHourly[h]) : FLOOR;
-      const floorTxt = fromInv ? `${Math.round(FLOOR * 10) / 10}%` : `${FLOOR}% (domyślnie)`;
-      const floorTip = fromInv ? `Próg odcięcia z falownika${ra.inverter_floor_source ? ': ' + ra.inverter_floor_source : ''}` : 'Brak progu z falownika — przyjęto 20%';
-      let manual = false;
-      if (!(cap > 0)) {                                   // integracja nie podała pojemności — użyj wpisanej ręcznie
-        try { cap = parseFloat(localStorage.getItem('bms_panel_capacity')); } catch (e) { cap = NaN; }
-        manual = cap > 0;
-      }
-      const needCap = !(cap > 0);
-      let full = { v: '—', s: 'brak pojemności baterii' };
-      let low = { v: '—', s: full.s };
-      if (cap > 0) {
-        const lf = this._hass.states[this._eid('sensor', 'load_forecast')] || this._hass.states['sensor.bms_load_forecast'];
-        const hl = lf && lf.attributes && Array.isArray(lf.attributes.hourly_forecast) && lf.attributes.hourly_forecast.length === 24
-          ? lf.attributes.hourly_forecast.map(Number) : null;
-        const pvMap = this._pvHourlyMap();
-        const havePv = Object.keys(pvMap).length > 0;
-        // --- do pełna
-        if (soc >= 99.5) full = { v: 'Pełna', s: 'bateria naładowana' };
-        else if (batt > 20) {
-          const h = (100 - soc) / 100 * cap / (batt / 1000);
-          full = { v: this._fmtDur(h), s: `ok. ${this._fmtAt(h)} · ładowanie ${this._fmtW(batt)}` };
-        } else {
-          const h = havePv ? this._simulateSoc(soc, cap, 100, true, hl, pvMap) : null;
-          full = h != null
-            ? { v: this._fmtDur(h), s: `ok. ${this._fmtAt(h)} · wg prognozy PV i zużycia` }
-            : { v: 'nie w 2 dni', s: havePv ? 'prognoza PV nie wystarczy do pełnego naładowania' : 'brak prognozy PV' };
-        }
-        // --- do 20%
-        if (soc <= FLOOR) low = { v: `≤ ${Math.round(FLOOR * 10) / 10}%`, s: 'poziom już osiągnięty' };
-        else {
-          const discharging = batt < -20;
-          let basis = '';
-          // wynik główny: przy obecnym poborze (rozładowanie, a gdy bateria się ładuje — zużycie domu bez PV)
-          const rate = discharging ? -batt : Math.max(load, 100);
-          const hNow = (soc - FLOOR) / 100 * cap / (rate / 1000);
-          basis = discharging ? `przy obecnym rozładowaniu ${this._fmtW(rate)}` : `przy obecnym zużyciu domu ${this._fmtW(rate)} (bez PV)`;
-          low = { v: this._fmtDur(hNow), s: `ok. ${this._fmtAt(hNow)} · ${basis}`, h: hNow };
-          // w nocy: ile zostanie, zanim słońce pokryje zużycie domu (prognoza zużycia i PV)
-          const sun = this._socAtSun(soc, cap, hl, pvMap, floorFn);
-          if (sun) {
-            const hhmm = (d) => d.toLocaleTimeString('pl-PL', { hour: '2-digit', minute: '2-digit' });
-            low.s2 = sun.floorAt
-              ? `Przed słońcem (ok. ${hhmm(sun.at)}) dojdzie do ${Math.round(sun.floor)}% ok. ${hhmm(sun.floorAt)}`
-              : `Do słońca (ok. ${hhmm(sun.at)}) zostanie ok. ${Math.round(sun.soc)}%`;
-          }
-        }
-      }
-      // ---- jedna kafelka „Bateria”: treść zależy od stanu (naładowana / ładuje się / zaplanowane ładowanie z sieci / rozładowanie)
-      const plan = this._plannedGridCharge();
-      const socTxt = `${Math.round(soc)}%`;
-      const lowLine = low.v === '—' ? '' : `Do ${floorTxt}: ${low.v} · ${low.s}`;
-      const hCh = cap > 0 && batt > 20 && soc < 99.5 ? (100 - soc) / 100 * cap / (batt / 1000) : null;
-      let st;
-      if (cap > 0 && soc >= 99.5) {
-        st = { l: '🔋 Bateria · naładowana', c: 'var(--green)', v: low.v.startsWith('>') ? 'wystarczy na ponad 2 dni' : `wystarczy na ${low.v}`, s: low.s, s2: low.s2 };
-      } else if (hCh !== null) {
-        st = { l: '⚡ Bateria · ładuje się', c: 'var(--green)', v: `pełna ok. ${this._fmtAt(hCh)}`,
-               s: `${socTxt} → 100% · ładowanie ${this._fmtW(batt)} · jeszcze ${this._fmtDur(hCh)}`, s2: [lowLine, low.s2].filter(Boolean).join('<br>') };
-      } else if (plan && !plan.none) {
-        const warnEarly = !plan.active && low.h != null && low.h < plan.hStart;
-        const parts = [];
-        if (warnEarly) parts.push(`Uwaga: bateria dojdzie do ${floorTxt} ok. ${this._fmtAt(low.h)}, przed startem ładowania.`);
-        else if (lowLine) parts.push(lowLine);
-        if (low.s2) parts.push(low.s2);
-        st = plan.active
-          ? { l: '🔌 Bateria · ładowanie z sieci', c: 'var(--accent)', v: `okno do ${plan.endTxt}`, s: `plan ładowania z sieci trwa ${plan.startTxt}–${plan.endTxt} · bateria ${socTxt}` }
-          : { l: '🔌 Bateria · ładowanie z sieci', c: warnEarly ? 'var(--orange)' : 'var(--accent)', v: `start ${this._fmtAt(plan.hStart)}`,
-              s: `plan ${plan.startTxt}–${plan.endTxt} · za ${this._fmtDur(plan.hStart)} · teraz ${socTxt}` };
-        st.s2 = parts.join('<br>');
-      } else if (cap > 0) {
-        const atFloor = soc <= FLOOR;
-        const parts = [];
-        if (low.s2) parts.push(low.s2);
-        if (plan && plan.none && !atFloor) parts.push('Brak zaplanowanego ładowania z sieci.');
-        st = { l: `⏳ Do rozładowania do ${floorTxt}`, c: atFloor ? 'var(--red)' : 'var(--orange)', v: low.v, s: low.s, s2: parts.join('<br>') };
-      } else {
-        st = { l: '🔋 Bateria', c: 'var(--muted)', v: '—', s: 'brak pojemności baterii', s2: '' };
-      }
-      const key = st.l + st.v + st.s + (st.s2 || '') + soc + st.c + floorTxt + THEME.mode + (needCap ? 'N' : manual ? 'M' + cap : '');
-      if (key === this._lastEtaKey) return;
-      this._lastEtaKey = key;
-      const capUi = (needCap || manual)
-        ? `<div class="e-cap" style="grid-column:1/-1;font-size:12px;color:var(--muted);display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
-             <span>${needCap ? 'Integracja nie podała pojemności baterii (zaktualizuj sensor.py). Wpisz ją ręcznie:' : 'Pojemność wpisana ręcznie:'}</span>
-             <input type="number" id="capInput" min="1" max="200" step="0.1" value="${manual ? cap : ''}" placeholder="kWh" style="width:90px;"> <span>kWh</span></div>` : '';
-      const socW = Math.max(0, Math.min(100, Number(soc) || 0));
-      box.innerHTML = capUi + `<div class="eta" style="grid-column:1/-1"><div class="e-l" title="${this._esc(floorTip)}">${st.l}</div><div class="e-v" style="color:${st.c}">${st.v}</div><div class="e-s">${st.s}</div>`
-        + `<div style="height:6px;border-radius:3px;background:var(--line);margin-top:8px;overflow:hidden"><div style="height:100%;width:${socW}%;background:${st.c}"></div></div>`
-        + `${st.s2 ? `<div class="e-s" style="margin-top:6px;opacity:.75">${st.s2}</div>` : ''}</div>`;
-      const inp = box.querySelector('#capInput');
-      if (inp) inp.addEventListener('change', () => {
-        const v = parseFloat(String(inp.value).replace(',', '.'));
-        try { if (v > 0) localStorage.setItem('bms_panel_capacity', String(v)); else localStorage.removeItem('bms_panel_capacity'); } catch (e) { /* ignoruj */ }
-        this._lastEtaKey = null;
-        this._renderEta();
-      });
-    }
-
     _renderPlan() {
       const box = this._el('planBox');
       if (!box) return;
@@ -4827,7 +4716,7 @@
 
   // Dodatki (bms-extras.js): plan 24 h, raport miesięczny, zdrowie baterii, kreator instalacji.
   // Placeholdery w karcie: #exPlanBox, #exWizBox (zakładka EMS) oraz #exReportBox, #exHealthBox (Zysk i log).
-  const EX_BOXES = ['exPlanBox', 'exWizBox', 'exReportBox', 'exHealthBox', 'exSavBox', 'exAccBox', 'exTblBox', 'exOvrBox', 'exHistBox', 'exTarBox', 'exSimBox'];  // exMainBox (ekran główny) celowo poza listą: ma własny pusty stan
+  const EX_BOXES = ['exPlanBox', 'exWizBox', 'exReportBox', 'exHealthBox', 'exSavBox', 'exAccBox', 'exTblBox', 'exOvrBox', 'exHistBox', 'exSimBox'];  // exMainBox (ekran główny) celowo poza listą: ma własny pusty stan
   const EX_STUBS = {
     _exRender() { /* bez modułu nic do rysowania */ },
     _exFail() {

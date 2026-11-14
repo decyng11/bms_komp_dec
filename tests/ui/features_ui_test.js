@@ -74,16 +74,12 @@ const sleep = (ms) => new Promise(r => setTimeout(r, ms));
   wc = await e.q(() => window.__wsCalls);
   ok(wc.some(c => c[0] === 'override_clear' && c[1].id === 'o1'), 'nadpisania: usunięcie po id');
 
-  // ---- Zysk i log: taryfy i symulacja
+  // ---- Zysk i log: symulacja (porównanie taryf usunięte z panelu)
   await e.q(() => __el.shadowRoot.querySelector('[data-tab="log"]').click());
-  await e.page.waitForFunction(() => !!__el.shadowRoot.querySelector('#exTarBox table') && !!__el.shadowRoot.querySelector('#exSimBox table'), null, { timeout: 8000 });
-  const an = await e.q(() => { const s = __el.shadowRoot; return { t: s.querySelector('#exTarBox').textContent, best: s.querySelectorAll('#exTarBox tr.px-best').length, sim: s.querySelector('#exSimBox').textContent, simRows: s.querySelectorAll('#exSimBox tbody tr').length }; });
-  ok(/Jedna stawka \(G11\)/.test(an.t) && an.best === 1 && /−25,00 zł/.test(an.t), 'taryfy: tabela z podświetloną tańszą pozycją i różnicą miesięczną: ' + an.t.slice(0, 120));
+  await e.page.waitForFunction(() => !!__el.shadowRoot.querySelector('#exSimBox table'), null, { timeout: 8000 });
+  const an = await e.q(() => { const s = __el.shadowRoot; return { tar: !!s.querySelector('#exTarBox'), sim: s.querySelector('#exSimBox').textContent, simRows: s.querySelectorAll('#exSimBox tbody tr').length }; });
+  ok(an.tar === false, 'porównanie taryf nie jest już w panelu');
   ok(an.simRows === 4 && /zwrot PV: 10,0 lat/.test(an.sim) && /ekstrapolacja/.test(an.sim), 'symulacja: 4 scenariusze, zwrot i ostrzeżenie o ekstrapolacji');
-  await e.q(() => { const s = __el.shadowRoot; s.getElementById('pxG11').value = '0,95'; s.getElementById('pxDyn').value = '0,4'; s.querySelector('[data-px-an="tariff"]').click(); });
-  await sleep(500);
-  wc = await e.q(() => window.__wsCalls);
-  ok(wc.some(c => c[0] === 'analysis_set' && c[1].g11 === 0.95 && c[1].dyn_markup === 0.4 && c[1].zone === null), 'taryfy: zapis cen wysyła liczby (przecinek → kropka)');
   await e.q(() => { const s = __el.shadowRoot; s.getElementById('pxIp').value = '25000'; s.getElementById('pxIb').value = '15000'; s.querySelector('[data-px-an="invest"]').click(); });
   await sleep(500);
   wc = await e.q(() => window.__wsCalls);

@@ -941,15 +941,14 @@
         try { s.data = exResp(await exCall(this, 'analysis_get', {})) || {}; s.err = ''; }
         catch (e) { s.err = exErr(e); }
         finally { s.loading = false; s.at = Date.now(); }
-        this._el('exTarBox') && (this._el('exTarBox').dataset.exKey = ''); this._el('exSimBox') && (this._el('exSimBox').dataset.exKey = '');
+        this._el('exSimBox') && (this._el('exSimBox').dataset.exKey = '');
         this._exAnalysis();
       },
       _exAnalysis() {
-        const tb = this._el('exTarBox'), sb = this._el('exSimBox'); if (!tb && !sb) return;
+        const sb = this._el('exSimBox'); if (!sb) return;
         const an = this._exPx().an;
         if (!an.loading && Date.now() - an.at > 300000) this._exAnLoad();
         const key = JSON.stringify([an.at, an.err, TC('text')]);
-        if (tb && tb.dataset.exKey !== key) { tb.dataset.exKey = key; tb.innerHTML = this._exTarHtml(); this._exAnBind(tb); }
         if (sb && sb.dataset.exKey !== key) { sb.dataset.exKey = key; sb.innerHTML = this._exSimHtml(); this._exAnBind(sb); }
       },
       _exAnBind(box) {
@@ -960,34 +959,13 @@
           const val = (id) => { const e = this._el(id); const v = e ? String(e.value).trim().replace(',', '.') : ''; return v === '' ? null : v; };
           const num = (id) => { const v = val(id); return v === null ? null : Number(v); };
           try {
-            let d = {};
-            if (b.dataset.pxAn === 'tariff') {
-              d = { g11: num('pxG11'), dyn_markup: num('pxDyn') };
-              const zp = num('pxZp'), zo = num('pxZo');
-              d.zone = (zp && zo) ? { peak: zp, off: zo, windows: val('pxZw') || '6-13,15-22', weekend_offpeak: true, holiday_offpeak: true } : null;
-            } else d = { invest_pv: num('pxIp'), invest_batt: num('pxIb') };
+            const d = { invest_pv: num('pxIp'), invest_batt: num('pxIb') };
             b.disabled = true;
             await exCall(this, 'analysis_set', d);
             this._showToast('✅ Zapisano');
             this._exPx().an.at = 0; this._exAnLoad();
           } catch (e) { this._showToast('❌ ' + exErr(e), true); b.disabled = false; }
         });
-      },
-      _exTarHtml() {
-        const an = this._exPx().an;
-        if (!an.data) return an.err ? `<div class="chart-empty" style="color:var(--red);">Nie udało się wczytać: ${exEsc(an.err)}</div>` : '<div class="chart-empty">Ładowanie…</div>';
-        const t = an.data.tariff || {}, cfg = t.cfg || {}, z = cfg.zone || {};
-        const rows = (t.rows || []).map(r => `<tr class="${t.best === r.key ? 'px-best' : ''}"><td style="text-align:left;white-space:normal;">${exEsc(r.name)}</td><td>${pxZl(r.cost)}</td><td>${pxZl(r.per_month)}</td><td class="${r.diff_month < 0 ? 'px-neg' : r.diff_month > 0 ? 'px-pos' : ''}">${r.key === 'actual' ? '—' : pxZl(r.diff_month, true)}</td></tr>`).join('');
-        const head = t.days ? `Ten sam pobór z sieci (${exFmt(t.import_kwh, 0)} kWh z ostatnich ${t.days} dób) przy różnych taryfach:` : 'Za mało danych godzinowych — porównanie pojawi się po kilku dobach pracy.';
-        const inp = (id, v, ph, w) => `<input type="text" inputmode="decimal" id="${id}" value="${v == null ? '' : exEsc(String(v).replace('.', ','))}" placeholder="${ph}" ${w ? `style="width:${w}px"` : ''} />`;
-        return `<div style="font-size:12px;color:var(--text2);margin-bottom:8px;">${head}</div>`
-          + (rows ? `<div class="px-tbl-wrap"><table class="px-tbl" style="min-width:420px;"><thead><tr><th style="text-align:left;">Taryfa</th><th>Okres</th><th>Miesiąc</th><th>Różnica / mies.</th></tr></thead><tbody>${rows}</tbody></table></div>` : '')
-          + (t.best ? '<div class="ex-sum" style="margin-top:8px;"><span class="ex-chip ok">💡 Przy tym poborze tańsza byłaby zielona pozycja — sprawdź też opłaty stałe i to, że EMS inaczej planowałby ładowanie.</span></div>' : '')
-          + '<div class="px-row"><div class="nm">Jedna stawka (G11)<small>cena całodobowa, zł/kWh</small></div>' + inp('pxG11', cfg.g11, 'np. 0,95', 90) + '</div>'
-          + '<div class="px-row"><div class="nm">Taryfa strefowa<small>cena w szczycie / poza, okna szczytu</small></div>' + inp('pxZp', z.peak, 'szczyt', 70) + inp('pxZo', z.off, 'poza', 70) + inp('pxZw', z.windows, '6-13,15-22', 110) + '</div>'
-          + '<div class="px-row"><div class="nm">Dynamiczna<small>narzut do ceny giełdowej (RCE), zł/kWh</small></div>' + inp('pxDyn', cfg.dyn_markup, 'np. 0,45', 90) + '</div>'
-          + '<div style="text-align:right;margin-top:6px;"><button class="btn" data-px-an="tariff" style="padding:8px 16px;">Zapisz i przelicz</button></div>'
-          + `<div class="px-note">${exEsc(t.note || '')} Ceny wpisz z własnej oferty; puste pole = pozycja nie jest pokazywana.</div>`;
       },
       _exSimHtml() {
         const an = this._exPx().an;
