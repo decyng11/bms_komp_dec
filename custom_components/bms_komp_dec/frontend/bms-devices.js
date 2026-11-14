@@ -582,6 +582,6 @@
     });
   };
   install.contract = 1;
-  install.version = '0.9.5';
+  install.version = '0.9.5.1';
   window.__bmsDevicesInstall = install;
 })();

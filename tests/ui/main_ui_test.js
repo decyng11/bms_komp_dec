@@ -13,7 +13,7 @@ const sleep = (ms) => new Promise(r => setTimeout(r, ms));
     __states['sensor.bms_plan_view'] = { state: 'pv', attributes: a.pv, last_updated: t, last_changed: t };
     __states['sensor.bms_profit_today'] = { state: '1', attributes: { sums: { day: { revenue: 1.1, cost: 2.5, net: -1.4 } }, extras: { day: { savings: { saving: 4.2, without_cost: 6.05 } } } }, last_updated: t, last_changed: t };
     const rs = __states['sensor.bms_reserve_soc'] || (__states['sensor.bms_reserve_soc'] = { state: '20', attributes: {}, last_updated: t, last_changed: t });
-    rs.attributes = Object.assign({}, rs.attributes, { inverter_floor: 20 });
+    rs.attributes = Object.assign({}, rs.attributes, { inverter_floor: 20, capacity_kwh: 14 });
     window.__svc = window.__svc || {}; window.__wsCalls = [];
     window.__svc['bms_komp_dec.override_set'] = (m) => { window.__wsCalls.push(['override_set', m.service_data]); return { response: { overrides: [] } }; };
     window.__svc['bms_komp_dec.override_clear'] = (m) => { window.__wsCalls.push(['override_clear', m.service_data]); return { response: { overrides: [] } }; };
@@ -28,6 +28,9 @@ const sleep = (ms) => new Promise(r => setTimeout(r, ms));
   await sleep(2500);
   const fm = await e.q(() => { const s = __el.shadowRoot.getElementById('nodesBox'); return { tick: !!s.querySelector('line[stroke="#ff3b30"]'), tgt: !!s.querySelector('rect[fill="#af52de"]') }; });
   ok(fm.tick && fm.tgt, 'pierścień baterii: kreska rezerwy i znacznik celu dnia');
+  const ch = await e.q(() => { const b = __el.shadowRoot.getElementById('nodesBox'); return { chips: Array.from(b.querySelectorAll('.nf-chip')).map(c => c.textContent), leg: (b.querySelector('.nf-leg') || {}).textContent || '' }; });
+  ok(ch.chips.length >= 3 && /Zgromadzone/.test(ch.chips[0]) && /kWh/.test(ch.chips[0]) && /Do rezerwy 20%/.test(ch.chips[1]) && /Przy tym tempie/.test(ch.chips[2]), 'pasek wskaźników pod schematem: ' + JSON.stringify(ch.chips));
+  ok(/rezerwa 20%/.test(ch.leg) && /plan na koniec dnia 55%/.test(ch.leg), 'legenda znaczników: ' + ch.leg);
   // linia PV nie przecina napisów pod słońcem
   const geo = await e.q(() => { const s = __el.shadowRoot.getElementById('nodesBox'); const lines = Array.from(s.querySelectorAll('path.nf-line')); const txt = Array.from(s.querySelectorAll('text')).filter(t => /produkcja PV|dziś/.test(t.textContent)); const pv = lines.find(l => /^M300/.test(l.getAttribute('d'))); const y0 = pv ? Math.min(...pv.getAttribute('d').match(/[\d.]+ ([\d.]+)/g).map(x => parseFloat(x.split(' ')[1]))) : null; const ys = txt.map(t => parseFloat(t.getAttribute('y'))); return { y0, maxTxt: ys.length ? Math.max(...ys) : null }; });
   ok(geo.y0 === null || geo.maxTxt === null || geo.y0 > geo.maxTxt, 'linia PV zaczyna się pod napisami: ' + JSON.stringify(geo));

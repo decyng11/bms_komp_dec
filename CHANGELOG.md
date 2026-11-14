@@ -1,3 +1,10 @@
+# EMS komp-dec — zmiany w 0.9.5.1 (z 0.9.5)
+
+## Ekran główny: karta „Magazyn energii” połączona ze schematem
+- Bateria na schemacie to większy pierścień SOC (z kreską rezerwy i znacznikiem planu na koniec dnia), a pod schematem jest **pasek czterech wskaźników**: zgromadzone (kWh), ile zostało do rezerwy, „przy tym tempie” (kiedy bateria dojdzie do rezerwy albo będzie pełna) i szacowane straty falownika (z bilansu mocy, nie pomiar). Pod spodem legenda znaczników pierścienia.
+- Z „Planu dnia” zniknęły przyciski nadpisań (zostały znaczniki aktywnych nadpisań z krzyżykiem; ustawia się je w zakładce EMS).
+- Poprawka `services.yaml`: nazwy usług z dwukropkiem ujęte w cudzysłów (hassfest odrzucał plik).
+
 # EMS komp-dec — zmiany w 0.9.5 (z 0.9.4.3)
 
 ## Odświeżony ekran główny

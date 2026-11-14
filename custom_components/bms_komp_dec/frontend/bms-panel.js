@@ -386,6 +386,15 @@
     .np-det { display: grid; grid-template-columns: 1fr auto; gap: 3px 12px; margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--line); font-size: 12px; color: var(--muted); }
     .np-det b { color: var(--text2); font-weight: 600; text-align: right; }
     .np-msg { padding: 26px 0; text-align: center; font-size: 12px; color: var(--muted); }
+    .nf-leg { display: flex; gap: 14px; flex-wrap: wrap; justify-content: center; font-size: 12px; color: var(--muted); padding: 2px 10px 6px; }
+    .nf-leg i { display: inline-block; vertical-align: -1px; margin-right: 5px; }
+    .nf-k { width: 3px; height: 11px; background: #ff3b30; border-radius: 2px; }
+    .nf-t { width: 8px; height: 8px; background: #af52de; border-radius: 2px; transform: rotate(45deg); }
+    .nf-chips { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; padding: 4px 10px 6px; }
+    .nf-chip { border: 1px solid var(--line); border-radius: 14px; padding: 8px 10px; min-width: 0; }
+    .nf-chip small { display: block; font-size: 11px; color: var(--muted); }
+    .nf-chip b { font-size: 15px; font-variant-numeric: tabular-nums; }
+    @media (max-width: 560px) { .nf-chips { grid-template-columns: repeat(2, 1fr); } }
     .nf-svg { width: 100%; height: auto; max-height: 420px; display: block; }
     .nf-line { fill: none; stroke-linecap: round; stroke-dasharray: 6 8; animation: nfFlow 0.9s linear infinite; }
     .nf-idle { fill: none; stroke: var(--line); stroke-width: 2; stroke-dasharray: 3 7; stroke-linecap: round; }
@@ -3904,7 +3913,7 @@
       const V = this._flowVariant || (cw > 0 && cw < 520 ? 'A' : '0');                    // '0' = bez zmian; A = przycięcie, B = większe, C = oba (telefon)
       const big = V === 'B' || V === 'C', crop = V === 'A' || V === 'C';
       const lh = big ? 20 : 16;
-      const key = [V, Math.round(pv / 10), Math.round(load / 10), Math.round(grid / 10), Math.round(batt / 10), Math.round(soc), THEME.mode, String(this._rsAttrs().inverter_floor), String((this._pvAttrs().table || []).length), Object.values(D).map(v => v === null ? 'x' : v.toFixed(1)).join(',')].join('|');
+      const key = [V, Math.round(pv / 10), Math.round(load / 10), Math.round(grid / 10), Math.round(batt / 10), Math.round(soc), THEME.mode, String(this._rsAttrs().inverter_floor), String(this._rsAttrs().capacity_kwh), String((this._pvAttrs().table || []).length), Object.values(D).map(v => v === null ? 'x' : v.toFixed(1)).join(',')].join('|');
       if (key === this._lastFlowKey) return;     // animacja jest w CSS — przerysowujemy tylko przy zmianie
       this._lastFlowKey = key;
 
@@ -3912,7 +3921,7 @@
       const H = { x: 300, y: (big ? 165 : 150) + 40 };       // środek niżej: linia PV zaczyna się pod napisami, a nie przecina ich
       const dx = V === 'C' ? 28 : 0;
       const N = { pv: { x: 300, y: 45 }, home: { x: 115 + dx, y: H.y }, grid: { x: 485 - dx, y: H.y }, batt: { x: 300, y: (big ? 308 : 268) + 40 } };
-      const R = big ? { pv: 38, home: 38, grid: 38, batt: 52 } : { pv: 32, home: 32, grid: 32, batt: 44 };
+      const R = big ? { pv: 38, home: 38, grid: 38, batt: 60 } : { pv: 32, home: 32, grid: 32, batt: 52 };
       const vb = (crop ? (V === 'C' ? '52 0 496 ' : '45 0 510 ') : '0 0 600 ') + (big ? 440 : 380);
       const cl = (a, b, r) => {                              // punkt na odcinku a→b przesunięty o r od a
         const dx = b.x - a.x, dy = b.y - a.y, d = Math.hypot(dx, dy) || 1;
@@ -3986,7 +3995,34 @@
         <rect class="nf-hit" data-k="home" x="${N.home.x - 60}" y="${N.home.y - R.home - 2}" width="120" height="${R.home * 2 + 4 + 40}"/>
         <rect class="nf-hit" data-k="grid" x="${N.grid.x - 60}" y="${N.grid.y - R.grid - 2}" width="120" height="${R.grid * 2 + 4 + 40}"/>
         <rect class="nf-hit" data-k="batt" x="${N.batt.x - R.batt - 2}" y="${N.batt.y - R.batt - 2}" width="${R.batt * 2 + 4 + 150}" height="${R.batt * 2 + 4}"/>
-      </svg>`;
+      </svg>` + this._flowChips({ soc, batt, load, pv, grid, flr, tgt });
+    }
+
+    // pasek wskaźników pod schematem: zgromadzone / do rezerwy / przy tym tempie / straty falownika (+ legenda znaczników pierścienia)
+    _flowChips(o) {
+      const ra = this._rsAttrs();
+      let cap = parseFloat(ra.capacity_kwh);
+      if (!(cap > 0)) { try { cap = parseFloat(localStorage.getItem('bms_panel_capacity')); } catch (e) { cap = NaN; } }
+      const hasFl = isFinite(o.flr) && o.flr > 0 && o.flr < 100;
+      const FL = hasFl ? o.flr : 20;
+      const f1 = (v) => (Math.round(v * 10) / 10).toFixed(1);
+      const chip = (l, v, t) => `<div class="nf-chip"${t ? ` title="${bmsEsc(t)}"` : ''}><small>${bmsEsc(l)}</small><b>${bmsEsc(v)}</b></div>`;
+      let c = '';
+      if (cap > 0) {
+        const kwh = cap * o.soc / 100, usable = Math.max(0, cap * (o.soc - FL) / 100);
+        let pace = '—', paceTip = '';
+        if (o.soc <= FL) pace = 'osiągnięte';
+        else if (o.batt < -20) { const h = usable / (-o.batt / 1000); pace = `do ${Math.round(FL)}% ok. ${this._fmtAt(h)}`; paceTip = `przy obecnym rozładowaniu ${this._fmtW(-o.batt)}`; }
+        else if (o.batt > 20 && o.soc < 99.5) { const h = (100 - o.soc) / 100 * cap / (o.batt / 1000); pace = `pełna ok. ${this._fmtAt(h)}`; paceTip = `przy obecnym ładowaniu ${this._fmtW(o.batt)}`; }
+        else { const h = usable / (Math.max(o.load, 100) / 1000); pace = `do ${Math.round(FL)}% ok. ${this._fmtAt(h)}`; paceTip = `przy obecnym zużyciu domu ${this._fmtW(Math.max(o.load, 100))} (bez PV)`; }
+        c += chip('Zgromadzone', `~ ${f1(kwh)} kWh`) + chip(`Do rezerwy ${Math.round(FL)}%`, `${f1(usable)} kWh`) + chip('Przy tym tempie', pace, paceTip);
+      }
+      // straty z bilansu mocy (PV + sieć − dom − bateria); to szacunek, a nie pomiar falownika
+      const loss = o.pv + o.grid - o.load - o.batt;
+      if (isFinite(loss) && (o.pv > 50 || Math.abs(o.batt) > 50)) c += chip('Straty falownika (szac.)', `${Math.max(0, Math.round(loss))} W`, 'Szacunek z bilansu mocy: PV + sieć − dom − bateria');
+      const leg = hasFl || isFinite(o.tgt)
+        ? `<div class="nf-leg">${hasFl ? `<span><i class="nf-k"></i>rezerwa ${Math.round(FL)}%</span>` : ''}${isFinite(o.tgt) ? `<span><i class="nf-t"></i>plan na koniec dnia ${Math.round(o.tgt)}%</span>` : ''}</div>` : '';
+      return leg + (c ? `<div class="nf-chips">${c}</div>` : '');
     }
 
     // ===== MINI WYKRES 24 h (popover przy węzłach) =====
@@ -4609,7 +4645,7 @@
   // =====================================================================
   // Wersja tego pliku (ustawiana skryptem pakującym z manifest.json). Każdy moduł niesie tę samą w install.version:
   // gdy się różnią, przeglądarka podała starą kopię modułu z pamięci podręcznej.
-  const CARD_VERSION = '0.9.5';
+  const CARD_VERSION = '0.9.5.1';
   const MOD_TIMEOUT_MS = 20000;
   const MODULES = {
     diag:   { file: 'bms-diag.js',   global: '__bmsDiagInstall',   contract: 1, label: 'Diagnostyki', p: null, ready: false, err: '', got: '' },
