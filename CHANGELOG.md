@@ -1,3 +1,7 @@
+# EMS komp-dec — w przygotowaniu (po 0.9.5.2, jeszcze niewydane)
+
+- **Nowy styl wyglądu „Material 3".** Diagnostyka → Wygląd: wybór między stylem klasycznym (domyślny) a Material Design 3 (tonalne karty, mocniej zaokrąglone elementy, dolny pasek zakładek z pigułką za ikoną, zielono-morska paleta). Styl działa z jasnym i ciemnym motywem, zmienia tylko kolory i kształty (układ i dane bez zmian), a wybór jest zapamiętany w danej przeglądarce. Powrót do „Klasyczny" przywraca dotychczasowy wygląd.
+
 # EMS komp-dec — zmiany w 0.9.5.2 (z 0.9.5.1)
 
 - **Nowy układ kart.** Zakładka „Wykresy" to teraz „Plan": na górze plan 24 h, tabela godzina po godzinie, ręczne nadpisanie i historia baterii, niżej wykresy i prognozy. Zakładka „EMS" nazywa się „Ustawienia", a jej sekcje zwija się kliknięciem w tytuł (stan pamiętany w przeglądarce).

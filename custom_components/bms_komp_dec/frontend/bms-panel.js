@@ -100,6 +100,48 @@
   const THEME = { mode: 'dark' };
   const TC = (k) => PALETTE[THEME.mode][k];
 
+
+  // ---------- styl wyglądu (skin): „Klasyczny” (domyślny) albo „Material 3” — wybór w Diagnostyce → Wygląd ----------
+  // Działa niezależnie od motywu jasny/ciemny. To wyłącznie warstwa stylów (zmienne i wygląd komponentów) — układ i dane
+  // są te same, więc wyłączenie stylu przywraca dokładnie dotychczasowy wygląd.
+  const SKIN_KEY = 'bms_panel_skin';
+  const SKINS = { classic: 'Klasyczny', m3: 'Material 3' };
+  const SKIN_M3 = `
+    :host([data-skin="m3"]) { --bg:#f4fbf8; --card:#e8f1ed; --surface:rgba(23,29,27,0.06); --line:rgba(111,121,117,0.22); --text:#171d1b; --text2:#3f4945; --muted:#566360; --muted2:#6f7975; --accent:#0b6b5d; --green:#1b6c2e; --orange:#8a5a00; --red:#ba1a1a; --input-bg:#f4fbf8; --seg-bg:#dde8e4; --seg-active:#bdf0e3; --shadow:0 1px 2px rgba(0,0,0,0.10),0 1px 3px 1px rgba(0,0,0,0.06); --pf-bg:#e8f1ed; --tonal:#d4e8e1; --on-tonal:#0e201c; --tert:#e1dcff; --on-tert:#1d1a47; --tab-on:#bdf0e3; --tab-on-fg:#00201b; --tab-off:#3f4945; --tab-bg:#e3ede9; --tab-line:transparent; color-scheme: light; }
+    :host([data-skin="m3"][data-theme="dark"]) { --bg:#0f1513; --card:#1a201e; --surface:rgba(255,255,255,0.06); --line:rgba(255,255,255,0.10); --text:#dee4e0; --text2:#bfc9c4; --muted:#9aa5a0; --muted2:#89938f; --accent:#7fd8c6; --green:#8fd99b; --orange:#f3c04f; --red:#ffb4ab; --input-bg:#222826; --seg-bg:#262b29; --seg-active:#005046; --shadow:none; --pf-bg:#1a201e; --tonal:#33433e; --on-tonal:#d4e8e1; --tert:#42407a; --on-tert:#e1dcff; --tab-on:#005046; --tab-on-fg:#bdf0e3; --tab-off:#bfc9c4; --tab-bg:#1b211f; color-scheme: dark; }
+    :host([data-skin="m3"]) { font-family: Roboto, "Google Sans", "Segoe UI", -apple-system, BlinkMacSystemFont, sans-serif; border-radius: 28px; }
+    :host([data-skin="m3"]) .header .title { font-weight: 500; letter-spacing: -0.2px; }
+    :host([data-skin="m3"]) .section-title { text-transform: none; font-size: 15px; font-weight: 600; letter-spacing: 0; color: var(--text); padding-left: 4px; }
+    :host([data-skin="m3"]) .chart-card, :host([data-skin="m3"]) .soc-card, :host([data-skin="m3"]) .pf-wrapper { border-radius: 24px; box-shadow: none; }
+    :host([data-skin="m3"]) .weather-tile { border-radius: 16px; background: var(--card); border: none; }
+    :host([data-skin="m3"]) .btn, :host([data-skin="m3"]) .ds-item { border-radius: 20px; background: var(--tonal); color: var(--on-tonal); box-shadow: none; }
+    :host([data-skin="m3"]) .btn:hover { background: var(--tonal); filter: brightness(0.96); }
+    :host([data-skin="m3"]) .btn.active { background: var(--tert); color: var(--on-tert); border: none; }
+    :host([data-skin="m3"]) .why-box { background: var(--tert); color: var(--on-tert); border: none; border-radius: 20px; }
+    :host([data-skin="m3"]) .why-box * { color: inherit; }
+    :host([data-skin="m3"]) .badge { border-radius: 8px; background: transparent; border: 1px solid var(--muted2); box-shadow: none; color: var(--text2); }
+    :host([data-skin="m3"]) .badge.on { background: var(--tonal); color: var(--on-tonal); border-color: transparent; }
+    :host([data-skin="m3"]) .price-pill { border-radius: 16px; background: var(--card); box-shadow: none; }
+    :host([data-skin="m3"]) .socbar { height: 12px; border-radius: 6px; }
+    :host([data-skin="m3"]) .socbar > div { background: var(--accent); border-radius: 6px; }
+    :host([data-skin="m3"]) .suggest-item { border-radius: 20px; background: var(--card); }
+    :host([data-skin="m3"]) select, :host([data-skin="m3"]) input[type="time"], :host([data-skin="m3"]) input[type="number"] { border-radius: 8px; border: 1px solid var(--muted2); }
+    :host([data-skin="m3"]) .sb-item, :host([data-skin="m3"]) .floor-alert { border-radius: 16px; }
+    /* dolna nawigacja: pasek jak w Material 3 — wskaźnik-pigułka za ikoną, etykieta pod spodem */
+    :host([data-skin="m3"]) .tabs.bottom { border: none; border-radius: 28px; box-shadow: 0 2px 10px rgba(0,0,0,0.18); padding: 8px 6px 6px; }
+    :host([data-skin="m3"]) .tabs.bottom .tab { border-radius: 16px; gap: 4px; }
+    :host([data-skin="m3"]) .tabs.bottom .tab.active { background: transparent; color: var(--text); }
+    :host([data-skin="m3"]) .tabs.bottom .tab .ti { padding: 3px 16px; border-radius: 14px; transition: background .2s; }
+    :host([data-skin="m3"]) .tabs.bottom .tab.active .ti { background: var(--tab-on); color: var(--tab-on-fg); }
+    :host([data-skin="m3"]) .tabs.bottom .tab .tls { font-size: 11px; font-weight: 600; }
+    :host([data-skin="m3"]) .tabs.bottom .tab.warn .ti::after { right: 6px; top: 0; }
+    /* Diagnostyka */
+    :host([data-skin="m3"]) .dg-card { border-radius: 24px; box-shadow: none; }
+    :host([data-skin="m3"]) .dg-pill { border-radius: 8px; background: transparent; border: 1px solid var(--muted2); color: var(--text2); }
+    :host([data-skin="m3"]) .dg-pill.on { background: var(--seg-active); border-color: transparent; color: var(--text); }
+    :host([data-skin="m3"]) .dg-tile { border-radius: 16px; }
+  `;
+
   const STYLES = `
     :host { --bg:#000; --card:#1c1c1e; --surface:rgba(255,255,255,0.06); --line:rgba(255,255,255,0.10); --text:#fff; --text2:#e5e5ea; --muted:#8e8e93; --muted2:#6e6e73; --accent:#0a84ff; --green:#30d158; --orange:#ff9f0a; --red:#ff453a; --input-bg:#2c2c2e; --seg-bg:rgba(118,118,128,0.24); --seg-active:#636366; --shadow:none; --pf-bg:#1c1c1e; color-scheme: dark; }
     :host([data-theme="light"]) { --bg:#e4e4e9; --card:#f0f0f4; --surface:rgba(60,60,67,0.07); --line:rgba(60,60,67,0.12); --text:#1c1c1e; --text2:#3a3a3c; --muted:#6c6c70; --muted2:#8e8e93; --accent:#0a84ff; --green:#34c759; --orange:#ff9500; --red:#ff3b30; --input-bg:#e4e4e9; --seg-bg:rgba(118,118,128,0.14); --seg-active:#f7f7fa; --shadow:0 1px 2px rgba(0,0,0,0.05),0 6px 18px rgba(0,0,0,0.07); --pf-bg:#f0f0f4; color-scheme: light; }
@@ -2611,11 +2653,26 @@
       if (persist) { try { localStorage.setItem(THEME_KEY, mode); } catch (e) { /* ignoruj */ } }
       this._applyTheme(mode);
     }
+    _resolveSkin() {
+      let v = null;
+      try { v = localStorage.getItem(SKIN_KEY); } catch (e) { /* storage niedostępny */ }
+      return Object.prototype.hasOwnProperty.call(SKINS, v) ? v : 'classic';
+    }
+    _setSkin(skin, persist = true) {
+      if (!Object.prototype.hasOwnProperty.call(SKINS, skin)) return;
+      if (persist) { try { localStorage.setItem(SKIN_KEY, skin); } catch (e) { /* ignoruj */ } }
+      this._applySkin(skin);
+    }
+    _applySkin(force) {
+      const skin = force || this._resolveSkin();
+      if (skin === 'classic') this.removeAttribute('data-skin'); else this.setAttribute('data-skin', skin);
+    }
     _applyTheme(force) {
       const mode = force || this._resolveTheme();
       const changed = THEME.mode !== mode || this.getAttribute('data-theme') !== mode;
       THEME.mode = mode;
       this.setAttribute('data-theme', mode);
+      this._applySkin();
       if (this.shadowRoot) {
         this.shadowRoot.querySelectorAll('[data-theme-set]').forEach(b => b.classList.toggle('active', b.dataset.themeSet === mode));
       }
@@ -2637,7 +2694,7 @@
 
     _renderShell() {
       const style = document.createElement('style');
-      style.textContent = STYLES;
+      style.textContent = STYLES + SKIN_M3;
       this.shadowRoot.appendChild(style);
 
       const wrap = document.createElement('div');

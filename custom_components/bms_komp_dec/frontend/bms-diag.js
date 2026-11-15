@@ -88,6 +88,7 @@
     if (DG_ST.ready && !DG_ST.err) return '<div class="dg-muted" style="margin:6px 2px;">☁ Zapisuję w Home Assistant…</div>';
     return `<div class="dg-alarm" style="margin:6px 0;">⚠ Dane Diagnostyki są teraz tylko w tej przeglądarce${DG_ST.err ? ' — ' + dgEsc(DG_ST.err) : ''}. Dziennik i kopie nie przetrwają czyszczenia danych witryny; próbuję ponownie automatycznie.</div>`;
   }
+  const SKINS_LABEL = { classic: 'Klasyczny', m3: 'Material 3' };
   const dgEsc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   const dgSleep = (ms) => new Promise(r => setTimeout(r, ms));
 
@@ -252,6 +253,10 @@
     .dg-nav::-webkit-scrollbar { display:none; }
     .dg-pill { flex:none; border:none; background:var(--surface); color:var(--text2); padding:8px 13px; border-radius:20px; font-weight:600; font-size:13px; cursor:pointer; font-family:inherit; }
     .dg-pill.on { background:var(--accent); color:#fff; }
+    .dg-skins { display:grid; grid-template-columns:repeat(auto-fit,minmax(200px,1fr)); gap:10px; }
+    .dg-skin { text-align:left; border:2px solid var(--line); background:var(--surface); color:var(--text); border-radius:16px; padding:14px; cursor:pointer; font-family:inherit; display:flex; flex-direction:column; gap:4px; }
+    .dg-skin b { font-size:15px; } .dg-skin span { font-size:12px; color:var(--muted); }
+    .dg-skin.on { border-color:var(--accent); background:var(--seg-active); }
     .dg-card { background:var(--card); border-radius:18px; padding:14px 16px; margin-bottom:12px; box-shadow:var(--shadow); }
     .dg-card h4 { margin:0 0 10px; font-size:15px; } .dg-card .sub { color:var(--muted); font-size:12px; margin:-6px 0 10px; }
     .dg-tiles { display:grid; grid-template-columns:repeat(auto-fill,minmax(210px,1fr)); gap:10px; }
@@ -465,7 +470,7 @@
           <button class="dg-btn" data-act="unlock" style="width:100%;">Odblokuj</button><div id="dgGateMsg" class="dg-muted" style="margin-top:10px;min-height:16px;"></div><div class="dg-muted" id="dgVer" style="margin-top:14px;font-size:11px;">${this._dgVerLine()}</div></div>`;
         return;
       }
-      const secs = [['overview', '📡 Przegląd'], ['selftest', '🩺 Autotest'], ['wizard', '🧭 Kreator instalacji'], ['config', '⚙️ Konfiguracja'], ['tou', '🕒 Strefy czasowe'], ['charts', '📈 Wykresy'], ['alarms', '🚨 Alarmy'], ['modes', '🛡️ Tryby'], ['notify', '🔔 Powiadomienia'], ['backup', '💾 Kopie i profile'], ['log', '📜 Dziennik zmian'], ['adv', '🧪 Zaawansowane']];
+      const secs = [['overview', '📡 Przegląd'], ['selftest', '🩺 Autotest'], ['wizard', '🧭 Kreator instalacji'], ['config', '⚙️ Konfiguracja'], ['tou', '🕒 Strefy czasowe'], ['charts', '📈 Wykresy'], ['alarms', '🚨 Alarmy'], ['modes', '🛡️ Tryby'], ['notify', '🔔 Powiadomienia'], ['backup', '💾 Kopie i profile'], ['log', '📜 Dziennik zmian'], ['look', '🎨 Wygląd'], ['adv', '🧪 Zaawansowane']];
       host.innerHTML = `<div class="dg-bar"><span>🔓 Tryb instalatora aktywny · wygasa za <b id="dgLeft">–</b></span><span class="sp"></span><button class="dg-btn sec sm" data-act="extend">Przedłuż</button><button class="dg-btn sec sm" data-act="lock">Zablokuj</button></div>
         <div class="dg-nav">${secs.map(([k, l]) => `<button class="dg-pill ${s.sec === k ? 'on' : ''}" data-act="sec" data-sec="${k}">${l}</button>`).join('')}</div>
         <div id="dgStoreNote">${dgStoreNote()}</div><div id="dgAlarmBox">${this._dgAlarmHtml()}</div><div id="dgBody"></div><div class="dg-muted" id="dgVer" style="margin:14px 0 4px;font-size:11px;">${this._dgVerLine()}</div><div id="dgToast" class="dg-toast"></div>`;
@@ -535,6 +540,7 @@
         case 'alarm-restore': this._dgAlarmRestore(Number(t.dataset.i)); break;
         case 'alarm-dismiss': { const al = DG_LS.get('bms_diag_alarms', []); al.splice(Number(t.dataset.i), 1); DG_LS.set('bms_diag_alarms', al); this._dgRenderAlarmBox(); this._dgSyncTab(); break; }
         case 'log-undo': this._dgLogUndo(Number(t.dataset.i)); break;
+        case 'skin': this._setSkin(t.dataset.skin); this._dgRenderSection(); break;
         case 'setlog-undo': this._dgSetLogUndo(Number(t.dataset.i)); break;
         case 'log-clear': if (confirm('Wyczyścić dziennik zmian (jest zapisany w Home Assistant)?')) { DG_LS.set('bms_diag_log', []); this._dgRenderSection(); } break;
         case 'alarm-hist': this._dgAlarmHistory(); break;
@@ -1581,6 +1587,12 @@
       const cfg = this._dgCfgEntities()[0]; if (!cfg) return null;
       const reg = this._hass.entities && this._hass.entities[cfg.eid]; if (reg && reg.device_id) return reg.device_id;
       try { const e = await this._hass.callWS({ type: 'config/entity_registry/get', entity_id: cfg.eid }); return e && e.device_id || null; } catch (err) { return null; }
+    },
+    _dgSec_look() {
+      const cur = this._resolveSkin();
+      const opt = (k, sub) => `<button class="dg-skin ${cur === k ? 'on' : ''}" data-act="skin" data-skin="${k}" aria-pressed="${cur === k}"><b>${dgEsc(SKINS_LABEL[k])}</b><span>${sub}</span></button>`;
+      return `<div class="dg-card"><h4>Styl wyglądu panelu</h4><div class="sub">Zmienia kolory, zaokrąglenia i dolny pasek zakładek. Układ i dane zostają takie same. Jasny / ciemny motyw przełączasz w nagłówku panelu — styl działa z oboma. Wybór jest zapamiętany w tej przeglądarce (każde urządzenie ma własny).</div>
+        <div class="dg-skins">${opt('classic', 'dotychczasowy wygląd')}${opt('m3', 'Material Design 3: tonalne karty, pigułkowa nawigacja')}</div></div>`;
     },
     _dgSec_adv() {
       const ov = DG_LS.get('bms_diag_prefix', '');
