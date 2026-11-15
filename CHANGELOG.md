@@ -1,5 +1,8 @@
 # EMS komp-dec — w przygotowaniu (po 0.9.5.1, jeszcze niewydane)
 
+- **Tryb awaryjny przy braku danych.** Gdy brak odczytu SOC trwa ponad 15 minut, EMS kończy to, co sam zlecił (ładowanie z sieci, sprzedaż z baterii — wg własnych znaczników, bo falownik milczy), zgłasza to powiadomieniem i wpisem w dzienniku, a po powrocie danych sam wraca do normalnej pracy.
+- **Samokontrola po restarcie.** Kilka minut po starcie jednorazowo porównuje stan falownika ze znacznikami EMS i zostawia w dzienniku wynik („stan zgodny” albo lista rozbieżności); nieaktualne znaczniki są czyszczone. Nieaktualny znacznik ręcznego ładowania jest też czyszczony, gdy ładowanie ktoś wyłączył poza EMS.
+
 - **Strażnik rozjazdu.** Gdy falownik ładuje z sieci, a żadne okno, harmonogram, „Wymuś ładowanie” ani ręczna komenda tego nie zleciły (np. zmiana godzin okna w trakcie albo ustawienie zmienione w aplikacji producenta), po 10 minutach pojawia się wpis w dzienniku i powiadomienie (ponowione najwcześniej po 6 h). Strażnik tylko zgłasza — nie wyłącza ładowania, bo może to być świadoma konfiguracja falownika.
 
 - **Prognoza zużycia: temperatura z opóźnieniem.** Do poprawki temperaturowej liczy się 70% temperatury dnia i 30% średniej z dwóch poprzednich dni (bezwładność budynku, pompa ciepła).

@@ -95,6 +95,8 @@ SCHED_SETTLE_S = 300       # tyle czekamy, aż falownik potwierdzi start, zanim 
 SELLING_TOKEN = "__sprzedaz__"     # zapamiętany „tryb” przy falownikach bez trybu Export First (Sofar)
 PRICE_HYSTERESIS = 0.02          # PLN/kWh powyżej progu, by uznać cenę za "wróconą do normy"
 GUARD_COOLDOWN_S = 120
+STARTUP_CHECK_S = 180      # kiedy po starcie robimy samokontrolę
+FAILSAFE_NODATA_S = 900    # brak SOC dłużej niż tyle → tryb awaryjny (nie sterujemy „na ślepo”)
 MISMATCH_GRACE_S = 600     # tyle czasu falownik może ładować z sieci „bez właściciela”, zanim zgłosimy rozjazd
 MISMATCH_RENOTIFY_S = 6 * 3600
 VERIFY_FIRST_WAIT_S = 20
@@ -1277,6 +1279,86 @@ class BmsRuntime:
             except Exception as err:  # noqa: BLE001
                 _LOGGER.error("EMS GUARD: awaryjny STOP (%s) nieudany: %s", slot, err)
 
+    async def _startup_check(self, now: datetime) -> None:
+        """Samokontrola po (re)starcie: raz, kilka minut po uruchomieniu, porównuje stan falownika ze znacznikami EMS
+        (kto zlecił ładowanie z sieci / sprzedaż) i zostawia w dzienniku jednoznaczny wynik. Rozjazdy zgłaszają strażnicy
+        (rozjazdu, awaryjny STOP); tu tylko podsumowanie, żeby po restarcie nie zgadywać, czy wszystko jest zgodne."""
+        if getattr(self, "_startup_done", False):
+            return
+        t0 = getattr(self, "_startup_t0", None)
+        if t0 is None:
+            self._startup_t0 = now
+            return
+        if (now - t0).total_seconds() < STARTUP_CHECK_S or self.soc() is None:
+            return
+        self._startup_done = True
+        try:
+            gc, sale = bool(self.grid_charging_on()), bool(self.is_selling())
+        except Exception:  # noqa: BLE001
+            return
+        issues: list[str] = []
+        gc_owner = self._mismatch_owner(now)
+        if gc and not gc_owner:
+            issues.append("falownik ładuje z sieci bez zlecenia EMS")
+        if not gc and (self.state.get("gc_sched") or self.state.get("gc_origin")):
+            issues.append("zapisane ładowanie z sieci, a falownik nie ładuje (znacznik nieaktualny)")
+            self.state.pop("gc_sched", None); self.state.pop("gc_origin", None); self._save_state()
+        if not sale and self.state.get("sale_sched"):
+            issues.append("zapisana sprzedaż, a falownik nie sprzedaje (znacznik nieaktualny)")
+            self.state.pop("sale_sched", None); self._save_state()
+        if sale and not self.state.get("sale_sched") and not any(
+                self._sched_window_open(k, now) for k in ("bateria_sprzedaz_start", "bateria_sprzedaz_start_2")):
+            issues.append("falownik sprzedaje poza oknem sprzedaży (start ręczny lub z aplikacji producenta)")
+        stan = f"ładowanie z sieci: {'tak' if gc else 'nie'}, sprzedaż: {'tak' if sale else 'nie'}"
+        if issues:
+            self.log.add("guard", f"Samokontrola po starcie: {stan}. Rozbieżności: " + "; ".join(issues), "warn")
+        else:
+            self.log.add("guard", f"Samokontrola po starcie: stan falownika zgodny z planem ({stan})", "ok")
+
+    async def _failsafe_check(self, now: datetime) -> None:
+        """Tryb awaryjny: brak odczytu SOC dłużej niż FAILSAFE_NODATA_S (falownik/internet/integracja milczy). Bez SOC nie da
+        się bezpiecznie ładować z sieci ani sprzedawać — kończymy to, co EMS sam zlecił (wg znaczników, nie odczytu z falownika),
+        i zgłaszamy. Po powrocie danych wpis w dzienniku; plan wznawia się sam."""
+        soc = self.soc()
+        if soc is not None:
+            if getattr(self, "_nodata_since", None) is not None:
+                if getattr(self, "_failsafe_on", False):
+                    self.log.add("guard", "Dane z falownika wróciły — tryb awaryjny zakończony, plan działa normalnie", "ok")
+                self._nodata_since = None
+                self._failsafe_on = False
+            return
+        since = getattr(self, "_nodata_since", None)
+        if since is None:
+            self._nodata_since = now
+            return
+        if getattr(self, "_failsafe_on", False) or (now - since).total_seconds() < FAILSAFE_NODATA_S:
+            return
+        self._failsafe_on = True
+        mins = int((now - since).total_seconds() // 60)
+        stopped: list[str] = []
+        if self.state.get("gc_sched") or self.state.get("gc_origin"):
+            try:
+                await self.run_command("wylacz_ladowanie_siec", source="tryb awaryjny")
+                stopped.append("ładowanie z sieci")
+            except Exception as err:  # noqa: BLE001
+                _LOGGER.error("EMS GUARD: tryb awaryjny — STOP ładowania: %s", err)
+        if self.state.get("sale_sched"):
+            try:
+                await self.run_command("nadwyzka_9700w", source="tryb awaryjny")
+                stopped.append("sprzedaż z baterii")
+            except Exception as err:  # noqa: BLE001
+                _LOGGER.error("EMS GUARD: tryb awaryjny — STOP sprzedaży: %s", err)
+        what = (" Zatrzymano: " + ", ".join(stopped) + ".") if stopped else ""
+        self.log.add("guard", f"Tryb awaryjny: brak danych SOC od {mins} min.{what}", "warn")
+        try:
+            await self.monitor.notifier.send(
+                "guard_action", "⚠ EMS: brak danych z falownika",
+                f"Brak odczytu SOC od ok. {mins} min — sterowanie wstrzymane dla bezpieczeństwa.{what} "
+                f"Sprawdź połączenie z falownikiem (Diagnostyka → Łączność). Plan wznowi się sam po powrocie danych.",
+                key="guard:failsafe")
+        except Exception as err:  # noqa: BLE001
+            _LOGGER.error("EMS GUARD: powiadomienie o trybie awaryjnym: %s", err)
+
     def _mismatch_owner(self, now: datetime) -> str | None:
         """Kto „odpowiada” za trwające ładowanie z sieci: harmonogram, okno, wymuszenie albo ręczna komenda.
         None = nikt (falownik ładuje z sieci, a EMS tego nie zlecał)."""
@@ -1298,6 +1380,11 @@ class BmsRuntime:
             on = bool(self.grid_charging_on())
         except Exception:  # noqa: BLE001
             return
+        if not on:
+            org = self.state.get("gc_origin")
+            if isinstance(org, dict) and now.timestamp() - float(org.get("ts") or 0.0) > SCHED_SETTLE_S:
+                self.state.pop("gc_origin", None)      # ktoś wyłączył ładowanie poza EMS — właściciel nieaktualny
+                self._save_state()
         if not on or self._mismatch_owner(now):
             self._mismatch_since = None
             return
@@ -1341,6 +1428,14 @@ class BmsRuntime:
             await self._stop_at_target(now)
         except Exception as err:  # noqa: BLE001
             _LOGGER.error("EMS GUARD: koniec ładowania po osiągnięciu celu: %s", err)
+        try:
+            await self._startup_check(now)
+        except Exception as err:  # noqa: BLE001
+            _LOGGER.error("EMS GUARD: samokontrola po starcie: %s", err)
+        try:
+            await self._failsafe_check(now)
+        except Exception as err:  # noqa: BLE001
+            _LOGGER.error("EMS GUARD: tryb awaryjny: %s", err)
         try:
             await self._mismatch_check(now)
         except Exception as err:  # noqa: BLE001
