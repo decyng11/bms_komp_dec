@@ -974,7 +974,7 @@ class LoadForecaster:
             typed = dict(hist)   # za mało dni tego typu — model ogólny
 
         vals = list(typed.values())
-        if len(vals) >= 5:
+        if len(vals) >= 12:   # przy małej próbce filtr wyrzucał prawdziwe, wysokie weekendy
             try:
                 med = statistics.median(vals)
                 mad = statistics.median([abs(v - med) for v in vals])
@@ -1021,19 +1021,20 @@ class LoadForecaster:
         result = self._apply_seasonal_correction(target, result, ref)
         return result
 
-    def _bias_factor(self, today: date) -> float:
+    def _bias_factor(self, today: date, off: bool | None = None) -> float:
         """Samokorekta: mediana (rzeczywiste / model liczony wstecz) z ostatnich dni, z wagą i sufitem z parametrów
         (domyślnie połowa różnicy, ±25%, 14 dni; samostrojenie może wybrać szybszy wariant)."""
         n_days = int(self.params.get("bias_days", BIAS_DAYS))
         gain = float(self.params.get("bias_gain", BIAS_GAIN))
         mx = float(self.params.get("bias_max", BIAS_MAX - 1.0))
-        sig = (today.isoformat(), n_days, gain, mx, tuple(
+        sig = (today.isoformat(), off, n_days, gain, mx, tuple(
             round(self.days.get((today - timedelta(days=i)).isoformat(), 0.0), 1) for i in range(1, n_days + 1)
         ))
         cached = getattr(self, "_bias_cache", None)
         if cached and cached[0] == sig:
             return cached[1]
         ratios: list[float] = []
+        typed_ratios: list[float] = []
         for i in range(1, n_days + 1):
             d = today - timedelta(days=i)
             actual = self.days.get(d.isoformat())
@@ -1042,8 +1043,18 @@ class LoadForecaster:
             pred = self._model_core(d, today)
             if pred and pred > 0:
                 ratios.append(actual / pred)
+                if off is not None and (self._is_off_day(d) or self._is_special_holiday(d)) == off:
+                    typed_ratios.append(actual / pred)
+        # Osobna korekta dla dni wolnych / roboczych: wspólna mediana była zdominowana przez dni robocze
+        # i przykrywała systematyczny błąd weekendów i świąt.
+        if off is not None and len(typed_ratios) >= 3:
+            ratios = typed_ratios
+            # błąd stale po jednej stronie → pewniejszy, korekta mocniejsza
+            if len(ratios) >= 3 and (all(r > 1.05 for r in ratios) or all(r < 0.95 for r in ratios)):
+                gain = min(1.0, gain + 0.3)
         factor = 1.0
-        if len(ratios) >= (BIAS_MIN_SAMPLES if n_days >= 14 else 4) and gain > 0:
+        min_samples = 3 if (off is not None and len(typed_ratios) >= 3) else (BIAS_MIN_SAMPLES if n_days >= 14 else 4)
+        if len(ratios) >= min_samples and gain > 0:
             med = statistics.median(ratios)
             factor = min(1.0 + mx, max(1.0 - mx, 1.0 + gain * (med - 1.0)))
         self._bias_cache = (sig, round(factor, 4))
@@ -1064,7 +1075,7 @@ class LoadForecaster:
         if result is None:
             return None
         if target >= today:
-            result *= self._bias_factor(today)
+            result *= self._bias_factor(today, self._is_off_day(target) or self._is_special_holiday(target))
 
         if live and target == today:
             actual_so_far = self.days.get(today.isoformat())

@@ -1,5 +1,7 @@
 # EMS komp-dec — w przygotowaniu (po 0.9.5.1, jeszcze niewydane)
 
+- **Prognoza zużycia: weekendy i święta.** Korekta błędu liczona osobno dla dni wolnych (weekend, święto) i roboczych — wspólna mediana przykrywała zaniżanie weekendów. Gdy błąd jest stale po jednej stronie, korekta jest mocniejsza. Filtr odstających wartości działa dopiero od 12 dni danego typu (wcześniej wyrzucał prawdziwe, wysokie weekendy z małej próbki).
+
 - **Ekran główny**: usunięta osobna karta „Bateria · ładuje się / do rozładowania” w „Planie dnia” — jej treść (zgromadzona energia, zapas do rezerwy, czas do rezerwy lub pełnego naładowania) jest w pasku wskaźników pod schematem. Pole ręcznego wpisania pojemności baterii (gdy integracja jej nie poda) przeniesione do tego paska. Usunięta też sekcja „Porównanie taryf na Twoim poborze” w zakładce Zysk i log (symulacja roczna zostaje). Znikło przy tym ostrzeżenie „bateria dojdzie do progu przed startem ładowania z sieci” i opis „przed słońcem”.
 
 # EMS komp-dec — zmiany w 0.9.5.1 (z 0.9.5)

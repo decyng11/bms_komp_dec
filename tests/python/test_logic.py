@@ -437,7 +437,17 @@ async def main():
     for i in range(1, 15):
         lf6.days[(today4 - timedelta(days=i)).isoformat()] = 7.5
     check("forecast: korekta obciążenia 0.875", abs(lf6._bias_factor(today4) - 0.875) < 1e-3, lf6._bias_factor(today4))
-    check("forecast: jutro skorygowane, wstecz bez korekty", lf6.predict(date(2026, 11, 3), today4) == 8.75 and lf6.predict(date(2026, 11, 1), today4) == 10.0)
+    # błąd stale po jednej stronie (wszystkie dni −25%) → mocniejsza korekta typowana (gain 0.8 → 0.8)
+    check("forecast: korekta typowana przy stałym błędzie", abs(lf6._bias_factor(today4, False) - 0.8) < 1e-3, lf6._bias_factor(today4, False))
+    # weekendy zaniżane, dni robocze trafione → korekta tylko dla dni wolnych
+    lf7 = lfm.LoadForecaster(hass, lambda: "sensor.x"); lf7._loaded = True
+    lf7._model_core = lambda t, td: 10.0
+    for i in range(1, 15):
+        d = today4 - timedelta(days=i)
+        lf7.days[d.isoformat()] = 14.0 if (d.weekday() >= 5 or d in _hp.polish_holidays(d.year)) else 10.0 + (i % 3) * 0.1
+    check("forecast: korekta dni wolnych > 1", lf7._bias_factor(today4, True) > 1.15, lf7._bias_factor(today4, True))
+    check("forecast: korekta dni roboczych ≈ 1", abs(lf7._bias_factor(today4, False) - 1.0) < 0.05, lf7._bias_factor(today4, False))
+    check("forecast: jutro skorygowane, wstecz bez korekty", lf6.predict(date(2026, 11, 3), today4) == 8.0 and lf6.predict(date(2026, 11, 1), today4) == 10.0)
     lf6.days.update({(today4 - timedelta(days=i)).isoformat(): 3.0 for i in range(1, 15)})
     check("forecast: korekta ograniczona do 0.75", abs(lf6._bias_factor(today4) - 0.75) < 1e-3, lf6._bias_factor(today4))
     lf7 = lfm.LoadForecaster(hass, lambda: "sensor.x"); lf7._loaded = True
