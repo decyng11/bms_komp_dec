@@ -1,5 +1,9 @@
 # EMS komp-dec — w przygotowaniu (po 0.9.5.1, jeszcze niewydane)
 
+- **Prognoza zużycia: temperatura z opóźnieniem.** Do poprawki temperaturowej liczy się 70% temperatury dnia i 30% średniej z dwóch poprzednich dni (bezwładność budynku, pompa ciepła).
+- **Prognoza zużycia: diagnostyka wg typu dnia.** Nowy atrybut `error_by_type` (błąd i obciążenie osobno dla dni roboczych i wolnych, z odniesieniem do „tyle co tydzień temu” i średniej z 5 dni tego typu) oraz wiersz w stopce karty zużycia.
+- **Prognoza zużycia: wersja „bezpieczna”.** Atrybuty `tomorrow_forecast_safe` i `safe_factor` (kwantyl P75 niedoszacowań dla typu dnia, 1,0–1,35). Na razie tylko informacyjnie — planer nadal używa zwykłej prognozy.
+
 - **Prognoza zużycia: weekendy i święta.** Korekta błędu liczona osobno dla dni wolnych (weekend, święto) i roboczych — wspólna mediana przykrywała zaniżanie weekendów. Gdy błąd jest stale po jednej stronie, korekta jest mocniejsza. Filtr odstających wartości działa dopiero od 12 dni danego typu (wcześniej wyrzucał prawdziwe, wysokie weekendy z małej próbki).
 
 - **Ekran główny**: usunięta osobna karta „Bateria · ładuje się / do rozładowania” w „Planie dnia” — jej treść (zgromadzona energia, zapas do rezerwy, czas do rezerwy lub pełnego naładowania) jest w pasku wskaźników pod schematem. Pole ręcznego wpisania pojemności baterii (gdy integracja jej nie poda) przeniesione do tego paska. Usunięta też sekcja „Porównanie taryf na Twoim poborze” w zakładce Zysk i log (symulacja roczna zostaje). Znikło przy tym ostrzeżenie „bateria dojdzie do progu przed startem ładowania z sieci” i opis „przed słońcem”.

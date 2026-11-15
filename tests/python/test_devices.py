@@ -214,7 +214,8 @@ async def main():
     check("zimno już w historii: prognoza = historia (8,0), nie 8 × 1,75", abs(v - 8.0) < 0.05, v)
     f.temperatures[tgt.isoformat()] = -7.0
     v2 = f._model_core(tgt, tgt)
-    check("dzień chłodniejszy niż historia → więcej (8 × 2,25/1,75)", abs(v2 - 8.0 * 2.25 / 1.75) < 0.05, v2)
+    # temperatura efektywna = 0,7·(−7) + 0,3·3 = −4 °C → czynnik 1 + 0,05·22 = 2,1 (bezwładność budynku)
+    check("dzień chłodniejszy niż historia → więcej (8 × 2,1/1,75, z opóźnieniem temperatury)", abs(v2 - 8.0 * 2.1 / 1.75) < 0.05, v2)
     f.temperatures = {tgt.isoformat(): 3.0}
     check("brak temperatur historii → bez poprawki", abs(f._model_core(tgt, tgt) - 8.0) < 0.05)
     f.temperatures = {}; f.seasonal_factors = {10: 0.8, 11: 1.2, 12: 1.4}

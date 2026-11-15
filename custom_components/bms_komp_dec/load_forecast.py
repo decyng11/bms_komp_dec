@@ -46,6 +46,9 @@ MIN_VALID_KWH = 0.2
 MAX_VALID_KWH = 500.0
 MIN_HISTORY_FOR_FORECAST = 5
 MAD_K = 3.0
+TEMP_LAG_W0 = 0.7          # waga temperatury bieżącego dnia (reszta: dwa poprzednie dni)
+P_SAFE_Q = 0.75            # kwantyl błędu do „bezpiecznej” prognozy zużycia
+P_SAFE_MAX = 1.35
 EWMA_ALPHA = 0.3
 EWMA_ALPHA_FAST = 0.6      # gdy dwa ostatnie dni odbiegają w tę samą stronę
 PERSIST_THRESHOLD = 0.25
@@ -845,9 +848,14 @@ class LoadForecaster:
     # ------------------------------------------ dopasowanie współczynników
     def _fit_temperature_coefficients(self) -> None:
         data: list[tuple[float, float]] = []
-        for d_str, temp in self.temperatures.items():
+        for d_str in self.temperatures:
             if d_str in self.days:
-                data.append((temp, self.days[d_str]))
+                try:
+                    temp = self._eff_temp(date.fromisoformat(d_str))
+                except ValueError:
+                    continue
+                if temp is not None:
+                    data.append((temp, self.days[d_str]))
         if len(data) < 14:
             return
 
@@ -1102,8 +1110,20 @@ class LoadForecaster:
             pass
         return False
 
+    def _eff_temp(self, d: date) -> float | None:
+        """Temperatura efektywna: dom magazynuje ciepło, więc zużycie zależy też od poprzednich dni
+        (70% dzień + 30% średnia z dwóch poprzednich; bez poprzednich dni — sama temperatura dnia)."""
+        t0 = self.temperatures.get(d.isoformat())
+        if t0 is None:
+            return None
+        prev = [self.temperatures.get((d - timedelta(days=i)).isoformat()) for i in (1, 2)]
+        prev = [t for t in prev if t is not None]
+        if not prev:
+            return t0
+        return TEMP_LAG_W0 * t0 + (1.0 - TEMP_LAG_W0) * _mean(prev)
+
     def _temp_factor(self, d: date) -> float | None:
-        temp = self.temperatures.get(d.isoformat())
+        temp = self._eff_temp(d)
         if temp is None:
             return None
         hdd = max(0.0, HDD_BASE - temp)
@@ -1139,6 +1159,64 @@ class LoadForecaster:
         return base * (st / sr) if sr > 0 else base
 
     # --------------------------------------------------------- metryki
+    def error_by_type(self, today: date, days_back: int = 28) -> dict[str, Any]:
+        """Błąd modelu (bez „na żywo”) liczony wstecz osobno dla dni roboczych i wolnych, z punktami odniesienia:
+        „tyle co tydzień temu” i „średnia z 5 ostatnich dni tego typu”. Wynik pokazuje, czy model coś dodaje
+        i czy któryś typ dnia jest systematycznie zaniżany. rel = (rzeczywiste − model) / model."""
+        sig = (today, len(self.days), round(sum(self.days.values()), 3), len(self.temperatures))
+        cached = getattr(self, "_ebt_cache", None)
+        if cached and cached[0] == sig:
+            return cached[1]
+        bad = self.suspects()
+        rows: dict[str, list[tuple[float, float, float | None, float | None]]] = {"work": [], "off": []}
+        for i in range(1, days_back + 1):
+            d = today - timedelta(days=i)
+            actual = self.days.get(d.isoformat())
+            if not actual or actual < MIN_VALID_KWH or d.isoformat() in bad:
+                continue
+            pred = self.predict(d, d - timedelta(days=1), live=False)
+            if not pred or pred <= 0:
+                continue
+            off = self._is_off_day(d)
+            wk = self.days.get((d - timedelta(days=7)).isoformat())
+            if wk is not None and ((d - timedelta(days=7)).isoformat() in bad or wk < MIN_VALID_KWH):
+                wk = None
+            same = [
+                self.days[k.isoformat()] for k in (d - timedelta(days=j) for j in range(1, 40))
+                if k.isoformat() in self.days and k.isoformat() not in bad
+                and self._is_off_day(k) == off and self.days[k.isoformat()] >= MIN_VALID_KWH
+            ][:5]
+            rows["off" if off else "work"].append((actual, pred, wk, _mean(same) if len(same) >= 2 else None))
+        out: dict[str, Any] = {}
+        for typ, lst in rows.items():
+            if not lst:
+                out[typ] = {"n": 0}
+                continue
+            rel = [(a - p) / p for a, p, _w, _m in lst]
+            wk_e = [abs(a - w) / a for a, _p, w, _m in lst if w]
+            mn_e = [abs(a - m) / a for a, _p, _w, m in lst if m]
+            out[typ] = {
+                "n": len(lst),
+                "mape": round(_mean([abs(a - p) / a for a, p, _w, _m in lst]) * 100, 1),
+                "bias_pct": round(_mean(rel) * 100, 1),          # ujemne = prognoza zawyżona, dodatnie = zaniżona
+                "mape_naive_week": round(_mean(wk_e) * 100, 1) if wk_e else None,
+                "mape_naive_type": round(_mean(mn_e) * 100, 1) if mn_e else None,
+                "rel": [round(x, 4) for x in rel],
+            }
+        self._ebt_cache = (sig, out)
+        return out
+
+    def safe_factor(self, today: date, target: date) -> float:
+        """Mnożnik „bezpiecznej” prognozy zużycia: kwantyl P75 niedoszacowań dla typu dnia celu
+        (zaniżone zużycie kosztuje więcej niż zawyżone). 1.0…P_SAFE_MAX; mało danych → 1.05."""
+        typ = "off" if (self._is_off_day(target) or self._is_special_holiday(target)) else "work"
+        rel = (self.error_by_type(today).get(typ) or {}).get("rel") or []
+        if len(rel) < 6:
+            return 1.05
+        srt = sorted(rel)
+        q = srt[min(len(srt) - 1, int(round(P_SAFE_Q * (len(srt) - 1))))]
+        return round(min(P_SAFE_MAX, max(1.0, 1.0 + q)), 3)
+
     def _compute_mape(self, days_back: int = 14) -> float | None:
         errors: list[float] = []
         today = dt_util.now().date()
@@ -1305,6 +1383,9 @@ class LoadForecaster:
             "mape_14d": self._compute_mape(),
             "confidence_interval": self._confidence_interval(tomorrow_fc, tomorrow),
             "forecast_bias": self._bias_factor(today),
+            "error_by_type": {k: {kk: vv for kk, vv in v.items() if kk != "rel"} for k, v in self.error_by_type(today).items()},
+            "tomorrow_forecast_safe": None if tomorrow_fc is None else round(tomorrow_fc * self.safe_factor(today, tomorrow), 2),
+            "safe_factor": self.safe_factor(today, tomorrow),
             "forecast_split": split,
             "hourly_forecast": self._hourly_forecast(tomorrow_fc, tomorrow),
             "hourly_forecast_today": self._hourly_forecast(items[1]["forecast"], today),   # profil × prognoza wydana na dziś

@@ -1046,7 +1046,8 @@
       const profileDays = st.attributes.profiles_days || 0;
 
       const tuning = st.attributes.tuning || null;
-      const key = JSON.stringify({ d: days, c: confidence, m: mape, h: historyDays, p: profileDays, t: tuning });
+      const ebt = st.attributes.error_by_type || null;
+      const key = JSON.stringify({ e: ebt, d: days, c: confidence, m: mape, h: historyDays, p: profileDays, t: tuning });
       if (this._lastLoadConsKey === key) return;
       this._lastLoadConsKey = key;
 
@@ -1068,6 +1069,15 @@
           const acc = 100 - mape;
           const dotColor = acc >= 85 ? '#10b981' : acc >= 70 ? '#fbbf24' : '#f43f5e';
           parts.push(`<span class="stat"><span class="dot" style="background:${dotColor}"></span>Dokładność: <b>${acc.toFixed(0)}%</b></span>`);
+        }
+        if (ebt) {
+          const f = (o, nm) => {
+            if (!o || !o.n || o.n < 3) return '';
+            const b = o.bias_pct, warn = Math.abs(b) >= 10;
+            const txt = `${nm}: błąd <b>${o.mape.toFixed(0)}%</b>` + (warn ? ` (${b < 0 ? 'zawyżone' : 'zaniżone'} o ${Math.abs(b).toFixed(0)}%)` : '');
+            return `<span class="stat"${warn ? ' style="color:#fbbf24"' : ''}>${txt}</span>`;
+          };
+          parts.push(f(ebt.work, 'Dni robocze') + f(ebt.off, 'Dni wolne'));
         }
         if (historyDays > 0) parts.push(`<span class="stat">Historia: <b>${historyDays} dni</b></span>`);
         if (profileDays >= 3) parts.push(`<span class="stat">Profil godzinowy: <b>${profileDays} dni</b></span>`);
