@@ -88,7 +88,15 @@
     if (DG_ST.ready && !DG_ST.err) return '<div class="dg-muted" style="margin:6px 2px;">☁ Zapisuję w Home Assistant…</div>';
     return `<div class="dg-alarm" style="margin:6px 0;">⚠ Dane Diagnostyki są teraz tylko w tej przeglądarce${DG_ST.err ? ' — ' + dgEsc(DG_ST.err) : ''}. Dziennik i kopie nie przetrwają czyszczenia danych witryny; próbuję ponownie automatycznie.</div>`;
   }
-  const SKINS_LABEL = { classic: 'Klasyczny', m3: 'Material 3' };
+  const SKINS_LABEL = { classic: 'Klasyczny', m3: 'Material 3', glass: 'Szkło', matrix: 'Matryca', space: 'Przestrzeń', comfort: 'Komfort' };
+  const SKINS_SUB = {
+    classic: 'dotychczasowy wygląd (domyślny)',
+    m3: 'Material Design 3: tonalne karty, pigułkowa nawigacja',
+    glass: 'półprzezroczyste, rozmyte karty na kolorowym tle, pływający szklany pasek zakładek',
+    matrix: 'czerń lub papier, kwadratowe „piksele” zamiast linii, bursztynowy akcent, etykiety w czcionce monospace',
+    space: 'duże szklane okno na tle zmierzchu; na szerokim ekranie pionowy pasek zakładek z boku',
+    comfort: 'duży nagłówek, bardzo zaokrąglone płaskie karty, niebieski akcent, płaski dolny pasek',
+  };
   const dgEsc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   const dgSleep = (ms) => new Promise(r => setTimeout(r, ms));
 
@@ -1592,7 +1600,8 @@
       const cur = this._resolveSkin();
       const opt = (k, sub) => `<button class="dg-skin ${cur === k ? 'on' : ''}" data-act="skin" data-skin="${k}" aria-pressed="${cur === k}"><b>${dgEsc(SKINS_LABEL[k])}</b><span>${sub}</span></button>`;
       return `<div class="dg-card"><h4>Styl wyglądu panelu</h4><div class="sub">Zmienia kolory, zaokrąglenia i dolny pasek zakładek. Układ i dane zostają takie same. Jasny / ciemny motyw przełączasz w nagłówku panelu — styl działa z oboma. Wybór jest zapamiętany w tej przeglądarce (każde urządzenie ma własny).</div>
-        <div class="dg-skins">${opt('classic', 'dotychczasowy wygląd')}${opt('m3', 'Material Design 3: tonalne karty, pigułkowa nawigacja')}</div></div>`;
+        <div class="dg-skins">${Object.keys(SKINS_LABEL).map(k => opt(k, SKINS_SUB[k])).join('')}</div>
+        <div class="sub" style="margin-top:10px;">Style „Szkło”, „Matryca”, „Przestrzeń” i „Komfort” to własne projekty inspirowane znanymi kierunkami wizualnymi — nie kopie cudzych interfejsów. Na ekranie głównym mają własny układ; w kartach Plan i Ustawienia zmieniają kolory, zaokrąglenia i pasek zakładek.</div></div>`;
     },
     _dgSec_adv() {
       const ov = DG_LS.get('bms_diag_prefix', '');

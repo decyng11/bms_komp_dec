@@ -105,7 +105,8 @@
   // Działa niezależnie od motywu jasny/ciemny. To wyłącznie warstwa stylów (zmienne i wygląd komponentów) — układ i dane
   // są te same, więc wyłączenie stylu przywraca dokładnie dotychczasowy wygląd.
   const SKIN_KEY = 'bms_panel_skin';
-  const SKINS = { classic: 'Klasyczny', m3: 'Material 3' };
+  const SKINS = { classic: 'Klasyczny', m3: 'Material 3', glass: 'Szkło', matrix: 'Matryca', space: 'Przestrzeń', comfort: 'Komfort' };
+  const SKIN_HOME = { glass: 1, matrix: 1, space: 1, comfort: 1 };   // style z własnym ekranem głównym (_drawSkinHome)
   const SKIN_M3 = `
     :host([data-skin="m3"]) { --bg:#f4fbf8; --card:#e8f1ed; --surface:rgba(23,29,27,0.06); --line:rgba(111,121,117,0.22); --text:#171d1b; --text2:#3f4945; --muted:#566360; --muted2:#6f7975; --accent:#0b6b5d; --green:#1b6c2e; --orange:#8a5a00; --red:#ba1a1a; --input-bg:#f4fbf8; --seg-bg:#dde8e4; --seg-active:#bdf0e3; --shadow:0 1px 2px rgba(0,0,0,0.10),0 1px 3px 1px rgba(0,0,0,0.06); --pf-bg:#e8f1ed; --tonal:#d4e8e1; --on-tonal:#0e201c; --tert:#e1dcff; --on-tert:#1d1a47; --tab-on:#bdf0e3; --tab-on-fg:#00201b; --tab-off:#3f4945; --tab-bg:#e3ede9; --tab-line:transparent; --m3-pv:#c98a00; --m3-pvc:#ffe3a0; --m3-pvt:#6d4b00; --m3-grid:#0a7ea8; --m3-gridc:#c2e8ff; --m3-gridt:#004c69; --m3-sell:#7a55c2; --m3-sellc:#e9deff; --m3-sellt:#3b2470; --m3-batt:#0b6b5d; --m3-idle:#d5dfdb; color-scheme: light; }
     :host([data-skin="m3"][data-theme="dark"]) { --bg:#0f1513; --card:#1a201e; --surface:rgba(255,255,255,0.06); --line:rgba(255,255,255,0.10); --text:#dee4e0; --text2:#bfc9c4; --muted:#9aa5a0; --muted2:#89938f; --accent:#7fd8c6; --green:#8fd99b; --orange:#f3c04f; --red:#ffb4ab; --input-bg:#222826; --seg-bg:#262b29; --seg-active:#005046; --shadow:none; --pf-bg:#1a201e; --tonal:#33433e; --on-tonal:#d4e8e1; --tert:#42407a; --on-tert:#e1dcff; --tab-on:#005046; --tab-on-fg:#bdf0e3; --tab-off:#bfc9c4; --tab-bg:#1b211f; --m3-pv:#f3c04f; --m3-pvc:#5a4300; --m3-pvt:#ffe3a0; --m3-grid:#7bd0f6; --m3-gridc:#004d67; --m3-gridt:#c2e8ff; --m3-sell:#cfbcff; --m3-sellc:#4a3c80; --m3-sellt:#e9deff; --m3-batt:#7fd8c6; --m3-idle:#2a302e; color-scheme: dark; }
@@ -173,6 +174,188 @@
     :host([data-skin="m3"]) .dg-pill.on { background: var(--seg-active); border-color: transparent; color: var(--text); }
     :host([data-skin="m3"]) .dg-tile { border-radius: 16px; }
   `;
+
+  // Kwadratowe „piksele” stylu Matryca (siatka 5×7) — własny zestaw znaków potrzebnych na ekranie głównym (cyfry, jednostki, znaki).
+  const SK_GLYPHS = {
+    A:'01110,10001,10001,11111,10001,10001,10001', B:'11110,10001,10001,11110,10001,10001,11110', C:'01110,10001,10000,10000,10000,10001,01110',
+    D:'11110,10001,10001,10001,10001,10001,11110', E:'11111,10000,10000,11110,10000,10000,11111', G:'01110,10001,10000,10111,10001,10001,01111',
+    H:'10001,10001,10001,11111,10001,10001,10001', K:'10001,10010,10100,11000,10100,10010,10001', L:'10000,10000,10000,10000,10000,10000,11111',
+    M:'10001,11011,10101,10101,10001,10001,10001', N:'10001,11001,10101,10011,10001,10001,10001', O:'01110,10001,10001,10001,10001,10001,01110',
+    P:'11110,10001,10001,11110,10000,10000,10000', R:'11110,10001,10001,11110,10100,10010,10001', S:'01111,10000,10000,01110,00001,00001,11110',
+    T:'11111,00100,00100,00100,00100,00100,00100', U:'10001,10001,10001,10001,10001,10001,01110', V:'10001,10001,10001,10001,10001,01010,00100',
+    W:'10001,10001,10001,10101,10101,11011,10001', Z:'11111,00001,00010,00100,01000,10000,11111', 'Ł':'10000,10000,10100,11000,10000,10000,11111',
+    '0':'01110,10001,10011,10101,11001,10001,01110', '1':'00100,01100,00100,00100,00100,00100,01110', '2':'01110,10001,00001,00010,00100,01000,11111',
+    '3':'11110,00001,00001,01110,00001,00001,11110', '4':'00010,00110,01010,10010,11111,00010,00010', '5':'11111,10000,11110,00001,00001,10001,01110',
+    '6':'00110,01000,10000,11110,10001,10001,01110', '7':'11111,00001,00010,00100,01000,01000,01000', '8':'01110,10001,10001,01110,10001,10001,01110',
+    '9':'01110,10001,10001,01111,00001,00010,01100', '%':'11001,11010,00010,00100,01000,01011,10011', '.':'00000,00000,00000,00000,00000,01100,01100',
+    ',':'00000,00000,00000,00000,01100,00100,01000', ':':'00000,01100,01100,00000,01100,01100,00000', '+':'00000,00100,00100,11111,00100,00100,00000',
+    '-':'00000,00000,00000,11111,00000,00000,00000', '−':'00000,00000,00000,11111,00000,00000,00000', '/':'00001,00010,00010,00100,01000,01000,10000',
+    ' ':'00000,00000,00000,00000,00000,00000,00000',
+  };
+  // Ikony (siatka 24×24) do schematu przepływu: pełne (Szkło, Przestrzeń, Komfort) i konturowe (Matryca) — własne rysunki.
+  const SK_ICO = {
+    pv: '<circle cx="12" cy="12" r="4.4"/><path d="M11 1h2v3.5h-2zM11 19.5h2V23h-2zM1 11h3.5v2H1zM19.5 11H23v2h-3.5zM4.2 5.6l1.4-1.4 2.5 2.5-1.4 1.4zM17.9 17.3l1.4-1.4 2.5 2.5-1.4 1.4zM3.6 18.4l2.5-2.5 1.4 1.4-2.5 2.5zM16.5 6.7l2.5-2.5 1.4 1.4-2.5 2.5z"/>',
+    home: '<path d="M12 3 2 12h3v8h5.5v-5.5h3V20H19v-8h3z"/>',
+    batt: '<path d="M9 2h6v2h2a1 1 0 0 1 1 1v16a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1h2zM8 11v9h8v-9z"/>',
+    grid: '<path d="M16 7V3h-2v4h-4V3H8v4H6v7.5L9.5 18v3h5v-3l3.5-3.5V7z"/>',
+  };
+  const SK_ICO_LINE = {
+    pv: '<circle cx="12" cy="12" r="4"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M5 5l2 2M17 17l2 2M5 19l2-2M17 7l2-2"/>',
+    home: '<path d="M3 11 12 3l9 8M5 9v11h14V9"/>',
+    batt: '<rect x="7" y="4" width="10" height="17" rx="2"/><path d="M10 2h4M10 14l2-4 2 4"/>',
+    grid: '<path d="M9 3v5M15 3v5M7 8h10v4a5 5 0 0 1-10 0zM12 17v4"/>',
+  };
+
+  // ---------- kolejne style: Szkło, Matryca, Przestrzeń, Komfort (własne projekty, inspirowane znanymi kierunkami wizualnymi) ----------
+  // Każdy styl to zmienne kolorów + wygląd komponentów (jak Material 3) i własny ekran główny (_drawSkinHome). Znak „&” w CSS = selektor hosta stylu,
+  // „&D” = ten sam styl w ciemnym motywie. Domyślnym pozostaje „Klasyczny”.
+  const mkSkin = (n, css) => css.replace(/&D/g, `:host([data-skin="${n}"][data-theme="dark"])`).replace(/&/g, `:host([data-skin="${n}"])`);
+  const SK_ALL = ['glass', 'matrix', 'space', 'comfort'];
+  const skSel = (s) => SK_ALL.map((n) => `:host([data-skin="${n}"]) ${s}`).join(', ');
+  const SKIN_COMMON = `
+    ${skSel('.chart-card.nodes-card')} { background: transparent; box-shadow: none; padding: 0; border: none; border-radius: 0; overflow: visible; backdrop-filter: none; container: sk / inline-size; }
+    ${skSel('.sk-home')} { display: grid; gap: 12px; grid-template-columns: minmax(0, 1fr); }
+    ${skSel('.sk-hero')} { display: flex; gap: 16px; align-items: center; padding: 14px 18px; min-width: 0; }
+    ${skSel('.sk-ring')} { flex: none; width: 120px; height: 120px; }
+    ${skSel('.sk-htx')} { flex: 1; min-width: 0; }
+    ${skSel('.sk-lbl')} { font-size: 12px; font-weight: 600; letter-spacing: .6px; text-transform: uppercase; color: var(--muted); }
+    ${skSel('.sk-big')} { font-size: 26px; font-weight: 600; letter-spacing: -.5px; margin: 2px 0 4px; white-space: nowrap; }
+    ${skSel('.sk-sub')} { font-size: 13px; color: var(--muted); line-height: 1.5; }
+    ${skSel('.sk-note')} { font-size: 11.5px; color: var(--muted); margin-top: 6px; }
+    ${skSel('.sk-ct')} { display: flex; justify-content: space-between; align-items: baseline; font-size: 15px; font-weight: 600; }
+    ${skSel('.sk-ct small')} { font-size: 12px; font-weight: 500; color: var(--muted); }
+    ${skSel('.sk-flow')} { padding: 12px 16px 6px; }
+    ${skSel('.sk-flow svg')} { width: 100%; height: auto; display: block; }
+    ${skSel('.sk-kpis')} { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+    ${skSel('.sk-kpi')} { padding: 11px 14px; min-width: 0; }
+    ${skSel('.sk-kpi .l')} { font-size: 11px; font-weight: 600; letter-spacing: .5px; text-transform: uppercase; color: var(--muted); }
+    ${skSel('.sk-kpi .v')} { font-size: 20px; font-weight: 600; letter-spacing: -.3px; margin-top: 3px; white-space: nowrap; }
+    ${skSel('.sk-kpi .s')} { font-size: 11.5px; color: var(--muted); margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    ${skSel('.sk-strip-card')} { padding: 12px 16px 10px; }
+    ${skSel('.sk-strip')} { display: flex; gap: 2.5px; height: 26px; margin-top: 10px; }
+    ${skSel('.sk-strip i')} { flex: 1; border-radius: 7px; }
+    ${skSel('.sk-strip i.now')} { outline: 2px solid var(--text); outline-offset: 1px; }
+    ${skSel('.sk-ax')} { display: flex; justify-content: space-between; font-size: 10.5px; color: var(--muted); margin-top: 5px; }
+    ${skSel('.sk-leg')} { display: flex; flex-wrap: wrap; gap: 4px 12px; font-size: 11.5px; color: var(--muted); margin-top: 8px; }
+    ${skSel('.sk-leg b')} { display: inline-block; width: 9px; height: 9px; border-radius: 3px; margin-right: 5px; vertical-align: -1px; }
+    ${skSel('.sk-dots')} { display: block; max-width: 100%; }
+    @container sk (min-width: 640px) {
+      ${skSel('.sk-home')} { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); grid-template-areas: "hero flow" "kpis strip"; }
+      ${skSel('.sk-hero')} { grid-area: hero; } ${skSel('.sk-flow')} { grid-area: flow; } ${skSel('.sk-kpis')} { grid-area: kpis; } ${skSel('.sk-strip-card')} { grid-area: strip; }
+    }
+  `;
+
+  // „Szkło”: półprzezroczyste, rozmyte karty na kolorowym tle, pływający szklany pasek zakładek
+  const SKIN_GLASS = mkSkin('glass', `
+    & { --bg:#eef2fb; --card:rgba(255,255,255,0.55); --surface:rgba(255,255,255,0.5); --line:rgba(255,255,255,0.85); --text:#0f1115; --text2:rgba(15,17,21,0.78); --muted:rgba(15,17,21,0.58); --muted2:rgba(15,17,21,0.44); --accent:#0a7aff; --green:#12a85c; --orange:#e07f00; --red:#e5484d; --input-bg:rgba(255,255,255,0.7); --seg-bg:rgba(20,30,60,0.08); --seg-active:rgba(255,255,255,0.95); --shadow:none; --pf-bg:rgba(255,255,255,0.5); --tab-on:#fff; --tab-on-fg:#0a7aff; --tab-off:rgba(15,17,21,0.66); --tab-bg:rgba(255,255,255,0.62); --tab-line:rgba(255,255,255,0.95); --sk-glass:linear-gradient(145deg,rgba(255,255,255,0.78),rgba(255,255,255,0.42)); --sk-hi:rgba(255,255,255,0.9); --sk-sh:0 10px 28px rgba(60,80,140,0.16); --sk-pv:#f59e0b; --sk-grid:#0aa5d6; --sk-sell:#7c4dff; --sk-batt:#14b866; --sk-idle:rgba(20,30,60,0.12); --sk-ring1:#3ed99a; --sk-ring2:#0f9f68; color-scheme: light;
+      background: radial-gradient(70% 30% at 12% 6%,#9ec5ff 0,transparent 70%), radial-gradient(55% 26% at 95% 24%,#e0b8ff 0,transparent 70%), radial-gradient(70% 30% at 15% 62%,#a8f0d4 0,transparent 72%), radial-gradient(60% 28% at 95% 94%,#ffd1a3 0,transparent 70%), #eef2fb; }
+    &D { --bg:#0a0f1f; --card:rgba(255,255,255,0.10); --surface:rgba(255,255,255,0.08); --line:rgba(255,255,255,0.20); --text:#fff; --text2:rgba(255,255,255,0.84); --muted:rgba(255,255,255,0.62); --muted2:rgba(255,255,255,0.5); --accent:#4d9bff; --green:#35e08a; --orange:#ffa94d; --red:#ff6b6b; --input-bg:rgba(255,255,255,0.12); --seg-bg:rgba(255,255,255,0.12); --seg-active:rgba(255,255,255,0.26); --pf-bg:rgba(255,255,255,0.08); --tab-on:rgba(255,255,255,0.26); --tab-on-fg:#fff; --tab-off:rgba(255,255,255,0.74); --tab-bg:rgba(255,255,255,0.14); --tab-line:rgba(255,255,255,0.28); --sk-glass:linear-gradient(145deg,rgba(255,255,255,0.20),rgba(255,255,255,0.07)); --sk-hi:rgba(255,255,255,0.34); --sk-sh:0 12px 32px rgba(0,0,0,0.32); --sk-pv:#ffd166; --sk-grid:#4fd8ff; --sk-sell:#b98aff; --sk-batt:#35e08a; --sk-idle:rgba(255,255,255,0.16); --sk-ring1:#9affd0; --sk-ring2:#2fd596; color-scheme: dark;
+      background: radial-gradient(70% 30% at 12% 6%,#3556e0 0,transparent 70%), radial-gradient(55% 26% at 95% 24%,#a33bd0 0,transparent 70%), radial-gradient(70% 30% at 15% 62%,#0a9e76 0,transparent 72%), radial-gradient(60% 28% at 95% 94%,#e8590c 0,transparent 70%), #0a0f1f; }
+    & .chart-card, & .soc-card, & .pf-wrapper, & .weather-tile, & .ds-item, & .btn, & .sk-card, & .sk-kpi, & .dg-card, & .why-box, & .suggest-item { background: var(--sk-glass); border: 1px solid var(--line); backdrop-filter: blur(24px) saturate(180%); -webkit-backdrop-filter: blur(24px) saturate(180%); box-shadow: inset 0 1.5px 0 var(--sk-hi), var(--sk-sh); color: var(--text); }
+    & .chart-card, & .soc-card, & .pf-wrapper, & .sk-card, & .dg-card { border-radius: 28px; }
+    & .btn, & .ds-item, & .sk-kpi, & .suggest-item, & .why-box { border-radius: 22px; }
+    & .weather-tile { border-radius: 20px; }
+    & .row { background: var(--card); }
+    & .header .title { font-weight: 700; }
+    & .bell, & .theme-seg { background: var(--sk-glass); border: 1px solid var(--line); backdrop-filter: blur(20px); box-shadow: inset 0 1px 0 var(--sk-hi); }
+    & .tabs.bottom { border-radius: 34px; padding: 6px; background: var(--sk-glass); border: 1px solid var(--tab-line); backdrop-filter: blur(28px) saturate(190%); -webkit-backdrop-filter: blur(28px) saturate(190%); box-shadow: inset 0 1.5px 0 var(--sk-hi), 0 14px 34px rgba(0,0,0,0.26); }
+    & .tabs.bottom::before { display: none; }
+    & .tabs.bottom .tab { border-radius: 28px; }
+    & .tabs.bottom .tab.active { background: var(--tab-on); color: var(--tab-on-fg); box-shadow: inset 0 1px 0 var(--sk-hi), 0 2px 10px rgba(0,0,0,0.14); }
+    & select, & input[type="time"], & input[type="number"] { border-radius: 14px; background: var(--input-bg); border: 1px solid var(--line); }
+    & .sk-strip i { border-radius: 8px; }
+    & .sk-hero { background-image: radial-gradient(120% 90% at 0% 0%, rgba(255,255,255,0.22), transparent 55%), var(--sk-glass); }
+  `);
+
+  // „Matryca”: czerń lub papier, kwadratowe „piksele” zamiast gładkich linii, bursztynowy akcent, czcionka monospace
+  const SKIN_MATRIX = mkSkin('matrix', `
+    & { --bg:#f1f0eb; --card:#fbfbf8; --surface:#f6f5f0; --line:#d3d1c8; --text:#0c0c0c; --text2:#2a2a2a; --muted:#6b6a64; --muted2:#8d8c85; --accent:#d45a00; --green:#1c7c3c; --orange:#b86a00; --red:#c4302b; --input-bg:#fbfbf8; --seg-bg:#e6e4dc; --seg-active:#dcd9cf; --shadow:none; --pf-bg:#fbfbf8; --tab-on:#0c0c0c; --tab-on-fg:#f1f0eb; --tab-off:#55544e; --tab-bg:#fbfbf8; --tab-line:#d3d1c8; --sk-on:#0c0c0c; --sk-off:#d3d1c8; --sk-acc:#d45a00; color-scheme: light; }
+    &D { --bg:#050505; --card:#0f0f0f; --surface:#141414; --line:#2a2a28; --text:#f2f2ef; --text2:#cfcfca; --muted:#8c8c86; --muted2:#6a6a66; --accent:#ffb000; --green:#7ee08a; --orange:#ffb000; --red:#ff6a5a; --input-bg:#141414; --seg-bg:#1a1a18; --seg-active:#2a2a27; --pf-bg:#0f0f0f; --tab-on:#f2f2ef; --tab-on-fg:#050505; --tab-off:#8c8c86; --tab-bg:#0a0a0a; --tab-line:#2a2a28; --sk-on:#f2f2ef; --sk-off:#2e2e2b; --sk-acc:#ffb000; color-scheme: dark; }
+    & .date, & .section-title, & .sk-home, & .tabs, & .btn, & .badge, & .why-box, & .status-banner { font-family: "DejaVu Sans Mono", "JetBrains Mono", "SF Mono", Menlo, Consolas, monospace; }
+    & .chart-card, & .soc-card, & .pf-wrapper, & .sk-card, & .dg-card { background: var(--card); border: 1px solid var(--line); border-radius: 22px; box-shadow: none; }
+    & .weather-tile, & .ds-item, & .sk-kpi, & .suggest-item, & .why-box { background: var(--card); border: 1px solid var(--line); border-radius: 16px; box-shadow: none; }
+    & .sk-kpis { gap: 0; border: 1px solid var(--line); border-radius: 18px; background: var(--card); overflow: hidden; }
+    & .sk-kpi { border: none; border-radius: 0; background: transparent; }
+    & .sk-kpi + .sk-kpi { border-left: 1px dotted var(--line); }
+    & .btn { background: transparent; border: 1px solid var(--line); border-radius: 14px; box-shadow: none; text-transform: uppercase; letter-spacing: .5px; font-size: 12px; }
+    & .btn.active { border-color: var(--accent); color: var(--accent); }
+    & .row { background: var(--card); border-bottom: 1px dotted var(--line); }
+    & .header .title { font-weight: 700; }
+    & .date, & .section-title, & .sk-lbl, & .sk-kpi .l, & .sk-note, & .sk-ax, & .sk-leg { text-transform: uppercase; letter-spacing: .8px; }
+    & .section-title { font-size: 11.5px; }
+    & .bell, & .theme-seg { background: transparent; border: 1px solid var(--line); }
+    & .theme-seg button.active, & .tab.active { background: var(--seg-active); color: var(--accent); box-shadow: none; }
+    & .tabs { border-radius: 14px; background: var(--seg-bg); }
+    & .tabs.bottom { background: var(--tab-bg); border: 1px solid var(--tab-line); border-radius: 18px; box-shadow: none; }
+    & .tabs.bottom::before { display: none; }
+    & .tabs.bottom .tab { border-radius: 12px; text-transform: uppercase; letter-spacing: .5px; }
+    & .tabs.bottom .tab.active { background: transparent; color: var(--text); }
+    & .tabs.bottom .tab.active::before { content: ''; position: absolute; top: 1px; left: 50%; width: 5px; height: 5px; margin-left: -2px; border-radius: 1px; background: var(--accent); }
+    & select, & input[type="time"], & input[type="number"] { border-radius: 10px; background: var(--input-bg); border: 1px solid var(--line); font-family: inherit; }
+    & .toggle-switch, & .sw { accent-color: var(--accent); }
+    & .sk-strip i { border-radius: 2px; }
+    & .sk-big { font-size: 22px; }
+    & .sk-ct { text-transform: uppercase; letter-spacing: .8px; font-size: 12px; }
+  `);
+
+  // „Przestrzeń”: duże szklane okno na tle zmierzchu; na szerokim ekranie pionowy pasek zakładek z boku (rozwija się po najechaniu)
+  const SKIN_SPACE = mkSkin('space', `
+    & { --bg:#cfd9f1; --card:rgba(255,255,255,0.52); --surface:rgba(255,255,255,0.45); --line:rgba(255,255,255,0.78); --text:#12141c; --text2:rgba(18,20,28,0.8); --muted:rgba(18,20,28,0.6); --muted2:rgba(18,20,28,0.46); --accent:#2b6bff; --green:#12a85c; --orange:#d97800; --red:#d9383e; --input-bg:rgba(255,255,255,0.7); --seg-bg:rgba(30,40,80,0.10); --seg-active:rgba(255,255,255,0.9); --shadow:none; --pf-bg:rgba(255,255,255,0.45); --tab-on:rgba(30,40,80,0.16); --tab-on-fg:#12141c; --tab-off:rgba(18,20,28,0.68); --tab-bg:rgba(255,255,255,0.55); --tab-line:rgba(255,255,255,0.85); --sk-win:linear-gradient(160deg,rgba(255,255,255,0.62),rgba(255,255,255,0.38)); --sk-glass:rgba(255,255,255,0.55); --sk-hi:rgba(255,255,255,0.9); --sk-pv:#f59e0b; --sk-grid:#0aa5d6; --sk-sell:#7c4dff; --sk-batt:#14b866; --sk-idle:rgba(30,40,80,0.14); --sk-ring1:#3ed99a; --sk-ring2:#0f9f68; color-scheme: light;
+      background: radial-gradient(circle at 80% 78%, rgba(255,236,190,0.7) 0, transparent 24%), linear-gradient(180deg,#9fc3ee 0%,#d8c9ee 46%,#ffd2b0 78%,#ffe6c8 100%); padding: 14px; }
+    &D { --bg:#16213f; --card:rgba(255,255,255,0.09); --surface:rgba(255,255,255,0.07); --line:rgba(255,255,255,0.16); --text:#fff; --text2:rgba(255,255,255,0.86); --muted:rgba(255,255,255,0.64); --muted2:rgba(255,255,255,0.5); --accent:#7eb0ff; --green:#43e89a; --orange:#ffb454; --red:#ff7a7a; --input-bg:rgba(255,255,255,0.12); --seg-bg:rgba(255,255,255,0.12); --seg-active:rgba(255,255,255,0.28); --pf-bg:rgba(255,255,255,0.07); --tab-on:rgba(255,255,255,0.22); --tab-on-fg:#fff; --tab-off:rgba(255,255,255,0.76); --tab-bg:rgba(60,66,84,0.6); --tab-line:rgba(255,255,255,0.2); --sk-win:linear-gradient(160deg,rgba(80,86,104,0.55),rgba(38,42,56,0.62)); --sk-glass:rgba(255,255,255,0.09); --sk-hi:rgba(255,255,255,0.18); --sk-pv:#ffd166; --sk-grid:#4fd8ff; --sk-sell:#b98aff; --sk-batt:#43e89a; --sk-idle:rgba(255,255,255,0.16); --sk-ring1:#9affd0; --sk-ring2:#2fd596; color-scheme: dark;
+      background: radial-gradient(circle at 80% 78%, rgba(255,217,160,0.38) 0, transparent 24%), linear-gradient(180deg,#16213f 0%,#4a4079 42%,#c76b6a 76%,#f2ad6a 100%); }
+    & .app { background: var(--sk-win); border: 1px solid var(--line); border-radius: 40px; padding: 22px 24px; box-shadow: inset 0 1.5px 0 var(--sk-hi), 0 30px 70px rgba(0,0,0,0.35); backdrop-filter: blur(40px) saturate(150%); -webkit-backdrop-filter: blur(40px) saturate(150%); }
+    & .chart-card, & .soc-card, & .pf-wrapper, & .sk-card, & .dg-card { background: var(--sk-glass); border: 1px solid var(--line); border-radius: 30px; box-shadow: inset 0 1px 0 var(--sk-hi), 0 8px 22px rgba(0,0,0,0.16); }
+    & .weather-tile, & .ds-item, & .sk-kpi, & .suggest-item, & .why-box, & .btn { background: var(--sk-glass); border: 1px solid var(--line); border-radius: 24px; box-shadow: inset 0 1px 0 var(--sk-hi); }
+    & .row { background: var(--card); }
+    & .header .title { font-weight: 700; }
+    & .bell, & .theme-seg { background: var(--sk-glass); border: 1px solid var(--line); }
+    & .tabs.bottom { border-radius: 34px; padding: 6px; background: var(--tab-bg); border: 1px solid var(--tab-line); backdrop-filter: blur(30px); -webkit-backdrop-filter: blur(30px); box-shadow: inset 0 1px 0 var(--sk-hi), 0 14px 34px rgba(0,0,0,0.3); }
+    & .tabs.bottom::before { display: none; }
+    & .tabs.bottom .tab { border-radius: 26px; }
+    & .tabs.bottom .tab.active { background: var(--tab-on); color: var(--tab-on-fg); box-shadow: inset 0 1px 0 var(--sk-hi); }
+    & select, & input[type="time"], & input[type="number"] { border-radius: 14px; background: var(--input-bg); border: 1px solid var(--line); }
+    & .sk-strip i { border-radius: 8px; }
+    @media (max-width: 719px) { & .app { padding: 14px; border-radius: 30px; } }
+    @media (min-width: 720px) {
+      & .app { display: grid; grid-template-columns: 68px minmax(0, 1fr); column-gap: 18px; align-items: start; }
+      & .app > * { grid-column: 2; min-width: 0; }
+      & .app > .tabs.bottom { grid-column: 1; grid-row: 1 / span 40; align-self: start; position: sticky; top: 16px; bottom: auto; flex-direction: column; width: 68px; max-width: none; margin: 0; padding: 8px; gap: 6px; overflow: hidden; z-index: 40; transition: width .25s ease; }
+      & .app > .tabs.bottom .tab { flex: 0 0 auto; flex-direction: row; justify-content: flex-start; gap: 12px; padding: 11px 12px; width: 100%; }
+      & .app > .tabs.bottom .tab .tl { display: none; }
+      & .app > .tabs.bottom:hover, & .app > .tabs.bottom:focus-within { width: 192px; }
+      & .app > .tabs.bottom:hover .tab .tl, & .app > .tabs.bottom:focus-within .tab .tl { display: inline; }
+    }
+  `);
+
+  // „Komfort”: duży nagłówek, bardzo zaokrąglone płaskie karty, niebieski akcent, płaski dolny pasek z pigułką pod ikoną
+  const SKIN_COMFORT = mkSkin('comfort', `
+    & { --bg:#f2f3f6; --card:#fff; --surface:#fff; --line:rgba(20,22,26,0.09); --text:#14161a; --text2:#3a3f48; --muted:#6a707c; --muted2:#8b919c; --accent:#2f6df6; --green:#1fa463; --orange:#f08c00; --red:#e03e45; --input-bg:#e9ebf0; --seg-bg:#e9ebf0; --seg-active:#fff; --shadow:none; --pf-bg:#fff; --tab-on:rgba(47,109,246,0.13); --tab-on-fg:#2f6df6; --tab-off:#6a707c; --tab-bg:#fff; --tab-line:transparent; --sk-pv:#f08c00; --sk-grid:#1496d6; --sk-sell:#7b5cf0; --sk-batt:#1fa463; --sk-idle:#dfe2e8; color-scheme: light; font-family: "Samsung Sans", "Roboto Flex", Roboto, "Segoe UI", system-ui, sans-serif; }
+    &D { --bg:#000; --card:#1c1d21; --surface:#1c1d21; --line:rgba(255,255,255,0.09); --text:#f3f4f6; --text2:#d4d7de; --muted:#9a9fab; --muted2:#7d828d; --accent:#5b9bff; --green:#3ddc8c; --orange:#ffb04a; --red:#ff6f74; --input-bg:#2a2c32; --seg-bg:#2a2c32; --seg-active:#3a3d45; --pf-bg:#1c1d21; --tab-on:rgba(91,155,255,0.2); --tab-on-fg:#7eb0ff; --tab-off:#9a9fab; --tab-bg:#121316; --sk-pv:#ffb04a; --sk-grid:#4cc3ff; --sk-sell:#a58bff; --sk-batt:#3ddc8c; --sk-idle:#33353c; color-scheme: dark; }
+    & .header { min-height: 92px; align-items: flex-end; padding: 22px 8px 6px; }
+    & .header .title .logo { height: 44px; }
+    & .date { font-size: 13.5px; }
+    & .chart-card, & .soc-card, & .pf-wrapper, & .sk-card, & .dg-card { background: var(--card); border: none; border-radius: 28px; box-shadow: none; }
+    & .weather-tile, & .ds-item, & .sk-kpi, & .suggest-item, & .why-box { background: var(--card); border: none; border-radius: 22px; box-shadow: none; }
+    & .btn, & .ds-item { background: var(--seg-bg); border: none; border-radius: 22px; box-shadow: none; }
+    & .btn.active { background: var(--tab-on); color: var(--tab-on-fg); }
+    & .row { background: var(--card); border-bottom: 1px solid var(--line); }
+    & .section-title { text-transform: none; font-size: 13.5px; font-weight: 600; letter-spacing: 0; color: var(--accent); padding-left: 10px; }
+    & .bell, & .theme-seg { background: var(--card); }
+    & .tabs { border-radius: 24px; }
+    & .tabs.bottom { border: none; border-radius: 26px 26px 0 0; box-shadow: 0 -1px 0 var(--line); padding: 9px 8px 8px; margin: 16px -14px -14px; width: auto; max-width: none; background: var(--tab-bg); }
+    & .tabs.bottom::before { display: none; }
+    & .tabs.bottom .tab { border-radius: 18px; gap: 4px; }
+    & .tabs.bottom .tab.active { background: transparent; color: var(--text); }
+    & .tabs.bottom .tab .ti { padding: 4px 22px; border-radius: 17px; transition: background .2s; }
+    & .tabs.bottom .tab.active .ti { background: var(--tab-on); color: var(--tab-on-fg); }
+    & .tabs.bottom .tab .tls { font-size: 11px; font-weight: 500; }
+    & .tabs.bottom .tab.active .tls { font-weight: 700; }
+    & select, & input[type="time"], & input[type="number"] { border-radius: 14px; background: var(--input-bg); border: none; }
+    & .toggle-switch, & .sw { accent-color: var(--accent); }
+    & .sk-flow { padding-bottom: 4px; }
+    & .sk-big { font-weight: 600; }
+  `);
 
   const STYLES = `
     :host { --bg:#000; --card:#1c1c1e; --surface:rgba(255,255,255,0.06); --line:rgba(255,255,255,0.10); --text:#fff; --text2:#e5e5ea; --muted:#8e8e93; --muted2:#6e6e73; --accent:#0a84ff; --green:#30d158; --orange:#ff9f0a; --red:#ff453a; --input-bg:#2c2c2e; --seg-bg:rgba(118,118,128,0.24); --seg-active:#636366; --shadow:none; --pf-bg:#1c1c1e; color-scheme: dark; }
@@ -2728,7 +2911,7 @@
 
     _renderShell() {
       const style = document.createElement('style');
-      style.textContent = STYLES + SKIN_M3;
+      style.textContent = STYLES + SKIN_M3 + SKIN_COMMON + SKIN_GLASS + SKIN_MATRIX + SKIN_SPACE + SKIN_COMFORT;
       this.shadowRoot.appendChild(style);
 
       const wrap = document.createElement('div');
@@ -4076,6 +4259,144 @@
       box.innerHTML = `<div class="m3-home">${hero}${flow}${kpis}${strip}</div>`;
     }
 
+    // ---------- wspólny ekran główny stylów Szkło / Matryca / Przestrzeń / Komfort ----------
+    // Dane jak w stylu Material 3 (bateria z rezerwą i celem, przepływ mocy, zysk/PV/cena, plan 24 h); różni się tylko sposób rysowania.
+    _homeModel(o) {
+      const ra = this._rsAttrs(), pvA = this._pvAttrs(), TH = 20, soc = o.soc, flr = Number(ra.inverter_floor);
+      let cap = parseFloat(ra.capacity_kwh);
+      if (!(cap > 0)) { try { cap = parseFloat(localStorage.getItem('bms_panel_capacity')); } catch (e) { cap = NaN; } }
+      const rows = Array.isArray(pvA.table) ? pvA.table.filter(r => r && r.day) : [];
+      const todayK = this._todayKey(), nowH = new Date().getHours();
+      const endRow = rows.filter(r => r.day === todayK && r.h === 23).pop();
+      const tgt = endRow ? Number(endRow.soc) : NaN;
+      const profit = Number(this._st(this._eid('sensor', 'profit_today')));
+      const plan = rows.filter(r => r.day > todayK || (r.day === todayK && r.h >= nowH))
+        .sort((a, b) => (a.day === b.day ? a.h - b.h : (a.day < b.day ? -1 : 1))).slice(0, 24);
+      const hasFl = isFinite(flr) && flr > 0 && flr < 100, hasT = isFinite(tgt) && tgt > 0 && tgt <= 100;
+      let pace = '';
+      if (cap > 0) {
+        const usable = Math.max(0, cap * (soc - (hasFl ? flr : 20)) / 100);
+        if (o.batt > TH && soc < 99.5) pace = `pełna ok. ${this._fmtAt((100 - soc) / 100 * cap / (o.batt / 1000))}`;
+        else if (o.batt < -TH && usable > 0) pace = `do rezerwy ok. ${this._fmtAt(usable / (-o.batt / 1000))}`;
+      }
+      const battTxt = o.batt > TH ? `+${this._fmtW(o.batt)} ładowanie` : (o.batt < -TH ? `−${this._fmtW(-o.batt)} rozładowanie` : 'bateria w spoczynku');
+      return { o, TH, soc, flr, cap, tgt, profit, pb: Number(ra.price_buy), ps: Number(ra.price_sell), plan, hasFl, hasT, pace, battTxt, nowH,
+        act: { pv: o.pv > TH, home: o.load > TH, grid: Math.abs(o.grid) > TH, batt: Math.abs(o.batt) > TH } };
+    }
+    // tekst z kwadratowych pikseli (styl Matryca); zwraca gotowy <svg> oraz jego wymiary i same znaczniki
+    _skDots(text, cell, color) {
+      const ch = [...String(text).toUpperCase()], w = Math.max(1, ch.length * 6 * cell - cell), h = 7 * cell, s = cell * 0.72, off = (cell - s) / 2;
+      let d = '';
+      ch.forEach((c, i) => (SK_GLYPHS[c] || SK_GLYPHS[' ']).split(',').forEach((row, y) => {
+        for (let x = 0; x < row.length; x++) if (row[x] === '1') d += `<rect x="${((i * 6 + x) * cell + off).toFixed(2)}" y="${(y * cell + off).toFixed(2)}" width="${s.toFixed(2)}" height="${s.toFixed(2)}" rx="${(cell * 0.14).toFixed(2)}"/>`;
+      }));
+      return { w, h, d, svg: `<svg class="sk-dots" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" style="fill:${color}" role="img" aria-label="${bmsEsc(String(text))}">${d}</svg>` };
+    }
+    // pierścień naładowania: „flat” (Komfort), „grad” (Szkło, Przestrzeń) albo „matrix” (kwadratowe piksele)
+    _skRing(m, kind) {
+      const soc = Math.max(0, Math.min(100, m.soc)), cx = 60, cy = 60, rad = Math.PI / 180;
+      const at = (r, p) => [cx + r * Math.cos((p * 360 - 90) * rad), cy + r * Math.sin((p * 360 - 90) * rad)];
+      if (kind === 'matrix') {
+        const R = 51, N = 60; let s = '';
+        for (let i = 0; i < N; i++) {
+          const p = i / N, lit = p < soc / 100, [x, y] = at(R, p), z = lit ? 5.4 : 3.6;
+          s += `<rect x="${(x - z / 2).toFixed(1)}" y="${(y - z / 2).toFixed(1)}" width="${z}" height="${z}" rx="1" transform="rotate(${(p * 360).toFixed(1)} ${x.toFixed(1)} ${y.toFixed(1)})" style="fill:${lit ? 'var(--sk-on)' : 'var(--sk-off)'}"/>`;
+        }
+        if (m.hasFl) { const [x, y] = at(R, m.flr / 100); s += `<rect x="${(x - 4.5).toFixed(1)}" y="${(y - 4.5).toFixed(1)}" width="9" height="9" rx="1.5" transform="rotate(${(m.flr * 3.6).toFixed(1)} ${x.toFixed(1)} ${y.toFixed(1)})" fill="none" style="stroke:var(--sk-on)" stroke-width="1.4"/>`; }
+        if (m.hasT) { const [x, y] = at(R, m.tgt / 100); s += `<rect x="${(x - 4.5).toFixed(1)}" y="${(y - 4.5).toFixed(1)}" width="9" height="9" rx="1.5" transform="rotate(${(m.tgt * 3.6).toFixed(1)} ${x.toFixed(1)} ${y.toFixed(1)})" style="fill:var(--sk-acc)"/>`; }
+        const t = this._skDots(Math.round(soc) + '%', 4, 'var(--sk-on)');
+        return `<svg class="sk-ring" viewBox="0 0 120 120" role="img" aria-label="Poziom baterii ${Math.round(soc)}%">${s}<g transform="translate(${(cx - t.w / 2).toFixed(1)} ${(cy - t.h / 2).toFixed(1)})" style="fill:var(--sk-on)">${t.d}</g></svg>`;
+      }
+      const r = 46, c = 2 * Math.PI * r, grad = kind === 'grad', sw = grad ? 15 : 13;
+      let s = grad ? '<defs><linearGradient id="skrg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" style="stop-color:var(--sk-ring1)"/><stop offset="1" style="stop-color:var(--sk-ring2)"/></linearGradient></defs>' : '';
+      s += `<circle cx="${cx}" cy="${cy}" r="${r}" fill="none" style="stroke:var(--sk-idle)" stroke-width="${sw}"/>`;
+      s += `<circle cx="${cx}" cy="${cy}" r="${r}" fill="none" style="stroke:${grad ? 'url(#skrg)' : 'var(--sk-batt)'}" stroke-width="${sw}" stroke-linecap="round" stroke-dasharray="${(c * soc / 100).toFixed(1)} ${c.toFixed(1)}" transform="rotate(-90 ${cx} ${cy})"/>`;
+      if (m.hasFl) { const [x1, y1] = at(r - sw / 2 - 2, m.flr / 100), [x2, y2] = at(r + sw / 2 + 2, m.flr / 100); s += `<path d="M${x1.toFixed(1)} ${y1.toFixed(1)}L${x2.toFixed(1)} ${y2.toFixed(1)}" style="stroke:var(--text)" stroke-width="2.5" stroke-linecap="round" opacity=".85"/>`; }
+      if (m.hasT) { const [x, y] = at(r, m.tgt / 100); s += grad ? `<path d="M${x.toFixed(1)} ${(y - 6).toFixed(1)}l5 6-5 6-5-6z" style="fill:var(--text)"/>` : `<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="4.5" style="fill:var(--card);stroke:var(--text)" stroke-width="2"/>`; }
+      s += `<text x="${cx}" y="${cy + 10}" text-anchor="middle" font-weight="600" font-size="30" letter-spacing="-1" style="fill:var(--text);font-family:inherit">${Math.round(soc)}<tspan font-size="15" dy="-10">%</tspan></text>`;
+      return `<svg class="sk-ring" viewBox="0 0 120 120" role="img" aria-label="Poziom baterii ${Math.round(soc)}%">${s}</svg>`;
+    }
+    // schemat przepływu mocy: „sphere” (szklane kule), „tint” (kółka w odcieniu koloru, strzałki kierunku), „matrix” (kropkowane linie, konturowe ikony)
+    _skFlow(m, kind) {
+      const o = m.o, TH = m.TH, act = m.act, mx = kind === 'matrix';
+      const col = { pv: 'var(--sk-pv)', home: 'var(--accent)', grid: o.grid > 0 ? 'var(--red)' : 'var(--sk-grid)', batt: o.batt < 0 ? 'var(--orange)' : 'var(--sk-batt)' };
+      const P = { pv: [170, 28], grid: [50, 94], batt: [290, 94], home: [170, 130] }, hub = [170, 94];
+      // kierunek strzałki: pv → hub, grid → hub (import) lub hub → grid (eksport), hub → bateria (ładowanie) lub bateria → hub, hub → dom
+      const rev = { grid: o.grid < 0, batt: o.batt < 0 };
+      const seg = { pv: [170, 54, 170, 92], grid: [76, 94, 164, 94], batt: [176, 94, 264, 94], home: [170, 98, 170, 104] };
+      const ln = (k) => {
+        const [x1, y1, x2, y2] = seg[k];
+        if (!act[k]) return `<path d="M${x1} ${y1}L${x2} ${y2}" style="stroke:var(--sk-idle)" stroke-width="2.5" stroke-linecap="round"/>`;
+        if (mx) return `<path d="M${x1} ${y1}L${x2} ${y2}" style="stroke:${k === 'grid' && o.grid > 0 ? 'var(--sk-acc)' : 'var(--sk-on)'}" stroke-width="3.2" stroke-dasharray="3.2 4.8"/>`;
+        const glow = kind === 'sphere' ? `<path d="M${x1} ${y1}L${x2} ${y2}" style="stroke:${col[k]}" stroke-width="7" stroke-linecap="round" opacity=".35" filter="url(#skbl)"/>` : '';
+        const arrow = kind === 'tint' && k !== 'home' ? (() => { const mx2 = (x1 + x2) / 2, my2 = (y1 + y2) / 2, back = rev[k];
+          return k === 'pv' ? `<path d="M${mx2 - 4.5} ${my2 - 4}L${mx2} ${my2 + 4}L${mx2 + 4.5} ${my2 - 4}z" style="fill:${col[k]}"/>`
+            : `<path d="M${mx2 + (back ? 4 : -4)} ${my2 - 4.5}L${mx2 + (back ? -4 : 4)} ${my2}L${mx2 + (back ? 4 : -4)} ${my2 + 4.5}z" style="fill:${col[k]}"/>`; })() : '';
+        return `${glow}<path d="M${x1} ${y1}L${x2} ${y2}" style="stroke:${col[k]}" stroke-width="3.5" stroke-linecap="round"/>${arrow}`;
+      };
+      const node = (k) => {
+        const [x, y] = P[k], ico = mx ? SK_ICO_LINE[k] : SK_ICO[k], c = mx ? 'var(--sk-on)' : col[k];
+        if (mx) return `<circle cx="${x}" cy="${y}" r="19" fill="none" style="stroke:${act[k] ? 'var(--sk-on)' : 'var(--sk-off)'}" stroke-width="1.3"/><svg x="${x - 10}" y="${y - 10}" width="20" height="20" viewBox="0 0 24 24" fill="none" style="stroke:${c}" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">${ico}</svg>`;
+        const base = kind === 'tint'
+          ? `<circle cx="${x}" cy="${y}" r="25" style="fill:color-mix(in srgb, ${col[k]} 17%, transparent)"/>`
+          : `<circle cx="${x}" cy="${y}" r="26" style="fill:var(--sk-idle);stroke:var(--sk-hi)" stroke-width="1"/><circle cx="${x}" cy="${y}" r="26" fill="url(#skhl)"/>`;
+        return `${base}<svg x="${x - 11}" y="${y - 11}" width="22" height="22" viewBox="0 0 24 24" style="fill:${c}">${ico}</svg>`;
+      };
+      const tx = (x, y, v, sub, a) => `<text x="${x}" y="${y}" text-anchor="${a || 'middle'}" font-size="${mx ? 11.5 : 13}" font-weight="${mx ? 700 : 600}" style="fill:var(--text);font-family:inherit">${v}</text><text x="${x}" y="${y + 14}" text-anchor="${a || 'middle'}" font-size="${mx ? 8.5 : 10.5}" style="fill:var(--muted);font-family:inherit"${mx ? ' letter-spacing=".8"' : ''}>${mx ? sub.toUpperCase() : sub}</text>`;
+      const gSub = o.grid > TH ? 'import z sieci' : (o.grid < -TH ? 'eksport do sieci' : 'sieć');
+      const bSub = o.batt > TH ? 'ładowanie' : (o.batt < -TH ? 'rozładowanie' : 'spoczynek');
+      const bV = (o.batt > TH ? '+' : (o.batt < -TH ? '−' : '')) + this._fmtW(Math.abs(o.batt));
+      const defs = kind === 'sphere' ? '<defs><radialGradient id="skhl" cx=".3" cy=".2" r=".9"><stop offset="0" stop-color="#fff" stop-opacity=".5"/><stop offset=".6" stop-color="#fff" stop-opacity="0"/></radialGradient><filter id="skbl"><feGaussianBlur stdDeviation="3"/></filter></defs>' : '';
+      const dot = mx ? `<rect x="${hub[0] - 4.5}" y="${hub[1] - 4.5}" width="9" height="9" rx="1.5" style="fill:var(--sk-acc)"/>` : `<circle cx="${hub[0]}" cy="${hub[1]}" r="5" style="fill:var(--text)"/>`;
+      return `<svg viewBox="0 0 340 168" role="img" aria-label="Przepływ mocy">${defs}<g fill="none">${ln('pv')}${ln('grid')}${ln('batt')}${ln('home')}</g>${dot}${node('pv')}${node('grid')}${node('batt')}${node('home')}
+        ${tx(206, 24, this._fmtW(o.pv), 'produkcja PV', 'start')}${tx(50, 136, this._fmtW(Math.abs(o.grid)), gSub)}${tx(290, 136, bV, bSub)}${tx(206, 128, this._fmtW(o.load), 'dom', 'start')}</svg>`;
+    }
+    // pasek planu na 24 h: kolorowe słupki (Szkło, Przestrzeń, Komfort) albo kolumny pikseli wg planowanego SOC z markerami akcji (Matryca)
+    _skStrip(m, kind) {
+      const plan = m.plan; if (plan.length < 6) return '';
+      const ticks = [0, 6, 12, 18].filter(i => i < plan.length).map(i => `<span>${i === 0 ? 'teraz' : String(plan[i].h).padStart(2, '0') + ':00'}</span>`).join('');
+      const head = '<div class="sk-ct">Najbliższe 24 h<small>plan</small></div>';
+      if (kind === 'matrix') {
+        const W = 330, rows = 5, ch = 9, pw = W / plan.length, y0 = rows * ch + 12; let s = '';
+        plan.forEach((r, i) => {
+          const x = i * pw + pw / 2, lvl = isFinite(Number(r.soc)) ? Math.round(Math.max(0, Math.min(100, Number(r.soc))) / 100 * rows) : 0, z = pw * 0.62;
+          for (let k = 0; k < rows; k++) { const lit = k < lvl, zz = lit ? z : z * 0.6; s += `<rect x="${(x - zz / 2).toFixed(1)}" y="${((rows - 1 - k) * ch + ch / 2 - zz / 2).toFixed(1)}" width="${zz.toFixed(1)}" height="${zz.toFixed(1)}" rx="1" style="fill:${lit ? (i === 0 ? 'var(--sk-acc)' : 'var(--sk-on)') : 'var(--sk-off)'}"/>`; }
+          const a = r.action, mz = z * 0.9;
+          if (a === 'sell') s += `<rect x="${(x - mz / 2).toFixed(1)}" y="${(y0 - mz / 2).toFixed(1)}" width="${mz.toFixed(1)}" height="${mz.toFixed(1)}" rx="1" style="fill:var(--sk-acc)"/>`;
+          else if (a === 'grid') s += `<rect x="${(x - mz / 2).toFixed(1)}" y="${(y0 - mz / 2).toFixed(1)}" width="${mz.toFixed(1)}" height="${mz.toFixed(1)}" rx="1" fill="none" style="stroke:var(--sk-on)" stroke-width="1.2"/>`;
+          else if (a === 'pv') s += `<rect x="${(x - mz / 2).toFixed(1)}" y="${(y0 - mz / 2).toFixed(1)}" width="${mz.toFixed(1)}" height="${mz.toFixed(1)}" rx="1" style="fill:var(--sk-on)" opacity=".85"/>`;
+          else if (a === 'home') s += `<rect x="${(x - mz / 4).toFixed(1)}" y="${(y0 - mz / 4).toFixed(1)}" width="${(mz / 2).toFixed(1)}" height="${(mz / 2).toFixed(1)}" style="fill:var(--muted)"/>`;
+          else s += `<rect x="${(x - 1).toFixed(1)}" y="${(y0 - 1).toFixed(1)}" width="2" height="2" style="fill:var(--sk-off)"/>`;
+        });
+        return `<div class="sk-card sk-strip-card">${head}<svg class="sk-dots" viewBox="0 0 ${W} ${y0 + 8}" style="width:100%;height:auto;margin-top:8px" role="img" aria-label="Plan baterii na 24 godziny">${s}</svg><div class="sk-ax">${ticks}</div>
+          <div class="sk-leg"><span><span style="color:var(--sk-acc)">■</span> sprzedaż</span><span>□ z sieci</span><span>■ PV</span><span>▪ dom</span></div></div>`;
+      }
+      const cmap = { grid: 'var(--sk-grid)', sell: 'var(--sk-sell)', pv: 'var(--sk-pv)', home: 'var(--sk-batt)', idle: 'var(--sk-idle)' };
+      return `<div class="sk-card sk-strip-card">${head}<div class="sk-strip">${plan.map((r, i) => `<i class="${i === 0 ? 'now' : ''}" style="background:${cmap[r.action] || cmap.idle}" title="${String(r.h).padStart(2, '0')}:00 — ${bmsEsc(r.label || '')}"></i>`).join('')}</div><div class="sk-ax">${ticks}</div>
+        <div class="sk-leg"><span><b style="background:${cmap.grid}"></b>z sieci</span><span><b style="background:${cmap.sell}"></b>sprzedaż</span><span><b style="background:${cmap.pv}"></b>PV</span><span><b style="background:${cmap.home}"></b>bateria / dom</span></div></div>`;
+    }
+    _drawSkinHome(box, o, skin) {
+      const m = this._homeModel(o), mx = skin === 'matrix';
+      const key = JSON.stringify([skin, THEME.mode, Math.round(o.pv / 10), Math.round(o.load / 10), Math.round(o.grid / 10), Math.round(o.batt / 10), Math.round(m.soc), m.flr, m.tgt, m.cap,
+        isFinite(m.profit) ? m.profit.toFixed(2) : null, m.pb, m.ps, o.D.pv, m.nowH, m.plan.map(r => r.action + ':' + r.soc).join(',')]);
+      if (key === this._lastM3Key) return;
+      this._lastM3Key = key;
+      const f1 = (v) => (Math.round(v * 10) / 10).toFixed(1).replace('.', ','), zl = (v) => (isFinite(v) ? v.toFixed(2).replace('.', ',') : '—');
+      const ringKind = mx ? 'matrix' : (skin === 'comfort' ? 'flat' : 'grad'), flowKind = mx ? 'matrix' : (skin === 'comfort' ? 'tint' : 'sphere');
+      const g = mx ? ['□', '■'] : (skin === 'comfort' ? ['|', '○'] : ['|', '◆']);
+      const big = m.cap > 0 ? (mx ? this._skDots(f1(m.cap * m.soc / 100) + ' KWH', 3.4, 'var(--sk-on)').svg : `${f1(m.cap * m.soc / 100)} kWh`) : '';
+      const hero = `<div class="sk-card sk-hero">${this._skRing(m, ringKind)}<div class="sk-htx"><div class="sk-lbl">Bateria</div>${big ? `<div class="sk-big">${big}</div>` : ''}
+        <div class="sk-sub">${bmsEsc(m.battTxt)}${m.pace ? `<br>${bmsEsc(m.pace)}` : ''}</div>
+        <div class="sk-note">${m.hasFl ? `${g[0]} rezerwa ${Math.round(m.flr)}%` : ''}${m.hasFl && m.hasT ? ' &nbsp; ' : ''}${m.hasT ? `${mx ? '<span style="color:var(--sk-acc)">' + g[1] + '</span>' : g[1]} plan na koniec dnia ${Math.round(m.tgt)}%` : ''}</div></div></div>`;
+      const flow = `<div class="sk-card sk-flow"><div class="sk-ct">Przepływ mocy<small>teraz</small></div>${this._skFlow(m, flowKind)}</div>`;
+      const kpi = (l, v, s, color, dotsTxt, unit) => `<div class="sk-kpi"><div class="l">${l}</div><div class="v"${color ? ` style="color:${color}"` : ''}>${mx && dotsTxt ? this._skDots(dotsTxt, 2.8, color || 'var(--sk-on)').svg : v}</div><div class="s">${mx ? unit : s}</div></div>`;
+      const pTxt = isFinite(m.profit) ? (m.profit >= 0 ? '+' : '−') + zl(Math.abs(m.profit)) : '—';
+      const kpis = `<div class="sk-kpis">${kpi('Zysk dziś', pTxt + (isFinite(m.profit) ? ' zł' : ''), 'bilans EMS', isFinite(m.profit) && m.profit < 0 ? 'var(--red)' : 'var(--green)', pTxt === '—' ? '-' : pTxt, 'zł · EMS')}
+        ${kpi('PV dziś', o.D.pv === null ? '—' : f1(o.D.pv) + ' kWh', o.pv > m.TH ? 'teraz ' + this._fmtW(o.pv) : 'teraz brak', '', o.D.pv === null ? '-' : f1(o.D.pv), 'kWh · PV')}
+        ${kpi('Kupno', isFinite(m.pb) ? zl(m.pb) + ' zł' : '—', isFinite(m.ps) ? 'sprzed. ' + zl(m.ps) : 'za kWh', '', isFinite(m.pb) ? zl(m.pb) : '-', 'zł/kWh')}</div>`;
+      box.innerHTML = `<div class="sk-home">${hero}${flow}${kpis}${this._skStrip(m, mx ? 'matrix' : 'bars')}</div>`;
+    }
+
     _drawPowerflow() {
       if (!this.isConnected || this._activeTab !== 'main') return;
       const box = this._el('nodesBox');
@@ -4106,6 +4427,7 @@
       };
 
       if (this.getAttribute('data-skin') === 'm3') { this._drawM3Home(box, { pv, load, grid, batt, soc, D, dayTxt }); return; }
+      { const sk = this.getAttribute('data-skin'); if (sk && SKIN_HOME[sk]) { this._drawSkinHome(box, { pv, load, grid, batt, soc, D, dayTxt }, sk); return; } }
       const cw = box.clientWidth || 0;
       const V = this._flowVariant || (cw > 0 && cw < 520 ? 'A' : '0');                    // '0' = bez zmian; A = przycięcie, B = większe, C = oba (telefon)
       const big = V === 'B' || V === 'C', crop = V === 'A' || V === 'C';

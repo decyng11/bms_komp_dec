@@ -5,7 +5,7 @@ const sleep = (ms) => new Promise(r => setTimeout(r, ms));
 (async () => {
   const b = await chromium.launch();
   const e = await openCard(b, {});
-  const today = new Date().toISOString().slice(0, 10);
+  const _n = new Date(); const today = _n.getFullYear() + '-' + String(_n.getMonth() + 1).padStart(2, '0') + '-' + String(_n.getDate()).padStart(2, '0');   // data lokalna (jak _todayKey w karcie), nie UTC
   const rows = []; for (let h = 0; h < 24; h++) rows.push({ t: new Date().toISOString(), h, day: today, action: 'idle', label: 'Bez zmian', peak: false, buy: 0.7, sell: 0.4, pv: 0, load: 0.5, soc: h === 23 ? 55 : 60, floor: 20, import_kwh: 0, export_kwh: 0, cost: 0 });
   const soc = []; for (let h = 0; h < 24; h++) soc.push(h <= new Date().getHours() ? 70 - h : null);
   await e.q((a) => {
