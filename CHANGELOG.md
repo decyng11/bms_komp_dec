@@ -1,5 +1,7 @@
 # EMS komp-dec — w przygotowaniu (po 0.9.5.1, jeszcze niewydane)
 
+- **Strażnik rozjazdu.** Gdy falownik ładuje z sieci, a żadne okno, harmonogram, „Wymuś ładowanie” ani ręczna komenda tego nie zleciły (np. zmiana godzin okna w trakcie albo ustawienie zmienione w aplikacji producenta), po 10 minutach pojawia się wpis w dzienniku i powiadomienie (ponowione najwcześniej po 6 h). Strażnik tylko zgłasza — nie wyłącza ładowania, bo może to być świadoma konfiguracja falownika.
+
 - **Prognoza zużycia: temperatura z opóźnieniem.** Do poprawki temperaturowej liczy się 70% temperatury dnia i 30% średniej z dwóch poprzednich dni (bezwładność budynku, pompa ciepła).
 - **Prognoza zużycia: diagnostyka wg typu dnia.** Nowy atrybut `error_by_type` (błąd i obciążenie osobno dla dni roboczych i wolnych, z odniesieniem do „tyle co tydzień temu” i średniej z 5 dni tego typu) oraz wiersz w stopce karty zużycia.
 - **Prognoza zużycia: wersja „bezpieczna”.** Atrybuty `tomorrow_forecast_safe` i `safe_factor` (kwantyl P75 niedoszacowań dla typu dnia, 1,0–1,35). Na razie tylko informacyjnie — planer nadal używa zwykłej prognozy.

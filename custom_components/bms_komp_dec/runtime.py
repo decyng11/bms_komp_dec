@@ -95,6 +95,8 @@ SCHED_SETTLE_S = 300       # tyle czekamy, aż falownik potwierdzi start, zanim 
 SELLING_TOKEN = "__sprzedaz__"     # zapamiętany „tryb” przy falownikach bez trybu Export First (Sofar)
 PRICE_HYSTERESIS = 0.02          # PLN/kWh powyżej progu, by uznać cenę za "wróconą do normy"
 GUARD_COOLDOWN_S = 120
+MISMATCH_GRACE_S = 600     # tyle czasu falownik może ładować z sieci „bez właściciela”, zanim zgłosimy rozjazd
+MISMATCH_RENOTIFY_S = 6 * 3600
 VERIFY_FIRST_WAIT_S = 20
 VERIFY_SECOND_WAIT_S = 30
 PROFIT_REF_TTL_S = 300
@@ -735,6 +737,11 @@ class BmsRuntime:
                     self.log.add("command", f"{label} ({source}): błąd {eid}={value}: {err}", "error")
                     raise HomeAssistantError(f"{label}: nie udało się ustawić {eid}: {err}") from err
         self.log.add("command", f"{label} ({source})", "ok")
+        if key == "wlacz_ladowanie_siec":
+            self.state["gc_origin"] = {"src": source, "ts": dt_util.now().timestamp()}   # ktoś świadomie włączył
+            self._save_state()
+        elif key == "wylacz_ladowanie_siec" and self.state.pop("gc_origin", None) is not None:
+            self._save_state()
         if key in SCHED_END_CMD and self.state.pop(SCHED_END_CMD[key], None) is not None:
             self._save_state()                 # okno zakończone (STOP, zabezpieczenie albo ręcznie) — awaryjny STOP niepotrzebny
         if switch_on(self.hass, "readback_verify", True):
@@ -1270,6 +1277,52 @@ class BmsRuntime:
             except Exception as err:  # noqa: BLE001
                 _LOGGER.error("EMS GUARD: awaryjny STOP (%s) nieudany: %s", slot, err)
 
+    def _mismatch_owner(self, now: datetime) -> str | None:
+        """Kto „odpowiada” za trwające ładowanie z sieci: harmonogram, okno, wymuszenie albo ręczna komenda.
+        None = nikt (falownik ładuje z sieci, a EMS tego nie zlecał)."""
+        if self.state.get("gc_sched"):
+            return "harmonogram"
+        if self.state.get("gc_origin"):
+            return "komenda"
+        if self.in_grid_charge_window(now):
+            return "okno"
+        if switch_on(self.hass, "force_charge_battery", False):
+            return "wymuszenie"
+        return None
+
+    async def _mismatch_check(self, now: datetime) -> None:
+        """Strażnik rozjazdu: falownik ładuje z sieci, choć żadne okno, harmonogram, wymuszenie ani komenda tego nie zleciły
+        (np. zmiana godzin okna w trakcie, ustawienie zmienione w aplikacji producenta). Tylko zgłasza — nie wyłącza,
+        bo to może być świadoma konfiguracja w falowniku."""
+        try:
+            on = bool(self.grid_charging_on())
+        except Exception:  # noqa: BLE001
+            return
+        if not on or self._mismatch_owner(now):
+            self._mismatch_since = None
+            return
+        since = getattr(self, "_mismatch_since", None)
+        if since is None:
+            self._mismatch_since = now
+            return
+        if (now - since).total_seconds() < MISMATCH_GRACE_S:
+            return
+        last = getattr(self, "_mismatch_notified", None)
+        if last is not None and (now - last).total_seconds() < MISMATCH_RENOTIFY_S:
+            return
+        self._mismatch_notified = now
+        mins = int((now - since).total_seconds() // 60)
+        self.log.add("guard", f"Rozjazd: falownik ładuje z sieci od ok. {mins} min, a EMS tego nie zlecał "
+                              f"(brak okna, harmonogramu, wymuszenia i ręcznej komendy)", "warn")
+        try:
+            await self.monitor.notifier.send(
+                "guard_action", "⚠ EMS: ładowanie z sieci poza planem",
+                f"Falownik ładuje baterię z sieci od ok. {mins} min, a żadne okno ładowania, harmonogram ani komenda tego nie "
+                f"zlecały. Sprawdź ustawienia falownika albo wyłącz ładowanie z sieci przyciskiem w panelu.",
+                key="guard:mismatch")
+        except Exception as err:  # noqa: BLE001
+            _LOGGER.error("EMS GUARD: powiadomienie o rozjeździe: %s", err)
+
     def _cooldown_ok(self, name: str, now: datetime) -> bool:
         last = self._guard_last.get(name)
         if last is not None and (now - last).total_seconds() < GUARD_COOLDOWN_S:
@@ -1288,6 +1341,10 @@ class BmsRuntime:
             await self._stop_at_target(now)
         except Exception as err:  # noqa: BLE001
             _LOGGER.error("EMS GUARD: koniec ładowania po osiągnięciu celu: %s", err)
+        try:
+            await self._mismatch_check(now)
+        except Exception as err:  # noqa: BLE001
+            _LOGGER.error("EMS GUARD: kontrola rozjazdu: %s", err)
 
         if self.is_selling():
             reasons: list[str] = []
