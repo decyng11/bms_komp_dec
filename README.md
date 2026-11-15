@@ -21,7 +21,7 @@ Integracja Home Assistanta, która pilnuje, kiedy falownik Deye ma ładować bat
 
 Na górze są bieżące ceny kupna i sprzedaży oraz prognoza pogody i produkcji paneli na 7 dni (z zakresem niepewności). Niżej przepływ energii na żywo (panele, dom, sieć, bateria), kafelka „Bateria” z informacją, kiedy będzie pełna albo kiedy dojdzie do progu odcięcia falownika, paski produkcji i zużycia oraz tabela „Sprzedaż i zakup energii” (dziś, miesiąc, razem) z szacunkiem, ile prądu kosztowałoby bez paneli i baterii.
 
-Karta działa tak samo na telefonie, ma jasny i ciemny motyw.
+Karta działa tak samo na telefonie, ma jasny i ciemny motyw. Styl wyglądu (Klasyczny — domyślny, Material 3, Szkło, Matryca, Przestrzeń, Komfort) wybierasz w Diagnostyka → Wygląd.
 
 <p align="center"><img src="assets/screens/glowny_tel.png" width="300" alt="Karta na telefonie"></p>
 

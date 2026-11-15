@@ -4185,7 +4185,8 @@
 
     // Ekran główny w stylu Material 3 (tylko gdy włączony styl „Material 3” w Diagnostyce → Wygląd): karta baterii z paskiem
     // rezerwy i celu, schemat przepływu z „pigułkami”, kafelki zysku/PV/ceny i pasek planu na 24 h. Dane te same co w klasycznym.
-    _drawM3Home(box, o) {
+    _drawM3Home(box, o0) {
+      const o = this._skFin(o0);
       const ra = this._rsAttrs(), pvA = this._pvAttrs(), TH = 20;
       const soc = o.soc, flr = Number(ra.inverter_floor);
       let cap = parseFloat(ra.capacity_kwh);
@@ -4261,6 +4262,8 @@
 
     // ---------- wspólny ekran główny stylów Szkło / Matryca / Przestrzeń / Komfort ----------
     // Dane jak w stylu Material 3 (bateria z rezerwą i celem, przepływ mocy, zysk/PV/cena, plan 24 h); różni się tylko sposób rysowania.
+    // zabezpieczenie: moce i SOC zawsze skończone (brak odczytu = 0), żeby na ekranie nie pojawiło się „NaN W”
+    _skFin(o) { const f = (v) => (isFinite(v) ? Number(v) : 0); return Object.assign({}, o, { pv: f(o.pv), load: f(o.load), grid: f(o.grid), batt: f(o.batt), soc: Math.max(0, Math.min(100, f(o.soc))) }); }
     _homeModel(o) {
       const ra = this._rsAttrs(), pvA = this._pvAttrs(), TH = 20, soc = o.soc, flr = Number(ra.inverter_floor);
       let cap = parseFloat(ra.capacity_kwh);
@@ -4326,7 +4329,7 @@
       const seg = { pv: [170, 54, 170, 92], grid: [76, 94, 164, 94], batt: [176, 94, 264, 94], home: [170, 98, 170, 104] };
       const ln = (k) => {
         const [x1, y1, x2, y2] = seg[k];
-        if (!act[k]) return `<path d="M${x1} ${y1}L${x2} ${y2}" style="stroke:var(--sk-idle)" stroke-width="2.5" stroke-linecap="round"/>`;
+        if (!act[k]) return `<path d="M${x1} ${y1}L${x2} ${y2}" style="stroke:${mx ? 'var(--sk-off)' : 'var(--sk-idle)'}" stroke-width="2.5" stroke-linecap="round"/>`;
         if (mx) return `<path d="M${x1} ${y1}L${x2} ${y2}" style="stroke:${k === 'grid' && o.grid > 0 ? 'var(--sk-acc)' : 'var(--sk-on)'}" stroke-width="3.2" stroke-dasharray="3.2 4.8"/>`;
         const glow = kind === 'sphere' ? `<path d="M${x1} ${y1}L${x2} ${y2}" style="stroke:${col[k]}" stroke-width="7" stroke-linecap="round" opacity=".35" filter="url(#skbl)"/>` : '';
         const arrow = kind === 'tint' && k !== 'home' ? (() => { const mx2 = (x1 + x2) / 2, my2 = (y1 + y2) / 2, back = rev[k];
@@ -4375,8 +4378,8 @@
       return `<div class="sk-card sk-strip-card">${head}<div class="sk-strip">${plan.map((r, i) => `<i class="${i === 0 ? 'now' : ''}" style="background:${cmap[r.action] || cmap.idle}" title="${String(r.h).padStart(2, '0')}:00 — ${bmsEsc(r.label || '')}"></i>`).join('')}</div><div class="sk-ax">${ticks}</div>
         <div class="sk-leg"><span><b style="background:${cmap.grid}"></b>z sieci</span><span><b style="background:${cmap.sell}"></b>sprzedaż</span><span><b style="background:${cmap.pv}"></b>PV</span><span><b style="background:${cmap.home}"></b>bateria / dom</span></div></div>`;
     }
-    _drawSkinHome(box, o, skin) {
-      const m = this._homeModel(o), mx = skin === 'matrix';
+    _drawSkinHome(box, o0, skin) {
+      const o = this._skFin(o0), m = this._homeModel(o), mx = skin === 'matrix';
       const key = JSON.stringify([skin, THEME.mode, Math.round(o.pv / 10), Math.round(o.load / 10), Math.round(o.grid / 10), Math.round(o.batt / 10), Math.round(m.soc), m.flr, m.tgt, m.cap,
         isFinite(m.profit) ? m.profit.toFixed(2) : null, m.pb, m.ps, o.D.pv, m.nowH, m.plan.map(r => r.action + ':' + r.soc).join(',')]);
       if (key === this._lastM3Key) return;
@@ -5057,7 +5060,7 @@
   // =====================================================================
   // Wersja tego pliku (ustawiana skryptem pakującym z manifest.json). Każdy moduł niesie tę samą w install.version:
   // gdy się różnią, przeglądarka podała starą kopię modułu z pamięci podręcznej.
-  const CARD_VERSION = '0.9.5.2';
+  const CARD_VERSION = '0.9.5.3';
   const MOD_TIMEOUT_MS = 20000;
   const MODULES = {
     diag:   { file: 'bms-diag.js',   global: '__bmsDiagInstall',   contract: 1, label: 'Diagnostyki', p: null, ready: false, err: '', got: '' },
