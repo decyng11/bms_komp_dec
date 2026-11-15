@@ -39,6 +39,27 @@ let fails = 0; const ok = (c, m) => { if (!c) { fails++; console.log('FAIL', m);
   await e.q(() => __el._setSkin('classic'));
   ok(await e.q(() => !__el.hasAttribute('data-skin')), 'powrót do klasycznego usuwa atrybut');
   ok((await cs('--card')) === bgClassic, 'kolory klasyczne przywrócone');
+  // układ Material 3 na ekranie głównym: karta baterii, pigułki przepływu, kafelki, pasek planu 24 h
+  await e.q(() => {
+    const rows = []; const d = new Date(); const day = (o) => new Date(d.getTime() + o * 864e5).toISOString().slice(0, 10);
+    const pat = ['idle','idle','idle','idle','idle','idle','home','home','pv','pv','pv','pv','pv','pv','grid','home','home','home','sell','sell','home','home','grid','grid'];
+    for (let o = 0; o < 2; o++) for (let h = 0; h < 24; h++) rows.push({ day: day(o), h, action: pat[h], label: pat[h], soc: 50 });
+    const t0 = new Date().toISOString(); __states['sensor.bms_plan_view'] = { state: 'pv', attributes: { table: rows }, last_updated: t0, last_changed: t0 };
+    __el._setSkin('m3'); __el.hass = __mk();
+  });
+  await e.page.waitForTimeout(700);
+  const m3 = await e.q(() => { const r = __el.shadowRoot; const q = (s) => r.querySelector(s);
+    return { hero: !!q('.m3-hero'), soc: (q('.m3-big') || {}).textContent, marks: r.querySelectorAll('.m3-lp .m').length, pills: r.querySelectorAll('.m3-flow svg rect').length,
+      kpis: r.querySelectorAll('.m3-kpi').length, strip: r.querySelectorAll('.m3-strip i').length, oldSvg: !!q('#nodesBox .nf-svg') }; });
+  ok(m3.hero && /^\d+%$/.test(m3.soc || '') , 'M3: karta baterii z SOC: ' + m3.soc);
+  ok(m3.marks >= 1, 'M3: znaczniki rezerwy / celu na pasku baterii: ' + m3.marks);
+  ok(m3.pills === 4 && m3.kpis === 3, 'M3: cztery pigułki przepływu i trzy kafelki');
+  ok(m3.strip === 24, 'M3: pasek planu ma 24 godziny: ' + m3.strip);
+  ok(!m3.oldSvg, 'M3: stary schemat kółek ukryty');
+  await e.q(() => __el._setSkin('classic'));
+  await e.page.waitForTimeout(500);
+  const cl = await e.q(() => ({ old: !!__el.shadowRoot.querySelector('#nodesBox .nf-svg'), m3: !!__el.shadowRoot.querySelector('.m3-hero') }));
+  ok(cl.old && !cl.m3, 'powrót do klasycznego przywraca schemat kółek');
   // kliknięcie w karcie w Diagnostyce przełącza styl
   await b.close();
   console.log(fails ? `FAILS ${fails}` : 'ALL OK'); process.exit(fails ? 1 : 0);

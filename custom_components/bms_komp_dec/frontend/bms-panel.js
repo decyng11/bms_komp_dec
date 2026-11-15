@@ -107,8 +107,8 @@
   const SKIN_KEY = 'bms_panel_skin';
   const SKINS = { classic: 'Klasyczny', m3: 'Material 3' };
   const SKIN_M3 = `
-    :host([data-skin="m3"]) { --bg:#f4fbf8; --card:#e8f1ed; --surface:rgba(23,29,27,0.06); --line:rgba(111,121,117,0.22); --text:#171d1b; --text2:#3f4945; --muted:#566360; --muted2:#6f7975; --accent:#0b6b5d; --green:#1b6c2e; --orange:#8a5a00; --red:#ba1a1a; --input-bg:#f4fbf8; --seg-bg:#dde8e4; --seg-active:#bdf0e3; --shadow:0 1px 2px rgba(0,0,0,0.10),0 1px 3px 1px rgba(0,0,0,0.06); --pf-bg:#e8f1ed; --tonal:#d4e8e1; --on-tonal:#0e201c; --tert:#e1dcff; --on-tert:#1d1a47; --tab-on:#bdf0e3; --tab-on-fg:#00201b; --tab-off:#3f4945; --tab-bg:#e3ede9; --tab-line:transparent; color-scheme: light; }
-    :host([data-skin="m3"][data-theme="dark"]) { --bg:#0f1513; --card:#1a201e; --surface:rgba(255,255,255,0.06); --line:rgba(255,255,255,0.10); --text:#dee4e0; --text2:#bfc9c4; --muted:#9aa5a0; --muted2:#89938f; --accent:#7fd8c6; --green:#8fd99b; --orange:#f3c04f; --red:#ffb4ab; --input-bg:#222826; --seg-bg:#262b29; --seg-active:#005046; --shadow:none; --pf-bg:#1a201e; --tonal:#33433e; --on-tonal:#d4e8e1; --tert:#42407a; --on-tert:#e1dcff; --tab-on:#005046; --tab-on-fg:#bdf0e3; --tab-off:#bfc9c4; --tab-bg:#1b211f; color-scheme: dark; }
+    :host([data-skin="m3"]) { --bg:#f4fbf8; --card:#e8f1ed; --surface:rgba(23,29,27,0.06); --line:rgba(111,121,117,0.22); --text:#171d1b; --text2:#3f4945; --muted:#566360; --muted2:#6f7975; --accent:#0b6b5d; --green:#1b6c2e; --orange:#8a5a00; --red:#ba1a1a; --input-bg:#f4fbf8; --seg-bg:#dde8e4; --seg-active:#bdf0e3; --shadow:0 1px 2px rgba(0,0,0,0.10),0 1px 3px 1px rgba(0,0,0,0.06); --pf-bg:#e8f1ed; --tonal:#d4e8e1; --on-tonal:#0e201c; --tert:#e1dcff; --on-tert:#1d1a47; --tab-on:#bdf0e3; --tab-on-fg:#00201b; --tab-off:#3f4945; --tab-bg:#e3ede9; --tab-line:transparent; --m3-pv:#c98a00; --m3-pvc:#ffe3a0; --m3-pvt:#6d4b00; --m3-grid:#0a7ea8; --m3-gridc:#c2e8ff; --m3-gridt:#004c69; --m3-sell:#7a55c2; --m3-sellc:#e9deff; --m3-sellt:#3b2470; --m3-batt:#0b6b5d; --m3-idle:#d5dfdb; color-scheme: light; }
+    :host([data-skin="m3"][data-theme="dark"]) { --bg:#0f1513; --card:#1a201e; --surface:rgba(255,255,255,0.06); --line:rgba(255,255,255,0.10); --text:#dee4e0; --text2:#bfc9c4; --muted:#9aa5a0; --muted2:#89938f; --accent:#7fd8c6; --green:#8fd99b; --orange:#f3c04f; --red:#ffb4ab; --input-bg:#222826; --seg-bg:#262b29; --seg-active:#005046; --shadow:none; --pf-bg:#1a201e; --tonal:#33433e; --on-tonal:#d4e8e1; --tert:#42407a; --on-tert:#e1dcff; --tab-on:#005046; --tab-on-fg:#bdf0e3; --tab-off:#bfc9c4; --tab-bg:#1b211f; --m3-pv:#f3c04f; --m3-pvc:#5a4300; --m3-pvt:#ffe3a0; --m3-grid:#7bd0f6; --m3-gridc:#004d67; --m3-gridt:#c2e8ff; --m3-sell:#cfbcff; --m3-sellc:#4a3c80; --m3-sellt:#e9deff; --m3-batt:#7fd8c6; --m3-idle:#2a302e; color-scheme: dark; }
     :host([data-skin="m3"]) { font-family: Roboto, "Google Sans", "Segoe UI", -apple-system, BlinkMacSystemFont, sans-serif; border-radius: 28px; }
     :host([data-skin="m3"]) .header .title { font-weight: 500; letter-spacing: -0.2px; }
     :host([data-skin="m3"]) .section-title { text-transform: none; font-size: 15px; font-weight: 600; letter-spacing: 0; color: var(--text); padding-left: 4px; }
@@ -127,6 +127,38 @@
     :host([data-skin="m3"]) .suggest-item { border-radius: 20px; background: var(--card); }
     :host([data-skin="m3"]) select, :host([data-skin="m3"]) input[type="time"], :host([data-skin="m3"]) input[type="number"] { border-radius: 8px; border: 1px solid var(--muted2); }
     :host([data-skin="m3"]) .sb-item, :host([data-skin="m3"]) .floor-alert { border-radius: 16px; }
+    /* ekran główny w układzie Material 3: karta baterii, schemat przepływu, kafelki, pasek planu */
+    :host([data-skin="m3"]) .nodes-card { background: transparent; box-shadow: none; padding: 0; border-radius: 0; overflow: visible; }
+    :host([data-skin="m3"]) .m3-home { display: flex; flex-direction: column; gap: 10px; }
+    :host([data-skin="m3"]) .m3-hero { background: var(--seg-active); color: var(--text); border-radius: 28px; padding: 16px 18px; }
+    :host([data-skin="m3"]) .m3-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; }
+    :host([data-skin="m3"]) .m3-lbl { font-size: 12px; font-weight: 600; letter-spacing: .6px; text-transform: uppercase; opacity: .8; }
+    :host([data-skin="m3"]) .m3-big { font-size: 52px; font-weight: 300; letter-spacing: -2px; line-height: 1; margin-top: 8px; }
+    :host([data-skin="m3"]) .m3-big span { font-size: 26px; letter-spacing: 0; }
+    :host([data-skin="m3"]) .m3-right { text-align: right; font-size: 13px; line-height: 1.5; }
+    :host([data-skin="m3"]) .m3-right b { font-size: 18px; font-weight: 600; }
+    :host([data-skin="m3"]) .m3-lp { position: relative; height: 12px; border-radius: 6px; background: rgba(0,0,0,0.14); margin-top: 14px; }
+    :host([data-skin="m3"]) .m3-lp .v { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 6px; background: var(--accent); }
+    :host([data-skin="m3"]) .m3-lp .m { position: absolute; top: -4px; bottom: -4px; width: 2px; border-radius: 1px; background: var(--text); opacity: .55; }
+    :host([data-skin="m3"]) .m3-lg { position: relative; height: 16px; margin-top: 6px; font-size: 11px; opacity: .85; }
+    :host([data-skin="m3"]) .m3-lg span { position: absolute; transform: translateX(-50%); white-space: nowrap; }
+    :host([data-skin="m3"]) .m3-flow { background: var(--card); border-radius: 24px; padding: 10px 12px 8px; }
+    :host([data-skin="m3"]) .m3-ct { display: flex; justify-content: space-between; font-size: 14px; font-weight: 600; }
+    :host([data-skin="m3"]) .m3-ct small { font-size: 12px; font-weight: 400; color: var(--muted); }
+    :host([data-skin="m3"]) .m3-flow svg { width: 100%; height: auto; display: block; }
+    :host([data-skin="m3"]) .m3-flow text { font-family: inherit; font-size: 12px; font-weight: 600; }
+    :host([data-skin="m3"]) .m3-kpis { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+    :host([data-skin="m3"]) .m3-kpi { background: var(--card); border-radius: 20px; padding: 11px 13px; min-width: 0; }
+    :host([data-skin="m3"]) .m3-kpi .l { font-size: 10.5px; font-weight: 600; letter-spacing: .6px; text-transform: uppercase; color: var(--muted); }
+    :host([data-skin="m3"]) .m3-kpi .v { font-size: 20px; font-weight: 500; margin-top: 3px; letter-spacing: -.3px; white-space: nowrap; }
+    :host([data-skin="m3"]) .m3-kpi .s { font-size: 11px; color: var(--muted); margin-top: 1px; }
+    :host([data-skin="m3"]) .m3-strip-card { background: var(--card); border-radius: 24px; padding: 12px 16px 12px; }
+    :host([data-skin="m3"]) .m3-strip { display: flex; gap: 2px; height: 30px; margin-top: 10px; }
+    :host([data-skin="m3"]) .m3-strip i { flex: 1; border-radius: 4px; }
+    :host([data-skin="m3"]) .m3-strip i.now { outline: 2px solid var(--text); outline-offset: 1px; }
+    :host([data-skin="m3"]) .m3-ax { display: flex; justify-content: space-between; font-size: 10px; color: var(--muted); margin-top: 4px; }
+    :host([data-skin="m3"]) .m3-leg { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; }
+    :host([data-skin="m3"]) .m3-leg span { height: 26px; border-radius: 8px; padding: 0 10px; display: inline-flex; align-items: center; font-size: 12px; font-weight: 600; }
     /* dolna nawigacja: pasek jak w Material 3 — wskaźnik-pigułka za ikoną, etykieta pod spodem */
     :host([data-skin="m3"]) .tabs.bottom { border: none; border-radius: 28px; box-shadow: 0 2px 10px rgba(0,0,0,0.18); padding: 8px 6px 6px; }
     :host([data-skin="m3"]) .tabs.bottom .tab { border-radius: 16px; gap: 4px; }
@@ -2665,7 +2697,9 @@
     }
     _applySkin(force) {
       const skin = force || this._resolveSkin();
+      const prev = this.getAttribute('data-skin') || 'classic';
       if (skin === 'classic') this.removeAttribute('data-skin'); else this.setAttribute('data-skin', skin);
+      if (prev !== skin) { this._lastFlowKey = null; this._lastM3Key = null; if (this._rendered) this._safe(() => this._drawPowerflow()); }
     }
     _applyTheme(force) {
       const mode = force || this._resolveTheme();
@@ -3966,6 +4000,82 @@
       return d;
     }
 
+    // Ekran główny w stylu Material 3 (tylko gdy włączony styl „Material 3” w Diagnostyce → Wygląd): karta baterii z paskiem
+    // rezerwy i celu, schemat przepływu z „pigułkami”, kafelki zysku/PV/ceny i pasek planu na 24 h. Dane te same co w klasycznym.
+    _drawM3Home(box, o) {
+      const ra = this._rsAttrs(), pvA = this._pvAttrs(), TH = 20;
+      const soc = o.soc, flr = Number(ra.inverter_floor);
+      let cap = parseFloat(ra.capacity_kwh);
+      if (!(cap > 0)) { try { cap = parseFloat(localStorage.getItem('bms_panel_capacity')); } catch (e) { cap = NaN; } }
+      const rows = Array.isArray(pvA.table) ? pvA.table.filter(r => r && r.day) : [];
+      const endRow = rows.filter(r => r.day === this._todayKey() && r.h === 23).pop();
+      const tgt = endRow ? Number(endRow.soc) : NaN;
+      const profit = Number(this._st(this._eid('sensor', 'profit_today')));
+      const pb = Number(ra.price_buy), ps = Number(ra.price_sell);
+      const now = new Date(), nowH = now.getHours();
+      const todayK = this._todayKey();
+      const plan = rows.filter(r => r.day > todayK || (r.day === todayK && r.h >= nowH))
+        .sort((a, b) => (a.day === b.day ? a.h - b.h : (a.day < b.day ? -1 : 1))).slice(0, 24);
+      const key = JSON.stringify([THEME.mode, Math.round(o.pv / 10), Math.round(o.load / 10), Math.round(o.grid / 10), Math.round(o.batt / 10),
+        Math.round(soc), flr, tgt, cap, isFinite(profit) ? profit.toFixed(2) : null, pb, ps, o.D.pv, nowH, plan.map(r => r.action).join(',')]);
+      if (key === this._lastM3Key) return;
+      this._lastM3Key = key;
+      const f1 = (v) => (Math.round(v * 10) / 10).toFixed(1).replace('.', ',');
+      const zl = (v) => (isFinite(v) ? v.toFixed(2).replace('.', ',') : '—');
+      // karta baterii
+      const hasFl = isFinite(flr) && flr > 0 && flr < 100, hasT = isFinite(tgt) && tgt > 0 && tgt <= 100;
+      let pace = '';
+      if (cap > 0) {
+        const usable = Math.max(0, cap * (soc - (hasFl ? flr : 20)) / 100);
+        if (o.batt > TH && soc < 99.5) pace = `pełna ok. ${this._fmtAt((100 - soc) / 100 * cap / (o.batt / 1000))}`;
+        else if (o.batt < -TH && usable > 0) pace = `do rezerwy ok. ${this._fmtAt(usable / (-o.batt / 1000))}`;
+      }
+      const battTxt = o.batt > TH ? `+${this._fmtW(o.batt)} ładowanie` : (o.batt < -TH ? `−${this._fmtW(-o.batt)} rozładowanie` : 'bateria w spoczynku');
+      const hero = `<div class="m3-hero">
+        <div class="m3-top"><div><div class="m3-lbl">Bateria</div><div class="m3-big">${Math.round(soc)}<span>%</span></div></div>
+          <div class="m3-right">${cap > 0 ? `<b>${f1(cap * soc / 100)} kWh</b><br>` : ''}${bmsEsc(battTxt)}${pace ? `<br>${bmsEsc(pace)}` : ''}</div></div>
+        <div class="m3-lp"><div class="v" style="width:${Math.max(0, Math.min(100, soc))}%"></div>${hasFl ? `<div class="m" style="left:${flr}%"></div>` : ''}${hasT ? `<div class="m" style="left:${tgt}%"></div>` : ''}</div>
+        <div class="m3-lg">${hasFl ? `<span style="left:${flr}%">rezerwa ${Math.round(flr)}%</span>` : ''}${hasT ? `<span style="left:${tgt}%">plan na koniec dnia ${Math.round(tgt)}%</span>` : ''}</div></div>`;
+      // schemat przepływu: pigułki PV / sieć / bateria / dom wokół węzła
+      const hub = { x: 170, y: 62 };
+      const act = { pv: o.pv > TH, home: o.load > TH, grid: Math.abs(o.grid) > TH, batt: Math.abs(o.batt) > TH };
+      const col = { pv: 'var(--m3-pv)', home: 'var(--accent)', grid: o.grid > 0 ? 'var(--red)' : 'var(--m3-grid)', batt: o.batt < 0 ? 'var(--orange)' : 'var(--m3-batt)' };
+      // kierunek: 1 = węzeł → węzeł centralny, -1 = od centralnego do węzła
+      const dir = { pv: 1, home: -1, grid: o.grid >= 0 ? 1 : -1, batt: o.batt < 0 ? 1 : -1 };
+      const path = { pv: [170, 36, 170, 62], grid: [120, 98, 170, 62], batt: [220, 98, 170, 62], home: [170, 62, 170, 100] };
+      const line = (k) => { const [x1, y1, x2, y2] = path[k]; const rev = (k !== 'home' && dir[k] < 0) || (k === 'home' && false);
+        const d = rev ? `M${x2} ${y2}L${x1} ${y1}` : (k === 'home' && dir.home > 0 ? `M${x2} ${y2}L${x1} ${y1}` : `M${x1} ${y1}L${x2} ${y2}`);
+        return act[k] ? `<path d="${d}" class="nf-line" stroke="${col[k]}" stroke-width="3"/>` : `<path d="${d}" class="nf-idle"/>`; };
+      const pill = (x, y, w, bg, fg, txt) => `<rect x="${x}" y="${y}" width="${w}" height="30" rx="15" fill="${bg}"/><text x="${x + w / 2}" y="${y + 20}" text-anchor="middle" fill="${fg}">${txt}</text>`;
+      const gTxt = Math.abs(o.grid) > TH ? `${o.grid > 0 ? '⚡ import' : '⚡ eksport'} ${this._fmtW(Math.abs(o.grid))}` : '⚡ sieć 0 W';
+      const bTxt = `🔋 ${o.batt > TH ? '+' : (o.batt < -TH ? '−' : '')}${this._fmtW(Math.abs(o.batt))}`;
+      const flow = `<div class="m3-flow"><div class="m3-ct">Przepływ mocy<small>teraz</small></div>
+        <svg viewBox="0 0 340 140" role="img" aria-label="Przepływ mocy">
+          <g fill="none" stroke-linecap="round">${line('pv')}${line('grid')}${line('batt')}${line('home')}</g>
+          <circle cx="${hub.x}" cy="${hub.y}" r="6" fill="var(--seg-bg)" stroke="var(--muted2)"/>
+          ${pill(125, 4, 90, 'var(--m3-pvc)', 'var(--m3-pvt)', '☀ ' + this._fmtW(o.pv))}
+          ${pill(4, 84, 116, 'var(--m3-gridc)', 'var(--m3-gridt)', gTxt)}
+          ${pill(220, 84, 116, 'var(--seg-active)', 'var(--text)', bTxt)}
+          ${pill(125, 106, 90, 'var(--tonal)', 'var(--on-tonal)', '🏠 ' + this._fmtW(o.load))}
+        </svg></div>`;
+      // kafelki
+      const kpis = `<div class="m3-kpis">
+        <div class="m3-kpi"><div class="l">Zysk dziś</div><div class="v" style="color:${isFinite(profit) && profit < 0 ? 'var(--red)' : 'var(--green)'}">${isFinite(profit) ? (profit >= 0 ? '+' : '−') + zl(Math.abs(profit)) + ' zł' : '—'}</div><div class="s">bilans EMS</div></div>
+        <div class="m3-kpi"><div class="l">PV dziś</div><div class="v">${o.D.pv === null ? '—' : f1(o.D.pv) + ' kWh'}</div><div class="s">${o.pv > TH ? 'teraz ' + this._fmtW(o.pv) : 'teraz brak'}</div></div>
+        <div class="m3-kpi"><div class="l">Kupno</div><div class="v">${isFinite(pb) ? zl(pb) + ' zł' : '—'}</div><div class="s">${isFinite(ps) ? 'sprzedaż ' + zl(ps) : 'za kWh'}</div></div></div>`;
+      // pasek planu na 24 h
+      const cmap = { grid: 'var(--m3-grid)', sell: 'var(--m3-sell)', pv: 'var(--m3-pv)', home: 'var(--m3-batt)', idle: 'var(--m3-idle)' };
+      let strip = '';
+      if (plan.length >= 6) {
+        const ticks = [0, 6, 12, 18].filter(i => i < plan.length).map(i => `<span>${i === 0 ? 'teraz' : String(plan[i].h).padStart(2, '0') + ':00'}</span>`).join('');
+        strip = `<div class="m3-strip-card"><div class="m3-ct">Najbliższe 24 h<small>plan</small></div>
+          <div class="m3-strip">${plan.map((r, i) => `<i class="${i === 0 ? 'now' : ''}" style="background:${cmap[r.action] || cmap.idle}" title="${String(r.h).padStart(2, '0')}:00 — ${bmsEsc(r.label || '')}"></i>`).join('')}</div>
+          <div class="m3-ax">${ticks}</div>
+          <div class="m3-leg"><span style="background:var(--m3-gridc);color:var(--m3-gridt)">z sieci</span><span style="background:var(--m3-sellc);color:var(--m3-sellt)">sprzedaż</span><span style="background:var(--m3-pvc);color:var(--m3-pvt)">PV</span><span style="background:var(--seg-active);color:var(--text)">z baterii</span></div></div>`;
+      }
+      box.innerHTML = `<div class="m3-home">${hero}${flow}${kpis}${strip}</div>`;
+    }
+
     _drawPowerflow() {
       if (!this.isConnected || this._activeTab !== 'main') return;
       const box = this._el('nodesBox');
@@ -3995,6 +4105,7 @@
         batt: (D.chg === null && D.dis === null) ? '' : `dziś ↓${k1(D.chg)} ↑${k1(D.dis)} kWh`,
       };
 
+      if (this.getAttribute('data-skin') === 'm3') { this._drawM3Home(box, { pv, load, grid, batt, soc, D, dayTxt }); return; }
       const cw = box.clientWidth || 0;
       const V = this._flowVariant || (cw > 0 && cw < 520 ? 'A' : '0');                    // '0' = bez zmian; A = przycięcie, B = większe, C = oba (telefon)
       const big = V === 'B' || V === 'C', crop = V === 'A' || V === 'C';

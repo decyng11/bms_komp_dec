@@ -1,6 +1,6 @@
 # EMS komp-dec — w przygotowaniu (po 0.9.5.2, jeszcze niewydane)
 
-- **Nowy styl wyglądu „Material 3".** Diagnostyka → Wygląd: wybór między stylem klasycznym (domyślny) a Material Design 3 (tonalne karty, mocniej zaokrąglone elementy, dolny pasek zakładek z pigułką za ikoną, zielono-morska paleta). Styl działa z jasnym i ciemnym motywem, zmienia tylko kolory i kształty (układ i dane bez zmian), a wybór jest zapamiętany w danej przeglądarce. Powrót do „Klasyczny" przywraca dotychczasowy wygląd.
+- **Nowy styl wyglądu „Material 3".** Diagnostyka → Wygląd: wybór między stylem klasycznym (domyślny) a Material Design 3. Ekran główny dostaje wtedy nowy układ: karta baterii z paskiem rezerwy i planowanego celu, schemat przepływu mocy z „pigułkami", kafelki (zysk dziś, PV, cena) i pasek planu na najbliższe 24 h z kolorami akcji. Reszta panelu dostaje tonalne karty, mocniej zaokrąglone elementy, zielono-morską paletę i dolny pasek zakładek z pigułką za ikoną. Działa z jasnym i ciemnym motywem; wybór jest zapamiętany w danej przeglądarce, a powrót do „Klasyczny" przywraca dotychczasowy wygląd i schemat.
 
 # EMS komp-dec — zmiany w 0.9.5.2 (z 0.9.5.1)
 
