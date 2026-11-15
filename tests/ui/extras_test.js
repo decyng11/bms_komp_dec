@@ -57,7 +57,7 @@ const blue = (e) => e.q(() => { const c = __el.shadowRoot.querySelector('#exPlan
   await seed(e, { curve: curve() });
   await sleep(500);
   ok(!e.reqs.some((r) => /bms-extras\.js/.test(r)), 'moduł dodatków NIE jest pobierany na stronie głównej');
-  await tab(e, 'ems');
+  await tab(e, 'charts');
   await e.page.waitForFunction(() => !!__el.shadowRoot.querySelector('#exPlanCv'), null, { timeout: 8000 });
   ok(e.reqs.filter((r) => /bms-extras\.js/.test(r)).length === 1 && e.reqs.some((r) => r === '/bms_komp_dec/bms-extras.js?v=' + CARD + '.1700000000'), 'moduł pobrany raz, z parametrem ?v=');
   ok(await e.q(() => !__el.shadowRoot.querySelector('#exPlanBox .chart-empty')), 'plan: brak komunikatu o błędzie');
@@ -102,7 +102,7 @@ const blue = (e) => e.q(() => { const c = __el.shadowRoot.querySelector('#exPlan
     ['brak krzywej', { noCurve: true }, /Plan niedostępny — brak danych/],
   ];
   for (const [name, o, re] of variants) {
-    e = await openCard(b, {}); await seed(e, o); await tab(e, 'ems');
+    e = await openCard(b, {}); await seed(e, o); await tab(e, 'charts');
     await e.page.waitForFunction(() => !!__el.shadowRoot.querySelector('#exPlanBox') && !/Ładowanie planu/.test(__el.shadowRoot.querySelector('#exPlanBox').textContent), null, { timeout: 8000 });
     const t = await e.q(() => __el.shadowRoot.querySelector('#exPlanBox').innerHTML);
     ok(re.test(t), 'wariant „' + name + '”: ' + t.replace(/<[^>]+>/g, '').slice(0, 80));
@@ -111,7 +111,7 @@ const blue = (e) => e.q(() => { const c = __el.shadowRoot.querySelector('#exPlan
     await e.ctx.close();
   }
   // tryb burzowy i brak cen RCE
-  e = await openCard(b, {}); await seed(e, { mode: 'storm', storm_mode: 'on', curve: Object.assign(curve({ noSell: true }), { sale: new Array(24).fill(0) }) }); await tab(e, 'ems');
+  e = await openCard(b, {}); await seed(e, { mode: 'storm', storm_mode: 'on', curve: Object.assign(curve({ noSell: true }), { sale: new Array(24).fill(0) }) }); await tab(e, 'charts');
   await e.page.waitForFunction(() => !!__el.shadowRoot.querySelector('#exPlanCv'), null, { timeout: 8000 });
   const ts = await sr(e, '#exPlanBox');
   ok(/tryb burzowy — cel 100%, bez sprzedaży/.test(ts) && /Sprzedaż z baterii: wyłączona \(tryb burzowy\)/.test(ts), 'plan: tryb burzowy oznaczony');
@@ -119,7 +119,7 @@ const blue = (e) => e.q(() => { const c = __el.shadowRoot.querySelector('#exPlan
   await e.ctx.close();
 
   // ===== 4. telefon: plan mieści się w ekranie
-  e = await openCard(b, { mobile: true }); await seed(e, { curve: curve() }); await tab(e, 'ems');
+  e = await openCard(b, { mobile: true }); await seed(e, { curve: curve() }); await tab(e, 'charts');
   await e.page.waitForFunction(() => !!__el.shadowRoot.querySelector('#exPlanCv'), null, { timeout: 8000 });
   ok((await blue(e)) > 200, 'telefon: krzywa narysowana');
   ok(await e.q(() => { const c = __el.shadowRoot.querySelector('#exPlanCv').getBoundingClientRect(); return c.left >= 0 && c.right <= window.innerWidth + 1; }), 'telefon: wykres mieści się w szerokości ekranu');

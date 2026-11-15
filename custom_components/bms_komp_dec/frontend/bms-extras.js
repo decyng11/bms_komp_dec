@@ -118,7 +118,7 @@
 
       _exPlan() {
         const box = this._el('exPlanBox');
-        if (!box || this._activeTab !== 'ems') return;
+        if (!box || (this._activeTab !== 'ems' && this._activeTab !== 'charts')) return;
         const s = this._exS();
         if (!box.dataset.exBound) {
           box.dataset.exBound = '1';
@@ -768,7 +768,7 @@
       _exPlus() {
         const root = this.shadowRoot; if (!root) return;
         if (!root.getElementById('exPlusStyle')) { const st = document.createElement('style'); st.id = 'exPlusStyle'; st.textContent = PLUS_CSS; root.appendChild(st); }
-        if (this._activeTab === 'ems') {
+        if (this._activeTab === 'ems' || this._activeTab === 'charts') {
           this._safe(() => this._exOvr());
           this._safe(() => this._exTable());
           this._safe(() => this._exHist());

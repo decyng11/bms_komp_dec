@@ -43,7 +43,7 @@ const sleep = (ms) => new Promise(r => setTimeout(r, ms));
   ok(why.vis && /do 80%/.test(why.t) && why.li === 1, 'dlaczego: zdanie i jeden powód poboczny: ' + why.t.slice(0, 80));
 
   // ---- zakładka EMS
-  await e.q(() => __el.shadowRoot.querySelector('[data-tab="ems"]').click());
+  await e.q(() => __el.shadowRoot.querySelector('[data-tab="charts"]').click());
   await e.page.waitForFunction(() => !!__el.shadowRoot.querySelector('#exTblBox table'), null, { timeout: 8000 });
   await sleep(500);
   const tb = await e.q(() => { const t = __el.shadowRoot.querySelector('#exTblBox'); return { rows: t.querySelectorAll('tbody tr').length, days: t.querySelectorAll('tr.day').length, acts: Array.from(t.querySelectorAll('.px-act')).map(x => x.textContent), tot: t.querySelector('tr.tot').textContent, peak: t.querySelectorAll('tr.peak').length }; });
@@ -90,7 +90,7 @@ const sleep = (ms) => new Promise(r => setTimeout(r, ms));
   const vis = () => e.q(() => { const s = __el.shadowRoot; const d = (sel) => { const x = s.querySelector(sel); return !!x && getComputedStyle(x).display !== 'none'; };
     return { charts: d('.tab[data-tab="charts"]'), log: d('.tab[data-tab="log"]'), dev: d('.tab[data-tab="dev"]'), ems: d('.tab[data-tab="ems"]'), simple: d('#simpleWrap'), plan: (() => { const x = s.querySelector('#exPlanBox'); const sec = x && x.closest('.section'); return !!sec && getComputedStyle(sec).display !== 'none'; })(), emsLabel: s.querySelector('.tab[data-tab="ems"] .tl').textContent, weather: d('.weather-global') }; });
   let v = await vis();
-  ok(v.charts && v.log && v.ems && !v.simple && v.emsLabel === 'EMS', 'bez trybu prostego: pełny panel');
+  ok(v.charts && v.log && v.ems && !v.simple && v.emsLabel === 'Ustawienia', 'bez trybu prostego: pełny panel');
   await e.q(() => { const t = new Date().toISOString(); for (const k of ['simple_mode', 'sell_enabled', 'grid_charge_enabled', 'auto_apply', 'auto_enable_sets', 'profit_check', 'dynamic_reserve', 'pv_forecast_correction', 'live_load_correction']) __states['switch.bms_' + k] = { state: ['simple_mode', 'sell_enabled', 'auto_enable_sets', 'pv_forecast_correction', 'live_load_correction'].includes(k) ? 'on' : 'off', attributes: {}, last_updated: t, last_changed: t };
     __states['sensor.bms_reserve_soc'] = { state: '40', attributes: { tariff_mode: 'zone', tariff_label: '6–13, 15–22', price_buy: 0.9, price_sell: 0.4, inverter_floor: 25, capacity_kwh: 10 }, last_updated: t, last_changed: t };
     __el.hass = __mk(); });
@@ -101,7 +101,7 @@ const sleep = (ms) => new Promise(r => setTimeout(r, ms));
   await sleep(600);
   v = await vis();
   const sm = await e.q(() => { const w = __el.shadowRoot.getElementById('simpleWrap'); return { t: w.textContent, seg: w.querySelectorAll('.sm-seg').length, act: Array.from(w.querySelectorAll('.sm-seg button.active')).map(x => x.dataset.simpleSw + ':' + x.dataset.v), auto: w.querySelectorAll('.sm-auto div').length, btn: (w.querySelector('[data-simple-auto]') || {}).textContent }; });
-  ok(v.simple && !v.plan, 'tryb prosty: widoczny ekran prosty, zwykłe sekcje EMS schowane');
+  ok(v.simple && !v.charts, 'tryb prosty: widoczny ekran prosty, zwykłe sekcje EMS schowane');
   ok(/strefowa — szczyt 6–13, 15–22/.test(sm.t) && /0,90 zł\/kWh/.test(sm.t), 'tryb prosty: wykryta taryfa i ceny: ' + sm.t.slice(0, 120));
   ok(sm.seg === 2 && sm.act.join() === 'sell_enabled:on,grid_charge_enabled:off', 'tryb prosty: odpowiedzi Tak/Nie zgodne ze stanem przełączników: ' + sm.act);
   ok(sm.auto === 6 && /\(3\)/.test(sm.btn || ''), 'tryb prosty: lista automatyki i przycisk dla 3 wyłączonych: ' + sm.btn);
@@ -117,7 +117,7 @@ const sleep = (ms) => new Promise(r => setTimeout(r, ms));
   await e.q(() => { const t = new Date().toISOString(); __states['switch.bms_simple_mode'] = { state: 'off', attributes: {}, last_updated: t, last_changed: t }; __el.hass = __mk(); });
   await sleep(500);
   v = await vis();
-  ok(v.charts && v.log && v.dev !== undefined && !v.simple && v.plan && v.emsLabel === 'EMS', 'po wyłączeniu trybu: pełny panel wrócił');
+  ok(v.charts && v.log && v.dev !== undefined && !v.simple && v.emsLabel === 'Ustawienia', 'po wyłączeniu trybu: pełny panel wrócił');
 
   // ---- diagnostyka: przełączniki i test sterowania
   await e.q(() => __el.shadowRoot.querySelector('[data-tab="diag"]').click());

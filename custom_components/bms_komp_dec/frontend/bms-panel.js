@@ -250,6 +250,10 @@
     .app.simple .tab[data-tab="charts"], .app.simple .tab[data-tab="log"], .app.simple .tab[data-tab="dev"] { display: none !important; }
     .app.simple .weather-global { display: none; }
     .app.simple [data-tab-content="ems"] > :not(#simpleWrap) { display: none !important; }
+    [data-tab-content="ems"] .section-title.collapsible { cursor: pointer; user-select: none; }
+    [data-tab-content="ems"] .section-title.collapsible::after { content: ' ▾'; opacity: .5; }
+    [data-tab-content="ems"] .section.collapsed > :not(.section-title) { display: none !important; }
+    [data-tab-content="ems"] .section.collapsed > .section-title.collapsible::after { content: ' ▸'; }
     .badge { padding: 5px 10px; border-radius: 16px; background: var(--surface); color: var(--muted); font-size: 12px; font-weight: 600; transition: all 0.3s; border: 1px solid var(--line); }
     .badge.on { background: rgba(16,185,129,0.15); color: #10b981; border-color: #10b981; box-shadow: 0 0 8px rgba(16,185,129,0.3); }
     .badge.danger.on { background: rgba(244,63,94,0.15); color: #f43f5e; border-color: #f43f5e; box-shadow: 0 0 8px rgba(244,63,94,0.4); }
@@ -2654,8 +2658,8 @@
         </div>
         <nav class="tabs bottom" id="tabsNav">
           <button class="tab active" data-tab="main" title="Główny" aria-label="Główny"><span class="ti">${TAB_SVG.main}</span><span class="tl">Główny</span><span class="tls">Główny</span></button>
-          <button class="tab" data-tab="charts" title="Wykresy" aria-label="Wykresy"><span class="ti">${TAB_SVG.charts}</span><span class="tl">Wykresy</span><span class="tls">Wykresy</span></button>
-          <button class="tab" data-tab="ems" title="EMS" aria-label="EMS"><span class="ti">${TAB_SVG.ems}</span><span class="tl">EMS</span><span class="tls">EMS</span></button>
+          <button class="tab" data-tab="charts" title="Plan i wykresy" aria-label="Plan i wykresy"><span class="ti">${TAB_SVG.charts}</span><span class="tl">Plan</span><span class="tls">Plan</span></button>
+          <button class="tab" data-tab="ems" title="Ustawienia EMS" aria-label="Ustawienia EMS"><span class="ti">${TAB_SVG.ems}</span><span class="tl">Ustawienia</span><span class="tls">Ustaw.</span></button>
           <button class="tab" data-tab="log" title="Zysk i log" aria-label="Zysk i log"><span class="ti">${TAB_SVG.log}</span><span class="tl">Zysk i log</span><span class="tls">Zysk</span></button>
           <button class="tab" data-tab="dev" id="tabDev" title="Urządzenia" aria-label="Urządzenia"><span class="ti">${TAB_SVG.dev}</span><span class="tl">Urządzenia</span><span class="tls">Urządz.</span></button>
           <button class="tab" data-tab="diag" id="tabDiag" style="display:none;" title="Diagnostyka" aria-label="Diagnostyka"><span class="ti">${TAB_SVG.diag}</span><span class="tl">Diagnostyka</span><span class="tls">Diagn.</span></button>
@@ -2702,6 +2706,23 @@
         </div>
 
         <div class="tab-content" data-tab-content="charts" style="display:none;">
+          <div class="section" style="margin-top:6px;">
+            <div class="section-title">📈 Plan na najbliższe 24 h</div>
+            <div class="chart-card full" style="padding:14px 16px;"><div id="exPlanBox"><div class="chart-empty">Ładowanie planu…</div></div></div>
+          </div>
+          <div class="section">
+            <div class="section-title">🗓 Plan godzina po godzinie</div>
+            <div class="chart-card full" style="padding:14px 16px;"><div id="exTblBox"><div class="chart-empty">Ładowanie…</div></div></div>
+          </div>
+          <div class="section">
+            <div class="section-title">🧭 Ręczne nadpisanie planu</div>
+            <div class="chart-card full" style="padding:14px 16px;"><div id="exOvrBox"><div class="chart-empty">Ładowanie…</div></div></div>
+          </div>
+          <div class="section">
+            <div class="section-title">🔋 Historia poziomu baterii (7 dni)</div>
+            <div class="chart-card full" style="padding:14px 16px;"><div id="exHistBox"><div class="chart-empty">Ładowanie…</div></div></div>
+          </div>
+
           
           <div class="section" style="margin-top:6px;">
             <div class="section-title">Historia energii i cen</div>
@@ -2788,23 +2809,6 @@
 
         <div class="tab-content" data-tab-content="ems" style="display:none;">
           <div class="simple-wrap" id="simpleWrap" style="display:none;"></div>
-          <div class="section" style="margin-top:6px;">
-            <div class="section-title">📈 Plan na najbliższe 24 h</div>
-            <div class="chart-card full" style="padding:14px 16px;"><div id="exPlanBox"><div class="chart-empty">Ładowanie planu…</div></div></div>
-          </div>
-          <div class="section">
-            <div class="section-title">🗓 Plan godzina po godzinie</div>
-            <div class="chart-card full" style="padding:14px 16px;"><div id="exTblBox"><div class="chart-empty">Ładowanie…</div></div></div>
-          </div>
-          <div class="section">
-            <div class="section-title">🧭 Ręczne nadpisanie planu</div>
-            <div class="chart-card full" style="padding:14px 16px;"><div id="exOvrBox"><div class="chart-empty">Ładowanie…</div></div></div>
-          </div>
-          <div class="section">
-            <div class="section-title">🔋 Historia poziomu baterii (7 dni)</div>
-            <div class="chart-card full" style="padding:14px 16px;"><div id="exHistBox"><div class="chart-empty">Ładowanie…</div></div></div>
-          </div>
-
           <div class="section">
             <div class="section-title">🤖 Inteligentny harmonogram</div>
             <div class="chart-card full" style="padding:14px 16px;">
@@ -3021,7 +3025,7 @@
           else this._stopFlowLoop();
           if (tab === 'diag') this._safe(() => this._dgOpen());
           else if (this._dg) this._dgDestroyChart();
-          if (tab === 'ems' || tab === 'diag') this._safe(() => this._exEnsure());
+          if (tab === 'ems' || tab === 'diag' || tab === 'charts') this._safe(() => this._exEnsure());
           if (tab === 'dev') this._safe(() => this._devEnsure());
 
           if (tab === 'charts') {
@@ -3043,6 +3047,25 @@
           }
         });
       });
+
+      // Ustawienia: sekcje zwijane kliknięciem w tytuł (stan w localStorage, domyślnie rozwinięte)
+      {
+        let saved = {}; try { saved = JSON.parse(localStorage.getItem('bms_ems_collapsed') || '{}') || {}; } catch (e) { saved = {}; }
+        wrap.querySelectorAll('[data-tab-content="ems"] > .section').forEach((sec) => {
+          const t = sec.querySelector(':scope > .section-title'); if (!t) return;
+          const key = (t.textContent || '').trim();
+          t.classList.add('collapsible'); t.setAttribute('role', 'button'); t.setAttribute('tabindex', '0');
+          const apply = (c) => { sec.classList.toggle('collapsed', c); t.setAttribute('aria-expanded', c ? 'false' : 'true'); };
+          apply(!!saved[key]);
+          const tog = () => {
+            const c = !sec.classList.contains('collapsed'); apply(c);
+            if (c) saved[key] = 1; else delete saved[key];
+            try { localStorage.setItem('bms_ems_collapsed', JSON.stringify(saved)); } catch (e) { /* brak storage */ }
+          };
+          t.addEventListener('click', tog);
+          t.addEventListener('keydown', (ev) => { if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); tog(); } });
+        });
+      }
 
       const addBtn = (id, action) => { const el = this._el(id); if (el) el.addEventListener('click', action); };
       addBtn('btn-sprzedaz-1', () => this._toggle('switch', 'bateria_sprzedaz_1'));
@@ -3705,7 +3728,7 @@
       const on = this._simpleOn();
       if (app.classList.contains('simple') !== on) {
         app.classList.toggle('simple', on);
-        root.querySelectorAll('.tab[data-tab="ems"] .tl, .tab[data-tab="ems"] .tls').forEach((e) => { e.textContent = on ? 'Ustawienia' : 'EMS'; });
+        root.querySelectorAll('.tab[data-tab="ems"] .tl, .tab[data-tab="ems"] .tls').forEach((e) => { e.textContent = e.classList.contains('tls') ? 'Ustaw.' : 'Ustawienia'; });
         const sw = this._el('simpleWrap'); if (sw) sw.style.display = on ? '' : 'none';
         if (on && ['charts', 'log', 'dev'].includes(this._activeTab)) { const m = root.querySelector('.tab[data-tab="main"]'); if (m) m.click(); }
         if (!on && sw) { sw.innerHTML = ''; sw.dataset.k = ''; }
