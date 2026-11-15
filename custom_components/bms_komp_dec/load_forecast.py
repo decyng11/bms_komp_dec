@@ -80,6 +80,7 @@ PROFILE_MAX_DAYS = 14
 PROFILE_TYPED_MIN_DAYS = 4   # tyle dni danego typu (roboczy / wolny), by użyć osobnego profilu godzinowego
 STALE_UNTIL_HOUR = 6         # do tej godziny licznik dzienny może jeszcze pokazywać wynik wczorajszy (reset po północy)
 DUP_EPS = 0.011              # dwa kolejne dni z tą samą wartością (do 0,01 kWh) = przepisany wynik poprzedniego dnia
+SPIKE_RATIO = 2.5            # dzień ponad 2,5× mediany sąsiednich dni to najpewniej skok licznika (np. po restarcie czujnika)
 PARTIAL_RATIO = 0.25         # dzień poniżej 25% mediany sąsiednich dni to najpewniej niepełne dane
 SUSPECT_NEIGHBOUR_DAYS = 7
 SUSPECT_MIN_NEIGHBOURS = 4
@@ -101,10 +102,11 @@ def _stdev(vals: list[float]) -> float:
 
 
 def suspect_days(days: dict[str, float], today: date | None = None) -> dict[str, str]:
-    """Dni z sumą zużycia, której nie należy ufać: {data: "duplicate" | "partial"}.
+    """Dni z sumą zużycia, której nie należy ufać: {data: "duplicate" | "partial" | "spike"}.
 
     duplicate — ta sama wartość (do 0,01 kWh) co dzień wcześniej: licznik falownika resetuje się po północy (zegar
                 falownika), a wczorajszy wynik został zapisany jako dzisiejszy. Zostaje pierwszy dzień z pary.
+    spike     — ponad 2,5× mediany sąsiednich dni: skok licznika (np. po restarcie czujnika, błędny odczyt).
     partial   — poniżej 25% mediany sąsiednich dni (±7 dni, min. 4): niepełne dane (przerwa w pomiarze, start w ciągu dnia).
     Dzień bieżący (i późniejsze) nie jest oceniany — jeszcze trwa."""
     items: dict[date, float] = {}
@@ -137,6 +139,8 @@ def suspect_days(days: dict[str, float], today: date | None = None) -> dict[str,
                  if o in items and o.isoformat() not in flags and items[o] >= MIN_VALID_KWH]
         if len(neigh) >= SUSPECT_MIN_NEIGHBOURS and items[d] < PARTIAL_RATIO * statistics.median(neigh):
             flags[d.isoformat()] = "partial"
+        elif len(neigh) >= SUSPECT_MIN_NEIGHBOURS and items[d] > SPIKE_RATIO * statistics.median(neigh):
+            flags[d.isoformat()] = "spike"
     return flags
 
 

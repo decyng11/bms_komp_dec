@@ -95,6 +95,8 @@ SCHED_SETTLE_S = 300       # tyle czekamy, aż falownik potwierdzi start, zanim 
 SELLING_TOKEN = "__sprzedaz__"     # zapamiętany „tryb” przy falownikach bez trybu Export First (Sofar)
 PRICE_HYSTERESIS = 0.02          # PLN/kWh powyżej progu, by uznać cenę za "wróconą do normy"
 GUARD_COOLDOWN_S = 120
+PV_STREAK_DAYS = 3         # tyle dni z rzędu PV wyraźnie poniżej prognozy → ostrzeżenie
+PV_STREAK_RATIO = 0.7
 STARTUP_CHECK_S = 180      # kiedy po starcie robimy samokontrolę
 FAILSAFE_NODATA_S = 900    # brak SOC dłużej niż tyle → tryb awaryjny (nie sterujemy „na ślepo”)
 MISMATCH_GRACE_S = 600     # tyle czasu falownik może ładować z sieci „bez właściciela”, zanim zgłosimy rozjazd
@@ -1279,6 +1281,45 @@ class BmsRuntime:
             except Exception as err:  # noqa: BLE001
                 _LOGGER.error("EMS GUARD: awaryjny STOP (%s) nieudany: %s", slot, err)
 
+    def pv_streak(self, today) -> dict[str, Any] | None:
+        """Passa dni, w których produkcja PV była wyraźnie niższa niż prognoza (ostatnie PV_STREAK_DAYS pełnych dni).
+        Zwraca {"days", "ratio"} albo None, gdy passy nie ma lub brakuje danych."""
+        ratios: list[float] = []
+        for i in range(1, PV_STREAK_DAYS + 1):
+            rec = self.insights.fc.get((today - timedelta(days=i)).isoformat()) or {}
+            try:
+                f_, a_ = float(rec.get("pv_fc")), float(rec.get("pv_act"))
+            except (TypeError, ValueError):
+                return None
+            if f_ < 2.0:                       # prognoza prawie zerowa — stosunek nic nie mówi
+                return None
+            ratios.append(a_ / f_)
+        if all(r < PV_STREAK_RATIO for r in ratios):
+            return {"days": PV_STREAK_DAYS, "ratio": round(sum(ratios) / len(ratios), 2)}
+        return None
+
+    async def _pv_streak_check(self, now: datetime) -> None:
+        """Zbyt optymistyczne PV: kilka dni z rzędu produkcja <70% prognozy. Planer, który pomija ładowanie z sieci przy
+        dobrej prognozie PV, powinien wtedy być ostrożniejszy — zgłaszamy to raz dziennie (wpis w dzienniku + powiadomienie)."""
+        today = dt_util.as_local(now).date()
+        if self.state.get("pv_streak_day") == today.isoformat():
+            return
+        st = self.pv_streak(today)
+        if not st:
+            return
+        self.state["pv_streak_day"] = today.isoformat()
+        self._save_state()
+        pct = round(st["ratio"] * 100)
+        self.log.add("guard", f"Prognoza PV zawyżona {st['days']} dni z rzędu (produkcja ok. {pct}% prognozy)", "warn")
+        try:
+            await self.monitor.notifier.send(
+                "guard_action", "⚠ EMS: prognoza PV zbyt optymistyczna",
+                f"Przez {st['days']} dni z rzędu produkcja PV wynosiła ok. {pct}% prognozy. Plan, który polega na dobrej "
+                f"pogodzie i pomija ładowanie z sieci, może zostawić za mało energii — rozważ wyższą rezerwę albo sprawdź "
+                f"źródło prognozy PV.", key="guard:pvstreak")
+        except Exception as err:  # noqa: BLE001
+            _LOGGER.error("EMS GUARD: powiadomienie o passie PV: %s", err)
+
     async def _startup_check(self, now: datetime) -> None:
         """Samokontrola po (re)starcie: raz, kilka minut po uruchomieniu, porównuje stan falownika ze znacznikami EMS
         (kto zlecił ładowanie z sieci / sprzedaż) i zostawia w dzienniku jednoznaczny wynik. Rozjazdy zgłaszają strażnicy
@@ -1438,6 +1479,10 @@ class BmsRuntime:
             await self._stop_at_target(now)
         except Exception as err:  # noqa: BLE001
             _LOGGER.error("EMS GUARD: koniec ładowania po osiągnięciu celu: %s", err)
+        try:
+            await self._pv_streak_check(now)
+        except Exception as err:  # noqa: BLE001
+            _LOGGER.error("EMS GUARD: passa PV: %s", err)
         try:
             await self._startup_check(now)
         except Exception as err:  # noqa: BLE001

@@ -457,6 +457,13 @@ async def main():
     lf9 = lfm.LoadForecaster(hass, lambda: "sensor.x")
     lf9.temperatures = {"2026-11-05": 10.0, "2026-11-04": 0.0, "2026-11-03": 0.0}
     check("forecast: temperatura efektywna z opóźnieniem", abs(lf9._eff_temp(date(2026, 11, 5)) - 7.0) < 1e-6, lf9._eff_temp(date(2026, 11, 5)))
+    # skok licznika: jeden dzień ≫ sąsiedzi → podejrzany
+    from datetime import date as _d
+    sp = {(_d(2026, 10, 1) + timedelta(days=i)).isoformat(): 10.0 + (i % 4) * 0.3 for i in range(14)}
+    sp["2026-10-08"] = 41.0
+    fl = lfm.suspect_days(sp, _d(2026, 11, 1))
+    check("forecast: skok licznika oznaczony jako spike", fl.get("2026-10-08") == "spike", fl)
+    check("forecast: zwykłe dni bez flagi", len(fl) == 1, fl)
     check("forecast: jutro skorygowane, wstecz bez korekty", lf6.predict(date(2026, 11, 3), today4) == 8.0 and lf6.predict(date(2026, 11, 1), today4) == 10.0)
     lf6.days.update({(today4 - timedelta(days=i)).isoformat(): 3.0 for i in range(1, 15)})
     check("forecast: korekta ograniczona do 0.75", abs(lf6._bias_factor(today4) - 0.75) < 1e-3, lf6._bias_factor(today4))
