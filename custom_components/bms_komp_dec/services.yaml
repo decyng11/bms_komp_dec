@@ -316,3 +316,18 @@ analysis_set:
 control_test:
   name: Testuj sterowanie falownikiem
   description: Zmienia prąd ładowania o jeden krok, czeka na odczyt zwrotny i przywraca wartość (administrator).
+
+settings_log_get:
+  name: Dziennik zmian ustawień EMS
+  description: Zwraca ostatnie zmiany encji integracji (kto, kiedy, było → jest). Administrator.
+  fields:
+    limit:
+      name: Limit
+      description: Ile ostatnich wpisów zwrócić (domyślnie 100).
+      required: false
+      example: 100
+      selector:
+        number:
+          min: 1
+          max: 150
+          mode: box

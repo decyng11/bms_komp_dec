@@ -17,7 +17,7 @@ from homeassistant.exceptions import HomeAssistantError
 from homeassistant.util import dt as dt_util
 
 from .const import (
-    CONF_BATTERY_CAPACITY_KWH, CONF_GRID_POWER, CONF_PRICE_BUY_ENTITY, CONF_PRICE_SELL_ENTITY, CONF_SOC,
+    CONF_BATTERY_CAPACITY_KWH, CONF_GRID_POWER, CONF_PRICE_BUY_ENTITY, CONF_PRICE_SELL_ENTITY, CONF_SOC, DOMAIN,
     DEFAULT_BATTERY_CAPACITY_KWH, DEFAULT_PRICE_BUY_ENTITY, DEFAULT_PRICE_SELL_ENTITY, WEEKDAY_SWITCH_KEYS,
 )
 from . import inbox
@@ -220,6 +220,60 @@ class BmsRuntime:
 
     def _save_state(self) -> None:
         self._state_store.request_save(lambda: dict(self.state))
+
+    def start_settings_log(self):
+        """Nasłuch zmian encji integracji → dziennik zmian ustawień (kto, kiedy, było → jest). Zwraca funkcję odpinającą."""
+        from homeassistant.const import EVENT_STATE_CHANGED
+        from homeassistant.core import callback
+        from homeassistant.helpers import entity_registry as er
+        from . import settings_log as sl
+
+        reg = er.async_get(self.hass)
+        own: dict[str, bool] = {}
+
+        def is_own(eid: str) -> bool:
+            if eid not in own:
+                ent = reg.async_get(eid)
+                own[eid] = bool(ent and ent.platform == DOMAIN and eid.split(".", 1)[0] in sl.DOMAINS)
+            return own[eid]
+
+        @callback
+        def _on_change(event) -> None:
+            data = event.data
+            eid = data.get("entity_id") or ""
+            if "." not in eid or eid.split(".", 1)[0] not in sl.DOMAINS:
+                return
+            old, new = data.get("old_state"), data.get("new_state")
+            if old is None or new is None or not is_own(eid):
+                return
+            ctx = event.context
+            if ctx is None or (ctx.user_id is None and ctx.parent_id is None):
+                return                                    # zmiana wewnętrzna integracji
+            who = "automatyzacja / skrypt"
+            if ctx.user_id:
+                who = f"użytkownik {ctx.user_id[:8]}"
+                self._spawn(self._name_settings_log_user(ctx.user_id))
+            if sl.record(self.state, eid, old.state, new.state, who) is not None:
+                self._save_state()
+
+        return self.hass.bus.async_listen(EVENT_STATE_CHANGED, _on_change)
+
+    async def _name_settings_log_user(self, user_id: str) -> None:
+        """Podmienia skrót identyfikatora w ostatnich wpisach na nazwę użytkownika HA (jednorazowo na użytkownika)."""
+        try:
+            user = await self.hass.auth.async_get_user(user_id)
+        except Exception:  # noqa: BLE001
+            return
+        if not user or not user.name:
+            return
+        short = f"użytkownik {user_id[:8]}"
+        changed = False
+        for e in self.state.get("settings_log") or []:
+            if isinstance(e, dict) and e.get("who") == short:
+                e["who"] = user.name
+                changed = True
+        if changed:
+            self._save_state()
 
     def async_shutdown(self) -> None:
         for task in list(self._tasks):

@@ -41,7 +41,7 @@ _SERVICES = (
     "watch_write", "watch_status", "watch_clear", "health_check", "monthly_report", "get_plan",
     "diag_store_get_all", "diag_store_set", "diag_store_delete",
     "notify_settings_get", "notify_settings_set", "notify_test", "inbox_action", "devices_get", "devices_set", "devices_discover", "insights_get", "self_test",
-    "override_set", "override_clear", "analysis_get", "analysis_set", "control_test",
+    "override_set", "override_clear", "analysis_get", "analysis_set", "control_test", "settings_log_get",
 )
 _SUGGEST_HOUR = 16   # RCE na jutro jest publikowane po południu — wcześniej propozycja bazowała na starych danych
 
@@ -467,6 +467,12 @@ def _register_services(hass: HomeAssistant) -> None:
         from .ctltest import run as ctl_run
         return await ctl_run(rt)
 
+    async def handle_settings_log_get(call):
+        await _require_admin(hass, call)
+        rt = _need_runtime(hass)
+        from . import settings_log as sl
+        return {"items": sl.items(rt.state, int(call.data.get("limit") or 100))}
+
     async def handle_devices_discover(call):
         await _require_admin(hass, call)
         rt = _need_runtime(hass)
@@ -483,6 +489,7 @@ def _register_services(hass: HomeAssistant) -> None:
         ("analysis_get", handle_analysis_get, SupportsResponse.ONLY),
         ("analysis_set", handle_analysis_set, SupportsResponse.OPTIONAL),
         ("control_test", handle_control_test, SupportsResponse.OPTIONAL),
+        ("settings_log_get", handle_settings_log_get, SupportsResponse.ONLY),
         ("devices_set", handle_devices_set, SupportsResponse.OPTIONAL),
         ("notify_settings_get", handle_notify_get, SupportsResponse.ONLY),
         ("notify_settings_set", handle_notify_set, SupportsResponse.OPTIONAL),
@@ -538,6 +545,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     coordinator.runtime = runtime
     entry.async_on_unload(coordinator.async_add_listener(runtime.on_coordinator_update))
     entry.async_on_unload(runtime.async_shutdown)
+    entry.async_on_unload(runtime.start_settings_log())
 
     await _async_register_frontend(hass)
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)

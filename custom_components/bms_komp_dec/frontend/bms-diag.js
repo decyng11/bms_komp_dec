@@ -503,7 +503,7 @@
           break; }
         case 'lock': s.until = 0; this._dgDestroyChart(); this._dgRender(); break;
         case 'extend': s.until = Date.now() + DG_UNLOCK_MS; this._dgTickBar(); break;
-        case 'sec': s.sec = t.dataset.sec; this._dgDestroyChart(); this._dgRender(); break;
+        case 'sec': if (t.dataset.sec === 'log') this._dgSetLog = undefined; s.sec = t.dataset.sec; this._dgDestroyChart(); this._dgRender(); break;
         case 'save-row': this._dgSaveDirty(t.closest('[data-scope]')); break;
         case 'save-scope': this._dgSaveDirty(this._el('dgBody').querySelector(`[data-scope="${t.dataset.scope}"]`) || this._el('dgBody')); break;
         case 'reset-scope': this._dgSectionRefresh(); break;
@@ -535,6 +535,7 @@
         case 'alarm-restore': this._dgAlarmRestore(Number(t.dataset.i)); break;
         case 'alarm-dismiss': { const al = DG_LS.get('bms_diag_alarms', []); al.splice(Number(t.dataset.i), 1); DG_LS.set('bms_diag_alarms', al); this._dgRenderAlarmBox(); this._dgSyncTab(); break; }
         case 'log-undo': this._dgLogUndo(Number(t.dataset.i)); break;
+        case 'setlog-undo': this._dgSetLogUndo(Number(t.dataset.i)); break;
         case 'log-clear': if (confirm('Wyczyścić dziennik zmian (jest zapisany w Home Assistant)?')) { DG_LS.set('bms_diag_log', []); this._dgRenderSection(); } break;
         case 'alarm-hist': this._dgAlarmHistory(); break;
         case 'mb-read': this._dgModbus('read'); break;
@@ -1535,7 +1536,36 @@
       const rows = log.slice(0, 150).map((r, i) => `<tr><td>${new Date(r.ts).toLocaleString('pl-PL')}<div class="dg-muted">${dgEsc(r.user || '')}${r.label ? ' · ' + dgEsc(r.label) : ''}</div></td><td>${dgEsc(r.name || r.eid)}<div class="dg-muted dg-mono" style="font-size:10.5px">${dgEsc(r.eid)}</div></td><td><span class="dg-muted">${dgEsc(this._dgFmt(r.from))}</span> → <b>${dgEsc(this._dgFmt(r.to))}</b></td><td class="${!r.ok || r.ver === 'drift' ? 'dg-bad' : (r.ver === 'pending' ? 'dg-warn' : 'dg-ok')}">${!r.ok ? '⚠ ' + dgEsc(r.err || 'brak potwierdzenia') : (r.ver === 'drift' ? '⚠ wartość zmieniła się po zapisie' : (r.ver === 'pending' ? '⏳ zapisane, trwa kontrola odczytu' : (r.ver === 'ok' ? '✔ kontrola odczytu OK (6 min)' : '✔ zapisane')))}</td><td>${r.ok && r.from != null && r.from !== '' && r.from !== 'unknown' && !String(r.eid).startsWith('button.') ? `<button class="dg-btn sm sec" data-act="log-undo" data-i="${i}">Przywróć</button>` : ''}</td></tr>`).join('');
       return `<div class="dg-card"><h4>Dziennik zmian</h4><div class="sub">Każdy zapis do falownika z tej zakładki (data, kto, było → jest, czy falownik potwierdził). Zapisany w tej przeglądarce (ostatnie 300).</div>
         <table class="dg-tbl stack"><thead><tr><th>Kiedy</th><th>Parametr</th><th>Zmiana</th><th>Status</th><th></th></tr></thead><tbody>${rows || '<tr><td colspan="5" class="dg-muted">Brak wpisów.</td></tr>'}</tbody></table>
-        ${log.length ? '<div style="margin-top:10px;"><button class="dg-btn sec sm" data-act="log-clear">Wyczyść dziennik</button></div>' : ''}</div>`;
+        ${log.length ? '<div style="margin-top:10px;"><button class="dg-btn sec sm" data-act="log-clear">Wyczyść dziennik</button></div>' : ''}</div>${this._dgSetLogCard()}`;
+    },
+    // zmiany ustawień EMS z całego Home Assistanta (panel, aplikacja, automatyzacje) — kto i kiedy, z cofaniem
+    _dgSetLogCard() {
+      if (this._dgSetLog === undefined && !this._dgSetLogBusy) this._dgSetLogLoad();
+      const it = this._dgSetLog;
+      const name = (eid) => { const st = this._hass.states[eid]; return (st && st.attributes && st.attributes.friendly_name) || eid; };
+      const rows = (it || []).map((r, i) => `<tr><td>${new Date(r.ts * 1000).toLocaleString('pl-PL')}<div class="dg-muted">${dgEsc(r.who || '')}</div></td><td>${dgEsc(name(r.eid))}<div class="dg-muted dg-mono" style="font-size:10.5px">${dgEsc(r.eid)}</div></td><td><span class="dg-muted">${dgEsc(this._dgFmt(r.from))}</span> → <b>${dgEsc(this._dgFmt(r.to))}</b></td><td><button class="dg-btn sm sec" data-act="setlog-undo" data-i="${i}">Przywróć</button></td></tr>`).join('');
+      const body = it === undefined ? '<tr><td colspan="4" class="dg-muted">Ładowanie…</td></tr>' : (rows || '<tr><td colspan="4" class="dg-muted">Brak zmian ustawień EMS.</td></tr>');
+      return `<div class="dg-card"><h4>Zmiany ustawień EMS</h4><div class="sub">Kto i kiedy zmienił ustawienie integracji (godziny okien, progi, przełączniki) — w panelu, w aplikacji HA albo przez automatyzację. Ostatnie 60 zmian; „Przywróć” ustawia poprzednią wartość.</div>
+        <table class="dg-tbl stack"><thead><tr><th>Kiedy / kto</th><th>Ustawienie</th><th>Zmiana</th><th></th></tr></thead><tbody>${body}</tbody></table></div>`;
+    },
+    async _dgSetLogLoad() {
+      this._dgSetLogBusy = true;
+      try {
+        const r = await dgCall(this, 'settings_log_get', { limit: 60 }, true);
+        const d = (r && (r.response || r)) || {};
+        this._dgSetLog = Array.isArray(d.items) ? d.items : [];
+      } catch (e) { this._dgSetLog = []; }
+      this._dgSetLogBusy = false;
+      if (this._activeTab === 'diag' && this._dgS().sec === 'log') this._dgRenderSection();
+    },
+    async _dgSetLogUndo(i) {
+      const r = (this._dgSetLog || [])[i]; if (!r) return;
+      const st = this._hass.states[r.eid]; if (!st) { this._dgToast('Encja już nie istnieje.', true); return; }
+      const chk = this._dgCheckValue(r.eid, r.from); if (chk.err) { this._dgToast('❌ Nie można cofnąć: ' + chk.err, true); return; }
+      const ch = [{ eid: r.eid, name: st.attributes.friendly_name || r.eid, from: st.state, to: r.from, r: 1, warn: chk.warn }];
+      if (!(await this._dgConfirmChanges(ch, 'Przywróć poprzednią wartość'))) return;
+      await this._dgApply(ch, 'cofnięcie zmiany ustawienia EMS');
+      this._dgSetLog = undefined; this._dgRenderSection();
     },
     async _dgLogUndo(i) {
       const r = DG_LS.get('bms_diag_log', [])[i]; if (!r) return; const st = this._hass.states[r.eid]; if (!st) { this._dgToast('Encja już nie istnieje.', true); return; }

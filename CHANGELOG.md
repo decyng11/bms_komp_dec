@@ -1,5 +1,10 @@
 # EMS komp-dec — w przygotowaniu (po 0.9.5.1, jeszcze niewydane)
 
+- **Skoki licznika dnia.** Dzień z sumą zużycia ponad 2,5× większą niż sąsiednie dni (np. po restarcie czujnika) jest oznaczany jako podejrzany („skok licznika”) i pomijany w modelu prognozy, tak jak dni zdublowane i niepełne.
+- **Ostrzeżenie o zawyżonej prognozie PV.** Gdy produkcja PV przez 3 dni z rzędu wynosi poniżej 70% prognozy, pojawia się wpis w dzienniku i powiadomienie (raz dziennie).
+- **„Dlaczego?” na stronie głównej** uwzględnia tryb awaryjny i rozjazd oraz podaje właściwy powód ładowania z sieci (okno / wymuszone / włączone ręcznie).
+- **Dziennik zmian ustawień EMS** (Diagnostyka → Dziennik zmian): kto i kiedy zmienił ustawienie integracji (godziny okien, progi, przełączniki) w panelu, aplikacji HA albo przez automatyzację, z przyciskiem „Przywróć”. Nowa usługa `settings_log_get` (administrator). Zmiany wewnętrzne integracji nie są zapisywane.
+
 - **Tryb awaryjny przy braku danych.** Gdy brak odczytu SOC trwa ponad 15 minut, EMS kończy to, co sam zlecił (ładowanie z sieci, sprzedaż z baterii — wg własnych znaczników, bo falownik milczy), zgłasza to powiadomieniem i wpisem w dzienniku, a po powrocie danych sam wraca do normalnej pracy.
 - **Samokontrola po restarcie.** Kilka minut po starcie jednorazowo porównuje stan falownika ze znacznikami EMS i zostawia w dzienniku wynik („stan zgodny” albo lista rozbieżności); nieaktualne znaczniki są czyszczone. Nieaktualny znacznik ręcznego ładowania jest też czyszczony, gdy ładowanie ktoś wyłączył poza EMS.
 
