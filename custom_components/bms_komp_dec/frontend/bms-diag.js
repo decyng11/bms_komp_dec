@@ -1692,6 +1692,6 @@
 
   };
   install.contract = 1;
-  install.version = '0.9.5.1';
+  install.version = '0.9.5.2';
   window.__bmsDiagInstall = install;
 })();

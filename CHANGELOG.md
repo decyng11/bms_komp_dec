@@ -1,4 +1,9 @@
-# EMS komp-dec — w przygotowaniu (po 0.9.5.1, jeszcze niewydane)
+# EMS komp-dec — zmiany w 0.9.5.2 (z 0.9.5.1)
+
+- **Nowy układ kart.** Zakładka „Wykresy" to teraz „Plan": na górze plan 24 h, tabela godzina po godzinie, ręczne nadpisanie i historia baterii, niżej wykresy i prognozy. Zakładka „EMS" nazywa się „Ustawienia", a jej sekcje zwija się kliknięciem w tytuł (stan pamiętany w przeglądarce).
+- **Prognoza zużycia:** osobna korekta dla dni roboczych i wolnych/świąt, opóźniona temperatura, diagnostyka błędu wg typu dnia, ostrożna prognoza P75 (tylko informacyjnie — planer jej nie używa).
+- Poniżej: zabezpieczenia i dziennik zmian dodane po 0.9.5.1.
+
 
 - **Skoki licznika dnia.** Dzień z sumą zużycia ponad 2,5× większą niż sąsiednie dni (np. po restarcie czujnika) jest oznaczany jako podejrzany („skok licznika”) i pomijany w modelu prognozy, tak jak dni zdublowane i niepełne.
 - **Ostrzeżenie o zawyżonej prognozie PV.** Gdy produkcja PV przez 3 dni z rzędu wynosi poniżej 70% prognozy, pojawia się wpis w dzienniku i powiadomienie (raz dziennie).
