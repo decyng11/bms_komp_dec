@@ -1359,6 +1359,16 @@ class BmsRuntime:
         except Exception as err:  # noqa: BLE001
             _LOGGER.error("EMS GUARD: powiadomienie o trybie awaryjnym: %s", err)
 
+    def failsafe_active(self) -> bool:
+        return bool(getattr(self, "_failsafe_on", False))
+
+    def mismatch_active(self) -> bool:
+        return getattr(self, "_mismatch_notified", None) is not None and getattr(self, "_mismatch_since", None) is not None
+
+    def grid_charge_owner(self, now: datetime) -> str | None:
+        """Kto zlecił trwające ładowanie z sieci (do opisu „dlaczego”)."""
+        return self._mismatch_owner(now)
+
     def _mismatch_owner(self, now: datetime) -> str | None:
         """Kto „odpowiada” za trwające ładowanie z sieci: harmonogram, okno, wymuszenie albo ręczna komenda.
         None = nikt (falownik ładuje z sieci, a EMS tego nie zlecał)."""

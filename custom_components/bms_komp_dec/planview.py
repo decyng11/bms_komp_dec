@@ -147,7 +147,11 @@ def why_now(rt: Any, now: datetime) -> dict[str, Any]:
         pass
     for o in ovr:
         add(rt.override_text(o))
-    if rt.storm_active():
+    if getattr(rt, "failsafe_active", lambda: False)():
+        kind, text = "idle", "Tryb awaryjny: brak danych z falownika — wstrzymałem sterowanie, wrócę do planu po odzyskaniu połączenia."
+    elif getattr(rt, "mismatch_active", lambda: False)():
+        kind, text = "grid", "Uwaga: falownik ładuje z sieci poza planem (żadne okno ani komenda tego nie zleciły) — sprawdź ustawienia falownika."
+    elif rt.storm_active():
         kind, text = "storm", "Tryb burzowy: bateria zostaje naładowana na wypadek awarii sieci, nic nie sprzedaję."
     elif rt.vacation_active():
         kind, text = "vacation", "Tryb urlopowy: ograniczam zużycie, bateria pracuje oszczędnie."
@@ -159,7 +163,13 @@ def why_now(rt: Any, now: datetime) -> dict[str, Any]:
     elif grid_chg:
         kind = "grid"
         tgt = (rt.state.get("grid_target_plan") or {}).get("target")
-        text = "Ładuję baterię z sieci, bo teraz prąd jest tani" + (f" — do {tgt:.0f}%." if isinstance(tgt, (int, float)) else ".")
+        owner = None
+        try:
+            owner = rt.grid_charge_owner(now)
+        except Exception:  # noqa: BLE001
+            pass
+        why = {"wymuszenie": "wymusiłeś ładowanie", "komenda": "włączono je ręcznie"}.get(owner or "", "teraz prąd jest tani")
+        text = f"Ładuję baterię z sieci, bo {why}" + (f" — do {tgt:.0f}%." if isinstance(tgt, (int, float)) else ".")
     else:
         pvw = None
         try:
