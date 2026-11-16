@@ -14,7 +14,7 @@ const sleep = (ms) => new Promise(r => setTimeout(r, ms));
   await e.page.waitForFunction(() => !!__el.shadowRoot.getElementById('dgBody'), null, { timeout: 5000 });
   await e.q(() => __el.shadowRoot.querySelector('[data-sec=adv]').click());
   await e.page.waitForFunction(() => !!__el.shadowRoot.querySelector('[data-act=clear-load-hist]'), null, { timeout: 5000 });
-  ok(true, 'przycisk jest w Diagnostyka → Zaawansowane');
+  ok(true, 'przycisk jest w Ustawienia → Zaawansowane');
   const pressed = () => e.q(() => window.__calls.filter(c => c[0] === 'button' && c[1] === 'press' && c[2].entity_id === 'button.bms_wyczysc_historie_zuzycia').length);
 
   // anuluj → bez wywołania

@@ -1449,7 +1449,7 @@ class BmsRuntime:
             await self.monitor.notifier.send(
                 "guard_action", "⚠ EMS: brak danych z falownika",
                 f"Brak odczytu SOC od ok. {mins} min — sterowanie wstrzymane dla bezpieczeństwa.{what} "
-                f"Sprawdź połączenie z falownikiem (Diagnostyka → Łączność). Plan wznowi się sam po powrocie danych.",
+                f"Sprawdź połączenie z falownikiem (Ustawienia → Łączność). Plan wznowi się sam po powrocie danych.",
                 key="guard:failsafe")
         except Exception as err:  # noqa: BLE001
             _LOGGER.error("EMS GUARD: powiadomienie o trybie awaryjnym: %s", err)

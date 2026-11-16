@@ -743,9 +743,6 @@
       .mp-bill small { display:block; font-size:11px; color:var(--muted); }
       .mp-bill b { font-size:18px; font-variant-numeric:tabular-nums; color:var(--text); }
       .mp-bill b.pos { color:var(--green); } .mp-bill b.neg { color:var(--red); }
-      .mp-chart { padding:10px 14px 6px; border-radius:14px; background:var(--card); border:1px solid var(--line); margin-bottom:10px; }
-      .mp-chart svg { width:100%; height:auto; display:block; }
-      .mp-leg { display:flex; gap:14px; flex-wrap:wrap; font-size:11px; color:var(--muted); margin-top:4px; }
       .mp-chips { display:flex; gap:6px; flex-wrap:wrap; margin-bottom:10px; }
       .mp-chip { display:inline-flex; gap:8px; align-items:center; padding:5px 6px 5px 12px; border-radius:999px; background:rgba(10,132,255,.12); font-size:12px; }
       .mp-chip button { border:0; background:transparent; color:var(--muted); font-size:14px; cursor:pointer; padding:0 6px; }
@@ -777,7 +774,7 @@
         this._safe(() => this._exMain());
       },
 
-      // ------------------------------------------------------------ ekran główny: rachunek dnia, SOC rzeczywisty i plan, przyciski nadpisań
+      // ------------------------------------------------------------ ekran główny: rachunek dnia i znaczniki aktywnych nadpisań
       _exMain() {
         const box = this._el('exMainBox'); if (!box || this._activeTab !== 'main') return;
         const a = this._pvAttrs ? this._pvAttrs() : {};
@@ -785,12 +782,8 @@
         const pa = (ps && ps.attributes) || {};
         const day = (pa.sums && pa.sums.day) || null;
         const sv = pa.extras && pa.extras.day && pa.extras.day.savings;
-        const hist = Array.isArray(a.soc_history) ? a.soc_history : [];
-        const today = hist.length ? hist[hist.length - 1] : null;
         const ovr = Array.isArray(a.overrides) ? a.overrides : [];
-        const fl = Number(this._rsAttrs().inverter_floor);
-        const nowH = new Date().getHours();
-        const key = JSON.stringify([day, sv, today && [today.soc, today.plan], ovr.map(o => o.id), fl, nowH]);
+        const key = JSON.stringify([day, sv, ovr.map(o => o.id)]);
         if (box.dataset.exKey === key) return;
         box.dataset.exKey = key;
         const zl = (v) => { const n = exNum(v); return n === null ? '—' : (n < 0 ? '−' : '') + Math.abs(n).toFixed(2).replace('.', ',') + ' zł'; };
@@ -805,23 +798,8 @@
             + (sv && exNum(sv.without_cost) !== null ? tile('Bez PV i baterii byłoby', zl(sv.without_cost)) : (net !== null ? tile('Saldo dziś', zl(net), net >= 0 ? 'pos' : 'neg') : ''))
             + '</div>';
         }
-        let chart = '';
-        const act = today && Array.isArray(today.soc) ? today.soc : null, plan = today && Array.isArray(today.plan) ? today.plan : null;
-        if (act && act.some(v => v !== null)) {
-          const W = 1000, Hh = 120, X = (h) => 24 + h * (W - 40) / 23, Y = (v) => 8 + (100 - Math.max(0, Math.min(100, v))) * (Hh - 24) / 100;
-          const path = (arr, from, to) => { let d = '', pen = false; for (let h = from; h <= to && h < arr.length; h++) { const v = exNum(arr[h]); if (v === null) { pen = false; continue; } d += (pen ? 'L' : 'M') + X(h).toFixed(1) + ' ' + Y(v).toFixed(1); pen = true; } return d; };
-          let lastAct = -1; act.forEach((v, h) => { if (v !== null && h <= nowH) lastAct = h; });
-          const grid = [0, 25, 50, 75, 100].map(v => `<line x1="24" x2="${W - 16}" y1="${Y(v).toFixed(1)}" y2="${Y(v).toFixed(1)}" stroke="var(--line)" stroke-width="1"/>`).join('');
-          const hours = [0, 4, 8, 12, 16, 20, 23].map(h => `<text x="${X(h).toFixed(1)}" y="${Hh - 2}" font-size="12" text-anchor="middle" fill="var(--muted)">${String(h).padStart(2, '0')}:00</text>`).join('');
-          const flLine = isFinite(fl) && fl > 0 && fl < 100 ? `<line x1="24" x2="${W - 16}" y1="${Y(fl).toFixed(1)}" y2="${Y(fl).toFixed(1)}" stroke="#ff3b30" stroke-width="1.5" stroke-dasharray="5 5" opacity=".7"/><text x="28" y="${(Y(fl) - 4).toFixed(1)}" font-size="12" fill="var(--muted)">rezerwa ${Math.round(fl)}%</text>` : '';
-          chart = `<div class="mp-chart"><svg viewBox="0 0 ${W} ${Hh}" role="img" aria-label="Poziom baterii dziś: rzeczywisty i z planu">${grid}${flLine}`
-            + (plan ? `<path d="${path(plan, 0, 23)}" fill="none" stroke="#0a84ff" stroke-width="2.5" stroke-dasharray="6 5" stroke-linecap="round"/>` : '')
-            + `<path d="${path(act, 0, 23)}" fill="none" stroke="var(--text)" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>`
-            + (lastAct >= 0 ? `<line x1="${X(nowH).toFixed(1)}" x2="${X(nowH).toFixed(1)}" y1="4" y2="${Hh - 16}" stroke="var(--muted)" stroke-dasharray="3 3"/>` : '')
-            + `${hours}</svg><div class="mp-leg"><span>━ rzeczywisty poziom baterii</span>${plan ? '<span style="color:#0a84ff">╌ plan z rana</span>' : ''}</div></div>`;
-        }
         const chips = ovr.length ? '<div class="mp-chips">' + ovr.map(o => `<span class="mp-chip">🧭 ${exEsc(o.text || pxKind[o.kind] || o.kind)}<button type="button" data-mp-del="${exEsc(o.id)}" aria-label="Usuń nadpisanie" title="Usuń">✕</button></span>`).join('') + '</div>' : '';
-        box.innerHTML = bill + chart + chips;
+        box.innerHTML = bill + chips;
         if (!box.dataset.exBound) {
           box.dataset.exBound = '1';
           box.addEventListener('click', async (ev) => {

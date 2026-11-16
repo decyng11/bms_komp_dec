@@ -379,7 +379,7 @@
             ${num('max_run_h', 'Ostrzeż po ciągłej pracy (h, 0 = nie)', 0.5)}<div></div>
             ${chk('notify_cycle', 'Powiadom o końcu cyklu')}${chk('notify_anomaly', 'Powiadom o nietypowej pracy')}${chk('notify_hint', 'Podpowiadaj „uruchom teraz”')}
           </div>
-          <div class="dv-note">Powiadomienia działają, gdy dany rodzaj jest włączony też w Diagnostyce → Powiadomienia (grupa „Urządzenia”).</div>
+          <div class="dv-note">Powiadomienia działają, gdy dany rodzaj jest włączony też w Ustawieniach → Powiadomienia (grupa „Urządzenia”).</div>
           <div class="section-title" style="margin:16px 0 8px;">🎛 Sterowanie (opcjonalne)</div>
           <div class="dv-form">
             <label>Przełącznik urządzenia<input type="text" list="dvSw" data-dvf="switch_eid" placeholder="switch.bojler" value="${dvEsc(e.switch_eid || '')}"/><datalist id="dvSw">${sws.map((x) => `<option value="${dvEsc(x)}">`).join('')}</datalist></label>

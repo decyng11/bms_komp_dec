@@ -1,4 +1,4 @@
-// Ekran główny: alerty, znaczniki rezerwy/celu na pierścieniu baterii, linia PV bez przecinania napisów, rachunek dnia, wykres SOC, przyciski nadpisań
+// Ekran główny: alerty, znaczniki rezerwy/celu na pierścieniu baterii, linia PV bez przecinania napisów, rachunek dnia, brak wykresu SOC, przyciski nadpisań
 const { openCard, chromium } = require('./ui_env');
 let fails = 0; const ok = (c, m) => { if (!c) { fails++; console.log('FAIL', m); } else console.log('ok  ', m); };
 const sleep = (ms) => new Promise(r => setTimeout(r, ms));
@@ -23,7 +23,7 @@ const sleep = (ms) => new Promise(r => setTimeout(r, ms));
   await sleep(300);
   const m = await e.q(() => { const b = __el.shadowRoot.getElementById('exMainBox'); return { bill: b.querySelector('.mp-bill').textContent, svg: !!b.querySelector('.mp-chart svg'), paths: b.querySelectorAll('.mp-chart path').length, chips: b.querySelectorAll('.mp-chip').length, btns: b.querySelectorAll('[data-mp]').length }; });
   ok(/4,20 zł/.test(m.bill) && /1,10 zł/.test(m.bill) && /6,05 zł/.test(m.bill), 'rachunek dnia: oszczędzone, sprzedałem, bez PV: ' + m.bill);
-  ok(m.svg && m.paths === 2, 'wykres SOC: linia rzeczywista i plan');
+  ok(!m.svg && m.paths === 0, 'wykres poziomu baterii usunięty z ekranu głównego (został rachunek dnia i znaczniki)');
   ok(m.chips === 1 && m.btns === 0, 'ekran główny: bez przycisków, aktywne nadpisanie jako znacznik');
   await sleep(2500);
   const fm = await e.q(() => { const s = __el.shadowRoot.getElementById('nodesBox'); return { tick: !!s.querySelector('line[stroke="#ff3b30"]'), tgt: !!s.querySelector('rect[fill="#af52de"]') }; });

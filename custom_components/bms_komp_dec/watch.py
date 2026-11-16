@@ -142,7 +142,7 @@ class WriteWatch:
 
     async def _report_drift(self, item: dict[str, Any], val: Any, note: str) -> None:
         prev = item.get("previous")
-        restore = f"\nPoprzednia wartość: {prev}. Przywróć ją w Diagnostyce (Dziennik → Cofnij)." if prev is not None else ""
+        restore = f"\nPoprzednia wartość: {prev}. Przywróć ją w Ustawieniach (Dziennik → Cofnij)." if prev is not None else ""
         body = (f"{item['label']}: ustawiono {item['expected']}, a po {int(item['checks'][-1]['after_s'] // 60)} min "
                 f"falownik raportuje {val}." + (f"\n{note}." if note else "") + restore)
         await self.rt.monitor.notifier.send(

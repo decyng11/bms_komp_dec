@@ -122,7 +122,7 @@ const { seed, curve, REPORT, HEALTH, tab, sr, openModes, openSec } = T;
   ok(/Tryb burzowy do/.test(bn) && /rezerwa 100%/.test(bn) && /Tryb urlopowy/.test(bn) && /250 W/.test(bn), 'baner: tryb burzowy (do kiedy) i urlopowy (zużycie)');
   ok(await e.q(() => window.__xss === undefined && !__el.shadowRoot.querySelector('#statusBanner img')), 'baner: znaczniki HTML w stanie alarmu nie są wykonywane');
   ok(await e.q(() => __el.shadowRoot.querySelectorAll('#statusBanner .sb-item.bad').length === 2 && __el.shadowRoot.querySelectorAll('#statusBanner .sb-item.warn').length === 1), 'baner: kolory — 2 czerwone, 1 pomarańczowy');
-  ok(await e.q(() => /⚠/.test(__el.shadowRoot.getElementById('tabDiag').textContent)), 'zakładka Diagnostyka: ⚠ od alarmu z integracji');
+  ok(await e.q(() => /⚠/.test(__el.shadowRoot.getElementById('tabDiag').textContent)), 'zakładka Ustawienia: ⚠ od alarmu z integracji');
   ok(/ⓘ/.test(bn) && await e.q(() => /niskonapięciowych/.test(__el.shadowRoot.querySelector('#statusBanner .sb-item span[title]').title)), 'baner: zastrzeżenie o modelu falownika w podpowiedzi ⓘ');
   // tryby — przeniesione do Diagnostyki (zakładka „🛡️ Tryby”)
   await tab(e, 'ems');

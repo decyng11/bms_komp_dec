@@ -90,7 +90,7 @@ def story():
         ["Plan nie przewiduje sprzedaży", "Wyłącza zestaw sprzedaży i ustawia Stop = Start (puste okno). Gdy plan znów zaproponuje sprzedaż, "
                                           "godziny i zestaw wracają. „Cofnij” przywraca poprzednie godziny."],
         ["Zestaw wyłączony albo okno puste", "Godziny w zakładce EMS są przygaszone z dopiskiem „nieaktywne”."],
-        ["Chcesz włączać zestawy ręcznie", "Wyłącz przełącznik „Auto-włączanie zestawów” (Diagnostyka → Tryby). Wtedy 90 minut przed oknem "
+        ["Chcesz włączać zestawy ręcznie", "Wyłącz przełącznik „Auto-włączanie zestawów” (Ustawienia → Tryby). Wtedy 90 minut przed oknem "
                                            "z planu przyjdzie powiadomienie „Zestaw potrzebny w planie jest wyłączony”."],
     ], [55, 115]))
     s.append(Spacer(1, 4))
@@ -119,7 +119,7 @@ def story():
     s.append(table(["Element", "Opis"], [
         ["Suma dnia", "Liczona z prognozy godzinowej Solcast w wariancie środkowym (estimate), niezależnie od ustawień encji. "
                       "Zakres pod wartością to warianty pesymistyczny i optymistyczny."],
-        ["Ostrzeżenie o wariancie", "Diagnostyka → Zaawansowane → „Prognoza PV” ostrzega, gdy encja Solcast pokazuje wariant "
+        ["Ostrzeżenie o wariancie", "Ustawienia → Zaawansowane → „Prognoza PV” ostrzega, gdy encja Solcast pokazuje wariant "
                                     "pesymistyczny (estimate10) albo optymistyczny (estimate90)."],
         ["Porównanie źródeł", "Ta sama karta pokazuje prognozę Solcast i Forecast.Solar na dziś i jutro, jeśli obie integracje są zainstalowane."],
         ["Wyzeruj naukę korekty PV", "Kasuje zapamiętane prognozy, z których liczona jest korekta. Użyj po zmianie ustawień źródła prognozy — "
@@ -132,7 +132,7 @@ def story():
                        "z najważniejszymi zdarzeniami dnia. Po północy dziennik dostaje wpis: plan sprzedaży a faktyczny eksport.", P))
 
     s.append(Paragraph("15.7. Pasek zakładek", H2))
-    s.append(Paragraph("Pasek zakładek jest przyklejony do dołu ekranu. Przełącznik „Pasek zakładek na górze” (Diagnostyka → Tryby) "
+    s.append(Paragraph("Pasek zakładek jest przyklejony do dołu ekranu. Przełącznik „Pasek zakładek na górze” (Ustawienia → Tryby) "
                        "przywraca poprzedni układ u wszystkich użytkowników.", P))
     s.append(Spacer(1, 6))
     s.append(Paragraph("Wszystkie opisane funkcje były sprawdzane w środowisku testowym. Po aktualizacji obserwuj dziennik decyzji "

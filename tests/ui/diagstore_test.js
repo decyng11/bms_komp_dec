@@ -64,7 +64,7 @@ const writeShutdown = async (e, val) => {
   const lastLog = await e.q(() => window.__store.log[0]);
   ok(lastLog && lastLog.eid === SHUT && String(lastLog.to) === '25' && lastLog.ok === true, 'zapis: wpis dziennika w HA: ' + JSON.stringify(lastLog));
   const ww = await e.q(() => window.__watchW);
-  ok(ww.length === 1 && ww[0].entity_id === SHUT && ww[0].expected === 25 && ww[0].tolerance === 0.01 && ww[0].source === 'Diagnostyka' && typeof ww[0].label === 'string', 'zapis: watch_write z oczekiwaną wartością: ' + JSON.stringify(ww));
+  ok(ww.length === 1 && ww[0].entity_id === SHUT && ww[0].expected === 25 && ww[0].tolerance === 0.01 && ww[0].source === 'Ustawienia' && typeof ww[0].label === 'string', 'zapis: watch_write z oczekiwaną wartością: ' + JSON.stringify(ww));
   ok(await e.q(() => __el._dgLS().get('bms_diag_watch').some(w => w.eid === 'number.inverter_battery_shutdown_soc' && w.srv === 'w1')), 'zapis: lokalny wpis kontroli powiązany z kontrolą w integracji (srv=w1)');
   ok((await e.q(() => window.__calls.filter(c => c[0] === 'number').length)) === 1, 'zapis: dokładnie jedno wywołanie number.set_value');
 

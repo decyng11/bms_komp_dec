@@ -90,13 +90,13 @@ const sleep = (ms) => new Promise(r => setTimeout(r, ms));
   const vis = () => e.q(() => { const s = __el.shadowRoot; const d = (sel) => { const x = s.querySelector(sel); return !!x && getComputedStyle(x).display !== 'none'; };
     return { charts: d('.tab[data-tab="charts"]'), log: d('.tab[data-tab="log"]'), dev: d('.tab[data-tab="dev"]'), ems: d('.tab[data-tab="ems"]'), simple: d('#simpleWrap'), plan: (() => { const x = s.querySelector('#exPlanBox'); const sec = x && x.closest('.section'); return !!sec && getComputedStyle(sec).display !== 'none'; })(), emsLabel: s.querySelector('.tab[data-tab="ems"] .tl').textContent, weather: d('.weather-global') }; });
   let v = await vis();
-  ok(v.charts && v.log && v.ems && !v.simple && v.emsLabel === 'Ustawienia', 'bez trybu prostego: pełny panel');
+  ok(v.charts && v.log && v.ems && !v.simple && v.emsLabel === 'EMS', 'bez trybu prostego: pełny panel');
   await e.q(() => { const t = new Date().toISOString(); for (const k of ['simple_mode', 'sell_enabled', 'grid_charge_enabled', 'auto_apply', 'auto_enable_sets', 'profit_check', 'dynamic_reserve', 'pv_forecast_correction', 'live_load_correction']) __states['switch.bms_' + k] = { state: ['simple_mode', 'sell_enabled', 'auto_enable_sets', 'pv_forecast_correction', 'live_load_correction'].includes(k) ? 'on' : 'off', attributes: {}, last_updated: t, last_changed: t };
     __states['sensor.bms_reserve_soc'] = { state: '40', attributes: { tariff_mode: 'zone', tariff_label: '6–13, 15–22', price_buy: 0.9, price_sell: 0.4, inverter_floor: 25, capacity_kwh: 10 }, last_updated: t, last_changed: t };
     __el.hass = __mk(); });
   await sleep(500);
   v = await vis();
-  ok(!v.charts && !v.log && !v.dev && !v.weather && v.ems && v.emsLabel === 'Ustawienia', 'tryb wyłączony: zakładki Wykresy/Zysk/Urządzenia i pogoda ukryte, EMS → „Ustawienia”: ' + JSON.stringify(v));
+  ok(!v.charts && !v.log && !v.dev && !v.weather && v.ems && v.emsLabel === 'EMS', 'tryb wyłączony: zakładki Wykresy/Zysk/Urządzenia i pogoda ukryte, EMS zostaje „EMS”: ' + JSON.stringify(v));
   await e.q(() => __el.shadowRoot.querySelector('[data-tab="ems"]').click());
   await sleep(600);
   v = await vis();
@@ -117,7 +117,7 @@ const sleep = (ms) => new Promise(r => setTimeout(r, ms));
   await e.q(() => { const t = new Date().toISOString(); __states['switch.bms_simple_mode'] = { state: 'off', attributes: {}, last_updated: t, last_changed: t }; __el.hass = __mk(); });
   await sleep(500);
   v = await vis();
-  ok(v.charts && v.log && v.dev !== undefined && !v.simple && v.emsLabel === 'Ustawienia', 'po wyłączeniu trybu: pełny panel wrócił');
+  ok(v.charts && v.log && v.dev !== undefined && !v.simple && v.emsLabel === 'EMS', 'po wyłączeniu trybu: pełny panel wrócił');
 
   // ---- diagnostyka: przełączniki i test sterowania
   await e.q(() => __el.shadowRoot.querySelector('[data-tab="diag"]').click());

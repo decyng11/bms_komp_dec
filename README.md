@@ -15,13 +15,13 @@ Integracja Home Assistanta, która pilnuje, kiedy falownik Deye ma ładować bat
 - [Rozliczenia, oszczędności i zdrowie baterii](#rozliczenia-oszczędności-i-zdrowie-baterii)
 - [Dodatkowe urządzenia](#dodatkowe-urządzenia)
 - [Zabezpieczenia](#zabezpieczenia)
-- [Diagnostyka i autotest](#diagnostyka-i-autotest)
+- [Ustawienia (dawniej Diagnostyka) i autotest](#ustawienia-dawniej-diagnostyka-i-autotest)
 
 ## Ekran główny
 
 Na górze są bieżące ceny kupna i sprzedaży oraz prognoza pogody i produkcji paneli na 7 dni (z zakresem niepewności). Niżej przepływ energii na żywo (panele, dom, sieć, bateria), kafelka „Bateria” z informacją, kiedy będzie pełna albo kiedy dojdzie do progu odcięcia falownika, paski produkcji i zużycia oraz tabela „Sprzedaż i zakup energii” (dziś, miesiąc, razem) z szacunkiem, ile prądu kosztowałoby bez paneli i baterii.
 
-Karta działa tak samo na telefonie, ma jasny i ciemny motyw. Styl wyglądu (Klasyczny — domyślny, Material 3, Szkło, Matryca, Przestrzeń, Komfort) wybierasz w Diagnostyka → Wygląd.
+Karta działa tak samo na telefonie, ma jasny i ciemny motyw. Styl wyglądu (Klasyczny — domyślny, Material 3, Szkło, Matryca, Przestrzeń, Komfort) wybierasz w Ustawienia → Wygląd.
 
 <p align="center"><img src="assets/screens/glowny_tel.png" width="300" alt="Karta na telefonie"></p>
 
@@ -85,7 +85,7 @@ Integracja potrafi sama znaleźć w Home Assistancie liczniki kWh (pralka, pompa
 - Tryby burzowy i urlopowy, reakcja na niskie i ujemne ceny, zabezpieczenie przed niskim SOC.
 - Falowniki Sofar (G3 i hybrydowe) są obsługiwane eksperymentalnie: na start EMS tylko zapisuje w dzienniku, co by ustawił.
 
-## Diagnostyka i autotest
+## Ustawienia (dawniej Diagnostyka) i autotest
 
 Parametry falownika, strefy czasowe, alarmy, kopie ustawień, tryby i kreator instalacji są w Diagnostyce, za hasłem. Autotest sprawdza na żywo dane z falownika, prognozę, ceny i urządzenia i daje raport do skopiowania. Problemy, które trwają dłużej (brak danych z falownika, brak ceny, brak prognozy), pojawiają się też w Ustawienia, Naprawy.
 
@@ -125,7 +125,7 @@ Co się zmieniło w kolejnych wersjach, jest w [CHANGELOG.md](CHANGELOG.md).
 
 ## Gdy coś nie działa
 
-Uruchom autotest w Diagnostyce i skopiuj raport. Możesz też pobrać plik diagnostyczny: Ustawienia, Urządzenia i usługi, EMS komp-dec, menu ⋮, „Pobierz diagnostykę”. Adres i numer seryjny falownika oraz usługa powiadomień są w nim ukryte.
+Uruchom autotest w Ustawieniach i skopiuj raport. Możesz też pobrać plik diagnostyczny: Ustawienia, Urządzenia i usługi, EMS komp-dec, menu ⋮, „Pobierz diagnostykę”. Adres i numer seryjny falownika oraz usługa powiadomień są w nim ukryte.
 
 ## Uwaga
 

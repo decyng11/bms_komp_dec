@@ -1,4 +1,4 @@
-"""Autotest (Diagnostyka → 🧪 Autotest): sprawdzenie na żywo tego, czego nie da się sprawdzić bez prawdziwej instalacji.
+"""Autotest (Ustawienia → 🧪 Autotest): sprawdzenie na żywo tego, czego nie da się sprawdzić bez prawdziwej instalacji.
 
 Tylko odczyt — nic nie jest zapisywane do falownika ani do ustawień. Wynik to grupy kontroli (ok / ostrzeżenie / błąd)
 z opisem i podpowiedzią; karta składa z nich raport do skopiowania."""
@@ -63,7 +63,7 @@ def _inverter_group(rt) -> list[dict[str, str]]:
         src = "falownik połączony bezpośrednio" if inv else ("ha-solarman" if has_solarman else "brak integracji falownika")
         st_ok = "ok" if bms and (inv or has_solarman) else "warn"
         out.append(_c("entries", "Wpisy integracji", st_ok, f"EMS ×{len(bms)}, falownik bezpośredni ×{len(inv)}, ha-solarman: {'tak' if has_solarman else 'nie'} → {src}",
-                      "" if st_ok == "ok" else "Kreator nie dokończył konfiguracji — uruchom go ponownie z Diagnostyki."))
+                      "" if st_ok == "ok" else "Kreator nie dokończył konfiguracji — uruchom go ponownie z zakładki Ustawienia."))
         if inv and has_solarman:
             out.append(_c("entries_both", "Dwa połączenia z falownikiem", "warn",
                           "Jest i falownik bezpośredni, i ha-solarman — logger zwykle przyjmuje tylko jedno połączenie naraz.",
@@ -240,7 +240,7 @@ def _summary_checks(rt) -> list[dict[str, str]]:
             probs.append(f"dziś po {t} jeszcze nie wysłano (ostatnio: {last or 'nigdy'})")
         detail = f"włączone, o {t}, ostatnio wysłane: {last or 'nigdy'}"
         return [_c("summary_daily", "Podsumowanie dnia", "warn" if probs else "ok", "; ".join([detail] + probs),
-                   "Popraw w Diagnostyka → Powiadomienia i sprawdź dziennik (rodzaj „notify”)." if probs else "")]
+                   "Popraw w Ustawienia → Powiadomienia i sprawdź dziennik (rodzaj „notify”)." if probs else "")]
     except Exception as err:  # noqa: BLE001
         return [_c("summary_daily", "Podsumowanie dnia", "warn", f"nie udało się sprawdzić: {err}")]
 

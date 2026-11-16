@@ -102,7 +102,7 @@ class Notifier:
         return raw.split(".", 1)[1] if raw.startswith("notify.") else raw
 
     def cfg(self) -> dict[str, Any]:
-        """Ustawienia z konfiguratora (Diagnostyka → Powiadomienia) nałożone na domyślne."""
+        """Ustawienia z konfiguratora (Ustawienia → Powiadomienia) nałożone na domyślne."""
         return ncfg.effective(self.rt.state.get("notify_cfg"))
 
     async def send(self, kind: str, title: str, message: str, *, key: str | None = None,
@@ -236,7 +236,7 @@ class Monitor:
             body = f"{a['name']}: {a['state']}" + (f" — {txt}" if txt else "")
             await self.notifier.send(
                 "alarm", "⚠ EMS: alarm falownika",
-                body + (f"\n{FAULT_NOTE}" if txt else "") + "\nSzczegóły: Diagnostyka → Alarmy.",
+                body + (f"\n{FAULT_NOTE}" if txt else "") + "\nSzczegóły: Ustawienia → Alarmy.",
                 key=f"alarm:{eid}:{a['state']}", cooldown_s=ALARM_COOLDOWN_S, level="error")
         for eid in [e for e in known if e not in active]:
             known.pop(eid, None)
@@ -460,7 +460,7 @@ class Monitor:
             "grid_charge_stalled", "🔌 EMS: okno ładowania trwa, a bateria się nie ładuje",
             f"SOC {soc:.0f}%, plan zakładał ~{float(tgt):.0f}%, a bateria nie przyjmuje energii od 5 min. "
             + ("; ".join(hints) + ". " if hints else "")
-            + "Falownik ładuje z sieci tylko poniżej własnego progu startu SOC — podnieś go (Diagnostyka → Ładowanie z sieci) "
+            + "Falownik ładuje z sieci tylko poniżej własnego progu startu SOC — podnieś go (Ustawienia → Ładowanie z sieci) "
               "i sprawdź, czy prąd ładowania z sieci nie jest 0.", key="gc_stall", level="warn")
 
     def _plan_props(self) -> dict:
@@ -646,7 +646,7 @@ class Monitor:
         if (not ncfg.kind(cfg, "summary_daily").get("on") and hm >= sch["daily"]["time"]
                 and sent.get("daily_off_logged") != today.isoformat()):
             sent["daily_off_logged"] = today.isoformat()
-            self.rt.log.add("notify", "Podsumowanie dnia jest wyłączone w konfiguratorze powiadomień (Diagnostyka → Powiadomienia) — nie wysłano.", "info")
+            self.rt.log.add("notify", "Podsumowanie dnia jest wyłączone w konfiguratorze powiadomień (Ustawienia → Powiadomienia) — nie wysłano.", "info")
         if ncfg.kind(cfg, "summary_daily").get("on") and hm >= sch["daily"]["time"] and sent.get("daily") != today.isoformat():
             sent["daily"] = today.isoformat()
             self.rt._save_state()  # noqa: SLF001

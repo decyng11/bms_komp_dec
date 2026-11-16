@@ -86,7 +86,7 @@
     const pend = Object.keys(DG_ST.dirty).length;
     if (DG_ST.ready && !DG_ST.err && !pend) return `<div class="dg-muted" style="margin:6px 2px;">☁ Dziennik, kopie i profile są zapisywane w Home Assistant${DG_ST.migrated ? ` (przeniesiono ${DG_ST.migrated} z tej przeglądarki)` : ''}.</div>`;
     if (DG_ST.ready && !DG_ST.err) return '<div class="dg-muted" style="margin:6px 2px;">☁ Zapisuję w Home Assistant…</div>';
-    return `<div class="dg-alarm" style="margin:6px 0;">⚠ Dane Diagnostyki są teraz tylko w tej przeglądarce${DG_ST.err ? ' — ' + dgEsc(DG_ST.err) : ''}. Dziennik i kopie nie przetrwają czyszczenia danych witryny; próbuję ponownie automatycznie.</div>`;
+    return `<div class="dg-alarm" style="margin:6px 0;">⚠ Dane Ustawień (dziennik, kopie, profile) są teraz tylko w tej przeglądarce${DG_ST.err ? ' — ' + dgEsc(DG_ST.err) : ''}. Dziennik i kopie nie przetrwają czyszczenia danych witryny; próbuję ponownie automatycznie.</div>`;
   }
   const SKINS_LABEL = { classic: 'Klasyczny', m3: 'Material 3', glass: 'Szkło', matrix: 'Matryca', space: 'Przestrzeń', comfort: 'Komfort' };
   const SKINS_SUB = {
@@ -265,6 +265,15 @@
     .dg-skin { text-align:left; border:2px solid var(--line); background:var(--surface); color:var(--text); border-radius:16px; padding:14px; cursor:pointer; font-family:inherit; display:flex; flex-direction:column; gap:4px; }
     .dg-skin b { font-size:15px; } .dg-skin span { font-size:12px; color:var(--muted); }
     .dg-skin.on { border-color:var(--accent); background:var(--seg-active); }
+    .dg-lay-nav { display:flex; gap:6px; flex-wrap:wrap; margin:10px 0; }
+    .dg-lay-row { display:flex; align-items:center; gap:8px; padding:8px 10px; border-radius:12px; background:var(--surface); margin-bottom:6px; }
+    .dg-lay-row.off { opacity:.62; }
+    .dg-lay-row.off .dg-lay-n b { text-decoration:line-through; }
+    .dg-lay-i { flex:none; width:22px; text-align:center; font-size:12px; color:var(--muted); font-variant-numeric:tabular-nums; }
+    .dg-lay-n { flex:1; min-width:0; font-size:13.5px; overflow-wrap:anywhere; }
+    .dg-lay-b { flex:none; display:flex; gap:4px; }
+    .dg-lay-b .dg-btn { min-width:36px; padding:6px 9px; }
+    .dg-lay-b .dg-btn[disabled] { opacity:.35; cursor:default; }
     .dg-card { background:var(--card); border-radius:18px; padding:14px 16px; margin-bottom:12px; box-shadow:var(--shadow); }
     .dg-card h4 { margin:0 0 10px; font-size:15px; } .dg-card .sub { color:var(--muted); font-size:12px; margin:-6px 0 10px; }
     .dg-tiles { display:grid; grid-template-columns:repeat(auto-fill,minmax(210px,1fr)); gap:10px; }
@@ -325,7 +334,7 @@
       if (DG_ST.card && !DG_ST.ready && Date.now() - DG_ST.retryAt > 30000) { DG_ST.retryAt = Date.now(); dgStoreLoad(this); }
       if (DG_ST.ready && DG_ST.card && Object.keys(DG_ST.dirty).length && !DG_ST.timer) dgStoreSchedule(2000);
       const b = this._el('tabDiag');
-      if (b) { b.style.display = this._dgIsAdmin() ? '' : 'none'; const ms = this._hass.states[this._eid('sensor', 'monitor_status')]; const be = ms && ms.attributes && Array.isArray(ms.attributes.alarms) ? ms.attributes.alarms.length : 0; const bad = (DG_LS.get('bms_diag_alarms', []).length || be) ? ' ⚠' : ''; const want = 'Diagnostyka' + bad; const lb = b.querySelector('.tl'); if (lb && lb.textContent !== want) lb.textContent = want; b.classList.toggle('warn', !!bad); }
+      if (b) { b.style.display = this._dgIsAdmin() ? '' : 'none'; const ms = this._hass.states[this._eid('sensor', 'monitor_status')]; const be = ms && ms.attributes && Array.isArray(ms.attributes.alarms) ? ms.attributes.alarms.length : 0; const bad = (DG_LS.get('bms_diag_alarms', []).length || be) ? ' ⚠' : ''; const want = 'Ustawienia' + bad; const lb = b.querySelector('.tl'); if (lb && lb.textContent !== want) lb.textContent = want; b.classList.toggle('warn', !!bad); }
       const s = this._dgS();
       const nw = Date.now(); if (nw - (s._wcAt || 0) > 5000) { s._wcAt = nw; try { this._dgWatchCheck(); } catch (e) { console.warn('EMS diag watch', e); } }
       if (s.until && !this._dgUnlocked() && this._activeTab === 'diag' && this._el('dgBody')) { s.until = 0; this._dgRender(); }
@@ -471,9 +480,9 @@
     },
     _dgRender() {
       const s = this._dgS(); const host = this._el('dgHost'); if (!host) return;
-      if (!this._dgIsAdmin()) { host.innerHTML = '<div class="dg-gate"><h3>🛠️ Diagnostyka</h3><p>Ta zakładka jest dostępna tylko dla administratorów Home Assistant.</p></div>'; return; }
+      if (!this._dgIsAdmin()) { host.innerHTML = '<div class="dg-gate"><h3>⚙️ Ustawienia</h3><p>Ta zakładka jest dostępna tylko dla administratorów Home Assistant.</p></div>'; return; }
       if (!this._dgUnlocked()) {
-        host.innerHTML = `<div class="dg-gate"><h3>🔒 Diagnostyka — tryb instalatora</h3><p>Konfiguracja falownika, strefy czasowe, alarmy i wykresy serwisowe. Podaj hasło, aby odblokować na 15 minut.</p>
+        host.innerHTML = `<div class="dg-gate"><h3>🔒 Ustawienia — tryb instalatora</h3><p>Konfiguracja falownika, strefy czasowe, alarmy i wykresy serwisowe. Podaj hasło, aby odblokować na 15 minut.</p>
           <input type="password" id="dgPw" placeholder="Hasło" autocomplete="off" style="width:100%;margin-bottom:10px;" />
           <button class="dg-btn" data-act="unlock" style="width:100%;">Odblokuj</button><div id="dgGateMsg" class="dg-muted" style="margin-top:10px;min-height:16px;"></div><div class="dg-muted" id="dgVer" style="margin-top:14px;font-size:11px;">${this._dgVerLine()}</div></div>`;
         return;
@@ -549,6 +558,11 @@
         case 'alarm-dismiss': { const al = DG_LS.get('bms_diag_alarms', []); al.splice(Number(t.dataset.i), 1); DG_LS.set('bms_diag_alarms', al); this._dgRenderAlarmBox(); this._dgSyncTab(); break; }
         case 'log-undo': this._dgLogUndo(Number(t.dataset.i)); break;
         case 'skin': this._setSkin(t.dataset.skin); this._dgRenderSection(); break;
+        case 'lay-tab': this._dgLayTab = t.dataset.lt; this._dgRenderSection(); break;
+        case 'lay-up': case 'lay-down': this._layoutMove(t.dataset.lt, t.dataset.id, act === 'lay-up' ? -1 : 1); this._dgRenderSection(); this._dgLayRefocus(act, t.dataset.id); break;
+        case 'lay-eye': this._layoutToggle(t.dataset.id); this._dgRenderSection(); this._dgLayRefocus('lay-eye', t.dataset.id); break;
+        case 'lay-reset-tab': this._layoutReset(t.dataset.lt); this._dgRenderSection(); break;
+        case 'lay-reset-all': this._layoutReset(); this._dgRenderSection(); break;
         case 'setlog-undo': this._dgSetLogUndo(Number(t.dataset.i)); break;
         case 'log-clear': if (confirm('Wyczyścić dziennik zmian (jest zapisany w Home Assistant)?')) { DG_LS.set('bms_diag_log', []); this._dgRenderSection(); } break;
         case 'alarm-hist': this._dgAlarmHistory(); break;
@@ -648,7 +662,7 @@
       // Karta zostaje awaryjnym źródłem kontroli, gdy usługa jest niedostępna.
       const numeric = !isNaN(Number(c.to)) && String(c.to).trim() !== '';
       dgCall(this, 'watch_write', { entity_id: c.eid, expected: numeric ? Number(c.to) : String(c.to), label: c.name, tolerance: 0.01,
-        previous: (from === '' || from == null) ? undefined : (isNaN(Number(from)) ? String(from) : Number(from)), source: 'Diagnostyka' }, true)
+        previous: (from === '' || from == null) ? undefined : (isNaN(Number(from)) ? String(from) : Number(from)), source: 'Ustawienia' }, true)
         .then((res) => {
           const id = res && res.response && res.response.item && res.response.item.id;
           if (!id) return;
@@ -1601,7 +1615,32 @@
       const opt = (k, sub) => `<button class="dg-skin ${cur === k ? 'on' : ''}" data-act="skin" data-skin="${k}" aria-pressed="${cur === k}"><b>${dgEsc(SKINS_LABEL[k])}</b><span>${sub}</span></button>`;
       return `<div class="dg-card"><h4>Styl wyglądu panelu</h4><div class="sub">Zmienia kolory, zaokrąglenia i dolny pasek zakładek. Układ i dane zostają takie same. Jasny / ciemny motyw przełączasz w nagłówku panelu — styl działa z oboma. Wybór jest zapamiętany w tej przeglądarce (każde urządzenie ma własny).</div>
         <div class="dg-skins">${Object.keys(SKINS_LABEL).map(k => opt(k, SKINS_SUB[k])).join('')}</div>
-        <div class="sub" style="margin-top:10px;">Style „Szkło”, „Matryca”, „Przestrzeń” i „Komfort” to własne projekty inspirowane znanymi kierunkami wizualnymi — nie kopie cudzych interfejsów. Na ekranie głównym mają własny układ; w kartach Plan i Ustawienia zmieniają kolory, zaokrąglenia i pasek zakładek.</div></div>`;
+        <div class="sub" style="margin-top:10px;">Style „Szkło”, „Matryca”, „Przestrzeń” i „Komfort” to własne projekty inspirowane znanymi kierunkami wizualnymi — nie kopie cudzych interfejsów. Na ekranie głównym mają własny układ; w kartach Plan i Ustawienia zmieniają kolory, zaokrąglenia i pasek zakładek.</div></div>${this._dgLayoutCard()}`;
+    },
+    // Układ panelu: kolejność i ukrywanie kafelków. Zapis w tej przeglądarce (localStorage) — każdy użytkownik i urządzenie
+    // mają własny układ. Zmienia tylko to, co widać i w jakiej kolejności; nie dotyka danych ani sterowania.
+    _dgLayoutCard() {
+      const G = this._layoutGroups(), st = this._layoutState();
+      const cur = G.find((g) => g.tab === this._dgLayTab) || G[0];
+      const pills = G.map((g) => `<button class="dg-pill ${g.tab === cur.tab ? 'on' : ''}" data-act="lay-tab" data-lt="${dgEsc(g.tab)}" aria-pressed="${g.tab === cur.tab}">${dgEsc(g.label)}</button>`).join('');
+      const ord = st.orders[cur.tab], label = Object.fromEntries(cur.tiles);
+      const rows = ord.map((id, i) => {
+        const off = st.hidden.has(id), nm = dgEsc(label[id] || id);
+        const mv = cur.fixed ? '' : `<button class="dg-btn sec" data-act="lay-up" data-lt="${dgEsc(cur.tab)}" data-id="${dgEsc(id)}" aria-label="Przesuń wyżej: ${nm}" title="Wyżej" ${i === 0 ? 'disabled' : ''}>↑</button><button class="dg-btn sec" data-act="lay-down" data-lt="${dgEsc(cur.tab)}" data-id="${dgEsc(id)}" aria-label="Przesuń niżej: ${nm}" title="Niżej" ${i === ord.length - 1 ? 'disabled' : ''}>↓</button>`;
+        return `<div class="dg-lay-row ${off ? 'off' : ''}" data-tile-row="${dgEsc(id)}"><span class="dg-lay-i">${cur.fixed ? '•' : i + 1}</span><span class="dg-lay-n"><b>${nm}</b></span><span class="dg-lay-b">${mv}<button class="dg-btn ${off ? 'green' : 'sec'}" data-act="lay-eye" data-id="${dgEsc(id)}" aria-pressed="${!off}" aria-label="${off ? 'Pokaż' : 'Ukryj'}: ${nm}">${off ? '👁 Pokaż' : '🚫 Ukryj'}</button></span></div>`;
+      }).join('');
+      const hidN = st.hidden.size;
+      return `<div class="dg-card" id="dgLayout"><h4>Układ panelu</h4><div class="sub">Ułóż kafelki w kolejności, która Ci odpowiada, i ukryj te, których nie potrzebujesz — osobno dla każdej zakładki. Zmiana działa od razu. Układ zapisuje się w tej przeglądarce (każdy użytkownik i urządzenie mają własny), więc nie wpływa na innych domowników. Ukrycie kafelka nie wyłącza żadnej funkcji EMS — tylko go nie pokazuje. Alerty (cena, próg falownika, status) zawsze zostają widoczne.</div>
+        <div class="dg-lay-nav" role="group" aria-label="Zakładka">${pills}</div>
+        <div id="dgLayRows">${rows}</div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px;align-items:center;"><button class="dg-btn sec" data-act="lay-reset-tab" data-lt="${dgEsc(cur.tab)}">↺ Przywróć tę zakładkę</button><button class="dg-btn sec" data-act="lay-reset-all" ${st.custom ? '' : 'disabled'}>↺ Przywróć cały domyślny układ</button><span class="sub" style="margin:0;">${st.custom ? (hidN ? `Ukryte kafelki: ${hidN}.` : 'Własna kolejność.') : 'Układ domyślny.'}</span></div></div>`;
+    },
+    // po przerysowaniu karty wracamy fokusem na ten sam przycisk (obsługa klawiaturą)
+    _dgLayRefocus(act, id) {
+      const root = this.shadowRoot; if (!root) return;
+      const q = (a) => root.querySelector(`#dgLayout [data-act="${a}"][data-id="${id}"]`);
+      let b = q(act); if (b && b.disabled) b = q(act === 'lay-up' ? 'lay-down' : 'lay-up'); if (!b || b.disabled) b = q('lay-eye');
+      if (b && b.focus) b.focus();
     },
     _dgSec_adv() {
       const ov = DG_LS.get('bms_diag_prefix', '');

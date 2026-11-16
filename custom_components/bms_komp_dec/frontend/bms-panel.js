@@ -101,12 +101,27 @@
   const TC = (k) => PALETTE[THEME.mode][k];
 
 
-  // ---------- styl wyglądu (skin): „Klasyczny” (domyślny) albo „Material 3” — wybór w Diagnostyce → Wygląd ----------
+  // ---------- styl wyglądu (skin): „Klasyczny” (domyślny) albo „Material 3” — wybór w Ustawieniach → Wygląd ----------
   // Działa niezależnie od motywu jasny/ciemny. To wyłącznie warstwa stylów (zmienne i wygląd komponentów) — układ i dane
   // są te same, więc wyłączenie stylu przywraca dokładnie dotychczasowy wygląd.
   const SKIN_KEY = 'bms_panel_skin';
   const SKINS = { classic: 'Klasyczny', m3: 'Material 3', glass: 'Szkło', matrix: 'Matryca', space: 'Przestrzeń', comfort: 'Komfort' };
   const SKIN_HOME = { glass: 1, matrix: 1, space: 1, comfort: 1 };   // style z własnym ekranem głównym (_drawSkinHome)
+  // ---- Układ panelu (Ustawienia → Wygląd → Układ panelu): kolejność i ukrywanie kafelków, osobno dla każdej przeglądarki.
+  // Kafelek to element z atrybutem data-tile w szablonie. Zmiana układu tylko przestawia / chowa istniejące elementy —
+  // nie zmienia danych ani sterowania. Alerty (cena, próg falownika, status, „dlaczego”) nie są kafelkami i zawsze zostają.
+  const LAYOUT_KEY = 'bms_panel_layout';
+  const LAYOUT_TABS = [
+    { tab: 'main', label: 'Główny', tiles: [['main-active', 'Aktywne funkcje'], ['main-flow', 'Schemat przepływu mocy (dom)'], ['main-plan', 'Plan dnia']] },
+    { tab: 'charts', label: 'Plan', tiles: [['ch-plan24', 'Plan na najbliższe 24 h'], ['ch-hourly', 'Plan godzina po godzinie'], ['ch-override', 'Ręczne nadpisanie planu'], ['ch-history7', 'Historia poziomu baterii (7 dni)'],
+      ['ch-energy', 'Historia energii i cen'], ['ch-loadcons', 'Zużycie domu — wczoraj / dziś / jutro'], ['ch-fc7d', 'Prognoza 7-dniowa zużycia domu'], ['ch-hourly-today', 'Profil godzinowy dziś'],
+      ['ch-hourly-tomorrow', 'Profil godzinowy jutra'], ['ch-pvprod', 'Produkcja PV dziś — rzeczywista vs prognoza'], ['ch-prices', 'Ceny sprzedaży prądu — dziś vs jutro']] },
+    { tab: 'ems', label: 'EMS', tiles: [['ems-schedule', 'Inteligentny harmonogram'], ['ems-sell', 'Przełączniki sprzedaży'], ['ems-pvblock', 'Blokada ładowania PV'], ['ems-export', 'Eksport z PV i blokada ładowania'],
+      ['ems-gridpower', 'Moc ładowania z sieci i ochrona przyłącza'], ['ems-gridcharge', 'Ładowanie z sieci']] },
+    { tab: 'log', label: 'Zysk i log', tiles: [['log-bilans', 'Bilans w PLN'], ['log-today', 'Co EMS zrobił dziś'], ['log-savings', 'Oszczędności'], ['log-sim', 'Symulacja roczna i zwrot z inwestycji'],
+      ['log-accuracy', 'Trafność prognoz'], ['log-report', 'Raport miesięczny'], ['log-health', 'Zdrowie i sprawność baterii'], ['log-auto', 'Funkcje automatyczne'], ['log-journal', 'Dziennik decyzji']] },
+    { tab: '*', label: 'Wszystkie zakładki', fixed: true, tiles: [['weather', 'Pogoda i prognoza PV (7 dni)']] },
+  ];
   const SKIN_M3 = `
     :host([data-skin="m3"]) { --bg:#f4fbf8; --card:#e8f1ed; --surface:rgba(23,29,27,0.06); --line:rgba(111,121,117,0.22); --text:#171d1b; --text2:#3f4945; --muted:#566360; --muted2:#6f7975; --accent:#0b6b5d; --green:#1b6c2e; --orange:#8a5a00; --red:#ba1a1a; --input-bg:#f4fbf8; --seg-bg:#dde8e4; --seg-active:#bdf0e3; --shadow:0 1px 2px rgba(0,0,0,0.10),0 1px 3px 1px rgba(0,0,0,0.06); --pf-bg:#e8f1ed; --tonal:#d4e8e1; --on-tonal:#0e201c; --tert:#e1dcff; --on-tert:#1d1a47; --tab-on:#bdf0e3; --tab-on-fg:#00201b; --tab-off:#3f4945; --tab-bg:#e3ede9; --tab-line:transparent; --m3-pv:#c98a00; --m3-pvc:#ffe3a0; --m3-pvt:#6d4b00; --m3-grid:#0a7ea8; --m3-gridc:#c2e8ff; --m3-gridt:#004c69; --m3-sell:#7a55c2; --m3-sellc:#e9deff; --m3-sellt:#3b2470; --m3-batt:#0b6b5d; --m3-idle:#d5dfdb; color-scheme: light; }
     :host([data-skin="m3"][data-theme="dark"]) { --bg:#0f1513; --card:#1a201e; --surface:rgba(255,255,255,0.06); --line:rgba(255,255,255,0.10); --text:#dee4e0; --text2:#bfc9c4; --muted:#9aa5a0; --muted2:#89938f; --accent:#7fd8c6; --green:#8fd99b; --orange:#f3c04f; --red:#ffb4ab; --input-bg:#222826; --seg-bg:#262b29; --seg-active:#005046; --shadow:none; --pf-bg:#1a201e; --tonal:#33433e; --on-tonal:#d4e8e1; --tert:#42407a; --on-tert:#e1dcff; --tab-on:#005046; --tab-on-fg:#bdf0e3; --tab-off:#bfc9c4; --tab-bg:#1b211f; --m3-pv:#f3c04f; --m3-pvc:#5a4300; --m3-pvt:#ffe3a0; --m3-grid:#7bd0f6; --m3-gridc:#004d67; --m3-gridt:#c2e8ff; --m3-sell:#cfbcff; --m3-sellc:#4a3c80; --m3-sellt:#e9deff; --m3-batt:#7fd8c6; --m3-idle:#2a302e; color-scheme: dark; }
@@ -372,6 +387,12 @@
     .tab.active { background: var(--seg-active); color: var(--text); box-shadow: 0 2px 8px rgba(0,0,0,0.12); }
     @media (max-width: 640px) { .tab { flex: 0 0 auto; padding: 10px 14px; overflow: visible; text-overflow: clip; } }
     .section { margin-top: 16px; }
+    /* Układ panelu: ukryty kafelek, odstępy po przestawieniu, komunikat gdy ukryto wszystko */
+    [data-tile-off] { display: none !important; }
+    [data-tab-content][data-custom] [data-tile]:not([data-first]) { margin-top: 16px !important; }
+    [data-tab-content][data-custom] [data-tile][data-first] { margin-top: 6px !important; }
+    [data-tab-content="log"][data-custom] [data-tile][data-first] { margin-top: 16px !important; }
+    .app:not(.simple) [data-tab-content][data-all-hidden]::after { content: 'Wszystkie kafelki tej zakładki są ukryte. Przywrócisz je w: Ustawienia → Wygląd → Układ panelu.'; display: block; padding: 28px 12px; text-align: center; color: var(--muted); font-size: 13px; }
     .section-title { font-size: 12px; font-weight: 600; text-transform: uppercase; color: var(--muted); margin-bottom: 8px; padding-left: 6px; letter-spacing: 1px; }
     
     /* Poprawione style pogody, żeby ładnie się dopasowywały */
@@ -2803,35 +2824,35 @@
         : `<div class="chart-empty">Dziś EMS nie wykonał jeszcze żadnych komend ani zmian.</div>`;
 
       body.innerHTML = `
-        <div class="section" style="margin-top:6px;">
+        <div class="section" data-tile="log-bilans" style="margin-top:6px;">
           <div class="section-title">💰 Bilans w PLN</div>
           <div class="chart-card full" style="padding:14px 16px;">${tiles}${bars}</div>
         </div>
-        <div class="section" id="logToday">
+        <div class="section" data-tile="log-today" id="logToday">
           <div class="section-title">🗓️ Co EMS zrobił dziś</div>
           <div class="chart-card full" style="padding:10px 16px;">${todayBox}</div>
         </div>
-        <div class="section">
+        <div class="section" data-tile="log-savings">
           <div class="section-title">💡 Oszczędności</div>
           <div class="chart-card full" style="padding:14px 16px;"><div id="exSavBox"><div class="chart-empty">Ładowanie…</div></div></div>
         </div>
-        <div class="section">
+        <div class="section" data-tile="log-sim">
           <div class="section-title">📆 Symulacja roczna i zwrot z inwestycji</div>
           <div class="chart-card full" style="padding:14px 16px;"><div id="exSimBox"><div class="chart-empty">Ładowanie…</div></div></div>
         </div>
-        <div class="section">
+        <div class="section" data-tile="log-accuracy">
           <div class="section-title">🎯 Trafność prognoz</div>
           <div class="chart-card full" style="padding:14px 16px;"><div id="exAccBox"><div class="chart-empty">Ładowanie…</div></div></div>
         </div>
-        <div class="section">
+        <div class="section" data-tile="log-report">
           <div class="section-title">📅 Raport miesięczny</div>
           <div class="chart-card full" style="padding:14px 16px;"><div id="exReportBox"><div class="chart-empty">Ładowanie…</div></div></div>
         </div>
-        <div class="section">
+        <div class="section" data-tile="log-health">
           <div class="section-title">🔋 Zdrowie i sprawność baterii</div>
           <div class="chart-card full" style="padding:14px 16px;"><div id="exHealthBox"><div class="chart-empty">Ładowanie…</div></div></div>
         </div>
-        <div class="section">
+        <div class="section" data-tile="log-auto">
           <div class="section-title">⚙️ Funkcje automatyczne</div>
           <div class="chart-card full" style="padding:14px 16px;">
             <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:8px;">${featureBtns}</div>
@@ -2845,10 +2866,11 @@
             <div id="logToast" style="font-size:12px;color:var(--muted);margin-top:8px;min-height:16px;"></div>
           </div>
         </div>
-        <div class="section">
+        <div class="section" data-tile="log-journal">
           <div class="section-title">📋 Dziennik decyzji (ostatnie ${entries.length})</div>
           <div class="chart-card full" style="padding:8px 16px;max-height:520px;overflow-y:auto;">${rows}</div>
         </div>`;
+      this._applyLayout();   // kafelki Zysku i logu powstają od nowa przy każdym rysowaniu — przywróć kolejność i ukrycia
       this._safe(() => this._exEnsure());
     }
 
@@ -2883,6 +2905,89 @@
       const prev = this.getAttribute('data-skin') || 'classic';
       if (skin === 'classic') this.removeAttribute('data-skin'); else this.setAttribute('data-skin', skin);
       if (prev !== skin) { this._lastFlowKey = null; this._lastM3Key = null; if (this._rendered) this._safe(() => this._drawPowerflow()); }
+    }
+    // ---------- układ panelu: kolejność i ukrywanie kafelków (localStorage, osobno dla przeglądarki) ----------
+    _layoutGroups() { return LAYOUT_TABS; }
+    _layoutLoad() {
+      const out = { order: {}, hidden: [] };
+      let j = null; try { j = JSON.parse(localStorage.getItem(LAYOUT_KEY) || 'null'); } catch (e) { j = null; }
+      if (!j || typeof j !== 'object') return out;
+      const known = new Set(); LAYOUT_TABS.forEach((g) => g.tiles.forEach((t) => known.add(t[0])));
+      if (Array.isArray(j.hidden)) out.hidden = [...new Set(j.hidden.filter((id) => known.has(id)))];
+      if (j.order && typeof j.order === 'object') {
+        LAYOUT_TABS.forEach((g) => { const a = j.order[g.tab]; if (Array.isArray(a)) out.order[g.tab] = a.filter((id) => g.tiles.some((t) => t[0] === id)); });
+      }
+      return out;
+    }
+    _layoutSave(L) {
+      try {
+        const empty = !L.hidden.length && !Object.keys(L.order).length;
+        if (empty) localStorage.removeItem(LAYOUT_KEY); else localStorage.setItem(LAYOUT_KEY, JSON.stringify({ v: 1, order: L.order, hidden: L.hidden }));
+      } catch (e) { /* storage niedostępny */ }
+    }
+    // pełna kolejność kafelków zakładki: zapisana, a nowe (nieznane zapisowi) dochodzą na końcu w domyślnym porządku
+    _layoutOrder(g, L) {
+      const def = g.tiles.map((t) => t[0]), seen = new Set(), res = [];
+      ((L && L.order && L.order[g.tab]) || []).forEach((id) => { if (def.includes(id) && !seen.has(id)) { seen.add(id); res.push(id); } });
+      def.forEach((id) => { if (!seen.has(id)) res.push(id); });
+      return res;
+    }
+    _layoutState() {
+      const L = this._layoutLoad(), orders = {};
+      LAYOUT_TABS.forEach((g) => { orders[g.tab] = this._layoutOrder(g, L); });
+      return { orders, hidden: new Set(L.hidden), custom: L.hidden.length > 0 || Object.keys(L.order).length > 0 };
+    }
+    _layoutMove(tab, id, dir) {
+      const g = LAYOUT_TABS.find((x) => x.tab === tab); if (!g || g.fixed) return false;
+      const L = this._layoutLoad(), ord = this._layoutOrder(g, L), i = ord.indexOf(id), j = i + (dir < 0 ? -1 : 1);
+      if (i < 0 || j < 0 || j >= ord.length) return false;
+      [ord[i], ord[j]] = [ord[j], ord[i]];
+      const def = g.tiles.map((t) => t[0]);
+      if (ord.join() === def.join()) delete L.order[g.tab]; else L.order[g.tab] = ord;
+      this._layoutSave(L); this._applyLayout(); return true;
+    }
+    _layoutToggle(id) {
+      if (!LAYOUT_TABS.some((g) => g.tiles.some((t) => t[0] === id))) return false;
+      const L = this._layoutLoad(), h = new Set(L.hidden);
+      if (h.has(id)) h.delete(id); else h.add(id);
+      L.hidden = [...h]; this._layoutSave(L); this._applyLayout(); return true;
+    }
+    _layoutReset(tab) {
+      const L = this._layoutLoad();
+      if (!tab) { L.order = {}; L.hidden = []; } else {
+        const g = LAYOUT_TABS.find((x) => x.tab === tab); if (!g) return false;
+        delete L.order[tab]; const ids = new Set(g.tiles.map((t) => t[0])); L.hidden = L.hidden.filter((id) => !ids.has(id));
+      }
+      this._layoutSave(L); this._applyLayout(); return true;
+    }
+    _applyLayout() {
+      const root = this.shadowRoot; if (!root) return;
+      const L = this._layoutLoad(), hid = new Set(L.hidden);
+      let unhid = false;
+      LAYOUT_TABS.forEach((g) => {
+        if (g.fixed) {
+          g.tiles.forEach(([id]) => { const el = root.querySelector(`[data-tile="${id}"]`); if (el) { if (!hid.has(id) && el.hasAttribute('data-tile-off')) unhid = true; el.toggleAttribute('data-tile-off', hid.has(id)); } });
+          return;
+        }
+        const tc = root.querySelector(`[data-tab-content="${g.tab}"]`); if (!tc) return;
+        const cont = g.tab === 'log' ? tc.querySelector('#logTabBody') : tc;
+        const tiles = cont ? [...cont.children].filter((n) => n.dataset && n.dataset.tile) : [];
+        if (!tiles.length) return;
+        const want = this._layoutOrder(g, L).map((id) => tiles.find((n) => n.dataset.tile === id)).filter(Boolean);
+        if (!want.every((n, i) => n === tiles[i])) {
+          const ref = tiles[tiles.length - 1].nextSibling;
+          want.forEach((n) => cont.insertBefore(n, ref));
+        }
+        const def = g.tiles.map((t) => t[0]);
+        const isDef = want.every((n, i) => n.dataset.tile === def[i]) && !def.some((id) => hid.has(id));
+        tiles.forEach((n) => { if (!hid.has(n.dataset.tile) && n.hasAttribute('data-tile-off')) unhid = true; n.toggleAttribute('data-tile-off', hid.has(n.dataset.tile)); n.removeAttribute('data-first'); });
+        const vis = want.filter((n) => !hid.has(n.dataset.tile));
+        tc.toggleAttribute('data-custom', !isDef);
+        if (!isDef && vis[0]) vis[0].setAttribute('data-first', '');
+        tc.toggleAttribute('data-all-hidden', vis.length === 0);
+      });
+      // pokazany ponownie kafelek mógł być rysowany, gdy był niewidoczny (szerokość 0) — wymuś ponowne rysowanie
+      if (unhid) { this._lastFlowKey = this._lastM3Key = this._lastLogKey = null; this._lastLoadConsKey = this._lastForecast7dKey = this._lastHourlyFcKey = this._lastPvProdKey = this._lastPriceTableKey = this._lastWeatherKey = null; }
     }
     _applyTheme(force) {
       const mode = force || this._resolveTheme();
@@ -2933,10 +3038,10 @@
         <nav class="tabs bottom" id="tabsNav">
           <button class="tab active" data-tab="main" title="Główny" aria-label="Główny"><span class="ti">${TAB_SVG.main}</span><span class="tl">Główny</span><span class="tls">Główny</span></button>
           <button class="tab" data-tab="charts" title="Plan i wykresy" aria-label="Plan i wykresy"><span class="ti">${TAB_SVG.charts}</span><span class="tl">Plan</span><span class="tls">Plan</span></button>
-          <button class="tab" data-tab="ems" title="Ustawienia EMS" aria-label="Ustawienia EMS"><span class="ti">${TAB_SVG.ems}</span><span class="tl">Ustawienia</span><span class="tls">Ustaw.</span></button>
+          <button class="tab" data-tab="ems" title="Ustawienia EMS (sprzedaż, ładowanie, harmonogram)" aria-label="EMS"><span class="ti">${TAB_SVG.ems}</span><span class="tl">EMS</span><span class="tls">EMS</span></button>
           <button class="tab" data-tab="log" title="Zysk i log" aria-label="Zysk i log"><span class="ti">${TAB_SVG.log}</span><span class="tl">Zysk i log</span><span class="tls">Zysk</span></button>
           <button class="tab" data-tab="dev" id="tabDev" title="Urządzenia" aria-label="Urządzenia"><span class="ti">${TAB_SVG.dev}</span><span class="tl">Urządzenia</span><span class="tls">Urządz.</span></button>
-          <button class="tab" data-tab="diag" id="tabDiag" style="display:none;" title="Diagnostyka" aria-label="Diagnostyka"><span class="ti">${TAB_SVG.diag}</span><span class="tl">Diagnostyka</span><span class="tls">Diagn.</span></button>
+          <button class="tab" data-tab="diag" id="tabDiag" style="display:none;" title="Ustawienia panelu i diagnostyka" aria-label="Ustawienia"><span class="ti">${TAB_SVG.diag}</span><span class="tl">Ustawienia</span><span class="tls">Ustaw.</span></button>
         </nav>
 
         <div class="price-bar" id="priceBar" style="display:none;"></div>
@@ -2944,7 +3049,7 @@
         <div class="status-banner" id="statusBanner" style="display:none;"></div>
 
         <!-- Pogoda na samej górze -->
-        <div class="weather-global">
+        <div class="weather-global" data-tile="weather">
           <div class="section-title">Pogoda i prognoza PV (7 dni)</div>
           <div class="weather-scroll" id="weatherContainer"></div>
         </div>
@@ -2952,7 +3057,7 @@
         <div class="tab-content" data-tab-content="main">
           <div class="why-box" id="whyBox" style="display:none;" aria-live="polite"></div>
           <!-- Aktywne funkcje przeniesione pod pogodę -->
-          <div class="section" style="margin-top:6px;">
+          <div class="section" data-tile="main-active" style="margin-top:6px;">
             <div class="section-title">Aktywne funkcje</div>
             <div class="active-badges">
               <div class="badge" id="badge-sprzedaz-1">Sprzedaż (1)</div>
@@ -2969,10 +3074,10 @@
           </div>
 
           <!-- Przepływ mocy (węzły) -->
-          <div class="section" style="margin-top:6px;">
+          <div class="section" data-tile="main-flow" style="margin-top:6px;">
             <div class="chart-card full nodes-card"><div id="nodesBox"></div><div id="nodePop" class="node-pop" hidden></div></div>
           </div>
-          <div class="section">
+          <div class="section" data-tile="main-plan">
             <div class="section-title">Plan dnia</div>
             <div id="exMainBox"></div>
             <div class="chart-card full" style="padding:6px 20px 12px;"><div id="planBox"></div></div>
@@ -2980,25 +3085,25 @@
         </div>
 
         <div class="tab-content" data-tab-content="charts" style="display:none;">
-          <div class="section" style="margin-top:6px;">
+          <div class="section" data-tile="ch-plan24" style="margin-top:6px;">
             <div class="section-title">📈 Plan na najbliższe 24 h</div>
             <div class="chart-card full" style="padding:14px 16px;"><div id="exPlanBox"><div class="chart-empty">Ładowanie planu…</div></div></div>
           </div>
-          <div class="section">
+          <div class="section" data-tile="ch-hourly">
             <div class="section-title">🗓 Plan godzina po godzinie</div>
             <div class="chart-card full" style="padding:14px 16px;"><div id="exTblBox"><div class="chart-empty">Ładowanie…</div></div></div>
           </div>
-          <div class="section">
+          <div class="section" data-tile="ch-override">
             <div class="section-title">🧭 Ręczne nadpisanie planu</div>
             <div class="chart-card full" style="padding:14px 16px;"><div id="exOvrBox"><div class="chart-empty">Ładowanie…</div></div></div>
           </div>
-          <div class="section">
+          <div class="section" data-tile="ch-history7">
             <div class="section-title">🔋 Historia poziomu baterii (7 dni)</div>
             <div class="chart-card full" style="padding:14px 16px;"><div id="exHistBox"><div class="chart-empty">Ładowanie…</div></div></div>
           </div>
 
           
-          <div class="section" style="margin-top:6px;">
+          <div class="section" data-tile="ch-energy" style="margin-top:6px;">
             <div class="section-title">Historia energii i cen</div>
             <div class="chart-card full">
               <div class="chart-head">
@@ -3022,7 +3127,7 @@
             </div>
           </div>
 
-          <div class="section">
+          <div class="section" data-tile="ch-loadcons">
             <div class="section-title">Zużycie domu — wczoraj / dziś / jutro</div>
             <div class="chart-card full">
               <div class="chart-head"><span>🏠 Porównanie</span><span class="sub" id="loadConsSub">—</span></div>
@@ -3032,7 +3137,7 @@
               <details class="lh-wrap" open><summary>Ostatnie 14 dni: rzeczywiste vs prognoza</summary><div id="loadHistTable"></div></details>
             </div>
           </div>
-          <div class="section">
+          <div class="section" data-tile="ch-fc7d">
             <div class="section-title">Prognoza 7-dniowa zużycia domu</div>
             <div class="chart-card full">
               <div class="chart-head"><span>📅 Najbliższe 7 dni</span><span class="sub">kWh / dzień</span></div>
@@ -3040,7 +3145,7 @@
               <div class="chart-footer" style="border-top:0;margin-top:2px;padding-top:2px;"><span class="stat"><i class="dot" style="background:#60a5fa"></i>prognoza dnia</span><span class="stat"><i class="dot" style="background:#fbbf24"></i>dziś / jutro</span></div>
             </div>
           </div>
-          <div class="section">
+          <div class="section" data-tile="ch-hourly-today">
             <div class="section-title">Profil godzinowy dziś</div>
             <div class="chart-card full">
               <div class="chart-head"><span>⏰ Prognoza godzinowa — dziś</span><span class="sub" id="hourlyTodaySub">—</span></div>
@@ -3049,7 +3154,7 @@
               <div id="hourlyTodayTable" class="hfc-wrap" role="group" aria-label="Tabela godzin dziś: prognoza i zużycie w Wh"></div>
             </div>
           </div>
-          <div class="section">
+          <div class="section" data-tile="ch-hourly-tomorrow">
             <div class="section-title">Profil godzinowy jutra</div>
             <div class="chart-card full">
               <div class="chart-head"><span>⏰ Prognoza godzinowa — jutro</span><span class="sub" id="hourlyFcSub">—</span></div>
@@ -3058,14 +3163,14 @@
               <div id="hourlyFcTable" class="hfc-wrap" role="group" aria-label="Tabela godzin jutro: prognoza w Wh"></div>
             </div>
           </div>
-          <div class="section">
+          <div class="section" data-tile="ch-pvprod">
             <div class="section-title">Produkcja PV dziś — rzeczywista vs prognoza (kWh/h)</div>
             <div class="chart-card full">
               <div class="chart-head"><span>☀️ Produkcja PV</span><span class="sub" id="pvProdSub">—</span></div>
               <canvas id="chartPvProd24h"></canvas>
             </div>
           </div>
-          <div class="section">
+          <div class="section" data-tile="ch-prices">
             <div class="section-title">Ceny sprzedaży prądu — dziś vs jutro</div>
             <div class="chart-card full" style="padding:14px 16px;">
               <div id="priceTableHeader" class="price-header">Ceny sprzedaży > Teraz: -- PLN/kWh</div>
@@ -3083,7 +3188,7 @@
 
         <div class="tab-content" data-tab-content="ems" style="display:none;">
           <div class="simple-wrap" id="simpleWrap" style="display:none;"></div>
-          <div class="section">
+          <div class="section" data-tile="ems-schedule">
             <div class="section-title">🤖 Inteligentny harmonogram</div>
             <div class="chart-card full" style="padding:14px 16px;">
               <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:10px;">
@@ -3098,7 +3203,7 @@
             </div>
           </div>
 
-          <div class="section">
+          <div class="section" data-tile="ems-sell">
             <div class="section-title">🔋 Przełączniki sprzedaży</div>
             <div class="action-grid">
               <button class="btn" id="btn-sprzedaz-1"><div class="icon">🔋</div><div class="label">Sprzedaż (1)<br><span id="txt-sprzedaz-1">wyłączono</span></div></button>
@@ -3146,7 +3251,7 @@
             </div>
           </div>
 
-          <div class="section">
+          <div class="section" data-tile="ems-pvblock">
             <div class="section-title">⚡ Blokada ładowania PV</div>
             <div class="action-grid">
               <button class="btn" id="btn-toggle-blokada-pv"><div class="icon" id="icon-blokada-pv">🔋</div><div class="label">Blokada PV<br><span id="txt-blokada-pv">wyłączona</span></div></button>
@@ -3169,7 +3274,7 @@
             </div>
           </div>
 
-          <div class="section">
+          <div class="section" data-tile="ems-export">
             <div class="section-title">🔋 Eksport z PV i blokada ładowania</div>
             <div class="row"><div class="field-info"><div class="name">Start eksportu</div><div class="eid-hint" id="eid-pv_export_start"></div></div>
               <div class="field-controls"><input type="time" data-time-key="pv_export_start"></div></div>
@@ -3181,7 +3286,7 @@
             </div>
           </div>
 
-          <div class="section">
+          <div class="section" data-tile="ems-gridpower">
             <div class="section-title">⚡ Moc ładowania z sieci i ochrona przyłącza</div>
             <div class="row">
               <div class="field-info">
@@ -3215,7 +3320,7 @@
             </div>
           </div>
 
-          <div class="section">
+          <div class="section" data-tile="ems-gridcharge">
             <div class="section-title">🔌 Ładowanie z sieci</div>
             <div class="action-grid">
               <button class="btn" id="btn-laduj-1"><div class="icon">🔌</div><div class="label">Zestaw 1<br><span id="txt-laduj-1">wyłączono</span></div></button>
@@ -3276,6 +3381,7 @@
         b.addEventListener('click', () => this._setTheme(b.dataset.themeSet, true));
       });
       this._applyTheme();
+      this._applyLayout();
       this._bindNodePop(wrap);
       wrap.addEventListener('click', (ev) => {
         const t = ev.target && ev.target.closest ? ev.target.closest('[data-mod-retry]') : null;
@@ -3823,9 +3929,9 @@
         items.push(['', `🏖 <b>Tryb urlopowy</b> — plan zakłada stałe zużycie domu${w ? ' ' + this._esc(Math.round(Number(w))) + ' W' : ''}.`]);
       }
       // dane integracji: brak połączenia z falownikiem / nieaktualny plan
-      if (!this._findEntity(ENTITY_FALLBACKS.soc)) items.push(['bad', '⚠ <b>Brak danych z falownika</b> — sprawdź połączenie (Diagnostyka → Łączność).']);
+      if (!this._findEntity(ENTITY_FALLBACKS.soc)) items.push(['bad', '⚠ <b>Brak danych z falownika</b> — sprawdź połączenie (Ustawienia → Łączność).']);
       const gen = Date.parse(String(this._pvAttrs().generated_at || '')) / 1000;
-      if (isFinite(gen) && gen > 0 && nowS - gen > 3600) items.push(['warn', `⚠ <b>Plan nieaktualny od ${Math.floor((nowS - gen) / 3600)} h</b> — EMS nie odświeżył planu; sprawdź Diagnostykę.`]);
+      if (isFinite(gen) && gen > 0 && nowS - gen > 3600) items.push(['warn', `⚠ <b>Plan nieaktualny od ${Math.floor((nowS - gen) / 3600)} h</b> — EMS nie odświeżył planu; sprawdź zakładkę Ustawienia.`]);
       const key = JSON.stringify(items);
       if (key === this._sbKey) return;
       this._sbKey = key;
@@ -3994,7 +4100,7 @@
       if (box.style.display === 'none') box.style.display = '';
     }
 
-    // Tryb prosty (przełącznik w Diagnostyce → Tryby): zakładki Wykresy / Zysk i log / Urządzenia znikają,
+    // Tryb prosty (przełącznik w Ustawieniach → Tryby): zakładki Wykresy / Zysk i log / Urządzenia znikają,
     // zakładka EMS zamienia się w trzy pytania
     _simpleOn() { return this._st(this._eid('switch', 'simple_mode')) === 'on'; }
     _applySimple() {
@@ -4002,7 +4108,7 @@
       const on = this._simpleOn();
       if (app.classList.contains('simple') !== on) {
         app.classList.toggle('simple', on);
-        root.querySelectorAll('.tab[data-tab="ems"] .tl, .tab[data-tab="ems"] .tls').forEach((e) => { e.textContent = e.classList.contains('tls') ? 'Ustaw.' : 'Ustawienia'; });
+        root.querySelectorAll('.tab[data-tab="ems"] .tl, .tab[data-tab="ems"] .tls').forEach((e) => { e.textContent = 'EMS'; });
         const sw = this._el('simpleWrap'); if (sw) sw.style.display = on ? '' : 'none';
         if (on && ['charts', 'log', 'dev'].includes(this._activeTab)) { const m = root.querySelector('.tab[data-tab="main"]'); if (m) m.click(); }
         if (!on && sw) { sw.innerHTML = ''; sw.dataset.k = ''; }
@@ -4038,7 +4144,7 @@
           <div class="sm-auto">${auto.map(([k, n]) => `<div class="${sw(k) === 'on' ? 'ok' : 'off'}">${sw(k) === 'on' ? '✓' : '○'} ${n}</div>`).join('')}</div>
           ${offN ? `<button type="button" class="btn" data-simple-auto="1" style="padding:10px 16px;">Włącz zalecaną automatykę (${offN})</button>` : '<div class="sm-h" style="margin:0;">Wszystko włączone — nic więcej nie musisz ustawiać.</div>'}</div>
         ${isFinite(profit) ? `<div class="sm-card"><div class="sm-q">Dziś: ${profit >= 0 ? '+' : '−'}${Math.abs(profit).toFixed(2).replace('.', ',')} zł</div><div class="sm-h" style="margin:0;">Bilans sprzedaży i zakupów energii z sieci od północy.</div></div>` : ''}
-        <div class="sm-foot">Tryb prosty wyłączysz w Diagnostyce → Tryby i powiadomienia (administrator).</div>`;
+        <div class="sm-foot">Tryb prosty wyłączysz w Ustawieniach → Tryby i powiadomienia (administrator).</div>`;
       if (!w.dataset.bound) {
         w.dataset.bound = '1';
         w.addEventListener('click', (ev) => {
@@ -4183,7 +4289,7 @@
       return d;
     }
 
-    // Ekran główny w stylu Material 3 (tylko gdy włączony styl „Material 3” w Diagnostyce → Wygląd): karta baterii z paskiem
+    // Ekran główny w stylu Material 3 (tylko gdy włączony styl „Material 3” w Ustawieniach → Wygląd): karta baterii z paskiem
     // rezerwy i celu, schemat przepływu z „pigułkami”, kafelki zysku/PV/ceny i pasek planu na 24 h. Dane te same co w klasycznym.
     _drawM3Home(box, o0) {
       const o = this._skFin(o0);
@@ -5161,14 +5267,14 @@
 
   // Zaślepki: działają do czasu załadowania modułu, potem moduł nadpisuje je pełnymi wersjami.
   const DG_STUBS = {
-    _devTabSync() {            // przełącznik z Diagnostyki → Tryby: chowa całą zakładkę Urządzenia
+    _devTabSync() {            // przełącznik z Ustawień → Tryby: chowa całą zakładkę Urządzenia
       const st = this._hass && this._hass.states[this._eid('switch', 'hide_devices_tab')];
       const hide = !!st && st.state === 'on';
       const b = this._el('tabDev'); if (!b) return;
       b.style.display = hide ? 'none' : '';
       if (hide && this._activeTab === 'dev') { const m = this.shadowRoot && this.shadowRoot.querySelector('.tab[data-tab="main"]'); if (m) m.click(); }
     },
-    _tabsPosSync() {           // przełącznik z Diagnostyki → Tryby: pasek zakładek na górze zamiast na dole
+    _tabsPosSync() {           // przełącznik z Ustawień → Tryby: pasek zakładek na górze zamiast na dole
       const wrap = this.shadowRoot && this.shadowRoot.querySelector('.app');
       const nav = wrap && wrap.querySelector('#tabsNav'); if (!nav) return;
       const st = this._hass && this._hass.states[this._eid('switch', 'tabs_top')];
@@ -5216,7 +5322,7 @@
         // alarm z integracji widać na zakładce, zanim załaduje się moduł Diagnostyki
         const ms = this._hass && this._hass.states[this._eid('sensor', 'monitor_status')];
         const be = ms && ms.attributes && Array.isArray(ms.attributes.alarms) ? ms.attributes.alarms.length : 0;
-        const want = 'Diagnostyka' + (be ? ' ⚠' : '');
+        const want = 'Ustawienia' + (be ? ' ⚠' : '');
         const lb = b.querySelector('.tl');
         if (lb && lb.textContent !== want) lb.textContent = want;
         b.classList.toggle('warn', !!be);
