@@ -1,4 +1,4 @@
-# EMS komp-dec — w przygotowaniu (po 0.9.5.3, jeszcze niewydane)
+# EMS komp-dec — zmiany w 0.9.5.4 (z 0.9.5.3)
 
 - **Układ panelu: własna kolejność i ukrywanie kafelków.** Nowy przycisk 🎨 w nagłówku (dostępny dla każdego użytkownika — bez uprawnień administratora i bez hasła) otwiera okno „Wygląd": styl, motyw i układ. „Edytuj układ na panelu" włącza tryb edycji: na każdym kafelku Główny / Plan / EMS / Zysk i log (i na pasku pogody) pojawiają się ⠿ (przeciąganie), ↑ ↓ oraz „Ukryj". Ukryty kafelek zostaje na miejscu jako szary pasek z „Pokaż", więc nic się nie gubi; w trybie edycji zawartość kafelków jest nieklikalna, żeby nic nie przełączyć przez pomyłkę. Układ zapisuje się w tej przeglądarce — każdy użytkownik i urządzenie ma własny, więc nie wpływa na innych domowników. „Przywróć domyślny" cofa zmiany; gdy ukryjesz wszystko na zakładce, panel podpowiada, gdzie to przywrócić. Ukrycie kafelka niczego nie wyłącza w EMS — tylko go nie pokazuje; alerty (cena, próg falownika, status, „dlaczego") nie są kafelkami i zawsze zostają widoczne. Ta sama lista z przyciskami jest też w Ustawienia → Wygląd. Domyślny układ jest taki sam jak dotąd.
 - **Tabela „Plan godzina po godzinie" mieści się na telefonie.** Wcześniej wąski ekran ucinał kolumny Dom, SOC i Koszt (trzeba było przewijać w bok). Teraz na telefonie każda godzina to dwa wiersze: godzina, akcja i koszt oraz niżej Kup / Sprz / PV / Dom / SOC. Na szerokim ekranie tabela wygląda jak dotąd.
@@ -7,6 +7,7 @@
 - **Okna (powiadomienia, „Wygląd") są czytelne także w stylach Szkło i Przestrzeń** — dostały pełne tło pod półprzezroczystą kartą i rozmycie.
 - **Zakładka „Diagnostyka" nazywa się teraz „Ustawienia"** (ustawienia panelu, wygląd, autotest, tryby, alarmy i narzędzia serwisowe). Dotychczasowa zakładka „Ustawienia" (sprzedaż, ładowanie, harmonogram) wraca do nazwy „EMS", żeby nie było dwóch zakładek o tej samej nazwie. Teksty podpowiedzi, powiadomień i autotestu odsyłają już do „Ustawień".
 - **Z ekranu głównego zniknął wykres „rezerwa N% / rzeczywisty poziom baterii".** Zostają rachunek dnia i znaczniki aktywnych nadpisań; historia baterii jest w zakładce Plan („Historia poziomu baterii (7 dni)").
+- **Tryb edycji układu: kafelek po ↑/↓ nie chowa się pod paskiem edycji** — panel sam przewija go w pole widzenia także w przeglądarkach, które ignorują `scroll-margin`.
 
 # EMS komp-dec — zmiany w 0.9.5.3 (z 0.9.5.2)
 
