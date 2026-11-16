@@ -21,7 +21,20 @@ Integracja Home Assistanta, która pilnuje, kiedy falownik Deye ma ładować bat
 
 Na górze są bieżące ceny kupna i sprzedaży oraz prognoza pogody i produkcji paneli na 7 dni (z zakresem niepewności). Niżej przepływ energii na żywo (panele, dom, sieć, bateria), kafelka „Bateria” z informacją, kiedy będzie pełna albo kiedy dojdzie do progu odcięcia falownika, paski produkcji i zużycia oraz tabela „Sprzedaż i zakup energii” (dziś, miesiąc, razem) z szacunkiem, ile prądu kosztowałoby bez paneli i baterii.
 
-Karta działa tak samo na telefonie, ma jasny i ciemny motyw. Styl wyglądu (Klasyczny — domyślny, Material 3, Szkło, Matryca, Przestrzeń, Komfort) wybierasz w Ustawienia → Wygląd.
+Karta działa tak samo na telefonie, ma jasny i ciemny motyw. Styl wyglądu (Klasyczny — domyślny, Material 3, Szkło, Matryca, Przestrzeń, Komfort) wybierasz przyciskiem 🎨 w nagłówku (każdy użytkownik, bez hasła) albo w Ustawienia → Wygląd.
+
+**Własny układ.** W oknie 🎨 „Edytuj układ na panelu” włącza tryb edycji: kafelki wykresów, planów i ustawień przestawiasz przeciągnięciem (⠿) albo przyciskami ↑ ↓, a zbędne ukrywasz („Ukryj”; ukryty kafelek zostaje jako pasek z „Pokaż”). Układ zapisuje się w tej przeglądarce, więc każdy domownik ma własny, a „Przywróć domyślny” cofa zmiany. Alerty zawsze zostają widoczne.
+
+**Mała karta do dashboardu.** Obok pełnego panelu możesz dodać małą kartę `custom:bms-mini-card` (w wyborze kart: „Centrum Energii — mała karta”): bateria, moce, pasek planu na 24 h i opis, co EMS planuje na najbliższą dobę (ładowanie z sieci i z PV, sprzedaż, SOC, szacunkowy koszt).
+
+```yaml
+type: custom:bms-mini-card
+title: Centrum Energii        # opcjonalnie
+navigation_path: /lovelace/ems  # opcjonalnie: klik otwiera ten widok
+show_flow: true               # moce PV / dom / sieć / bateria
+show_strip: true              # pasek planu 24 h
+show_summary: true            # opis „Co EMS planuje na najbliższe 24 h”
+```
 
 <p align="center"><img src="assets/screens/glowny_tel.png" width="300" alt="Karta na telefonie"></p>
 

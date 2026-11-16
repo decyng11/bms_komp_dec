@@ -730,6 +730,27 @@
       table.px-tbl tr.peak td:first-child { box-shadow: inset 3px 0 0 var(--orange); }
       table.px-tbl tr.tot td { font-weight:600; color:var(--text); border-bottom:none; }
       .px-act { display:inline-block; padding:2px 8px; border-radius:999px; font-size:11px; }
+      /* tabela planu na wąskim ekranie (telefon): każda godzina to dwa wiersze, żeby były widoczne WSZYSTKIE kolumny bez przewijania w bok */
+      .px-tbl-wrap.px-plan { container-type:inline-size; }
+      @container (max-width: 560px) {
+        table.px-tbl.plan { min-width:0 !important; display:block; font-size:12px; }
+        table.px-tbl.plan thead { display:none; }
+        table.px-tbl.plan tbody { display:block; }
+        table.px-tbl.plan tr { display:block; border-bottom:1px solid var(--line); }
+        table.px-tbl.plan tr.day td { display:block; border:0; padding:6px 8px; }
+        table.px-tbl.plan tr:not(.day):not(.tot) { display:grid; grid-template-columns:46px repeat(5, minmax(0, 1fr)); column-gap:4px; align-items:center; padding:5px 0 6px; }
+        table.px-tbl.plan tr:not(.day):not(.tot) td { display:block; border:0; padding:0; text-align:left; white-space:nowrap; min-width:0; }
+        table.px-tbl.plan tr:not(.day):not(.tot) td:nth-child(1) { grid-area:1 / 1 / 3 / 2; font-weight:600; color:var(--text); padding-left:6px; }
+        table.px-tbl.plan tr:not(.day):not(.tot) td:nth-child(2) { grid-area:1 / 2 / 2 / 5; overflow:hidden; text-overflow:ellipsis; }
+        table.px-tbl.plan tr:not(.day):not(.tot) td:nth-child(8) { grid-area:1 / 5 / 2 / 7; text-align:right; font-weight:600; padding-right:6px; }
+        table.px-tbl.plan tr:not(.day):not(.tot) td:nth-child(n+3):nth-child(-n+7) { grid-row:2; font-size:11px; overflow:hidden; text-overflow:ellipsis; }
+        table.px-tbl.plan td:nth-child(3) { grid-column:2; } table.px-tbl.plan td:nth-child(4) { grid-column:3; } table.px-tbl.plan td:nth-child(5) { grid-column:4; }
+        table.px-tbl.plan td:nth-child(6) { grid-column:5; } table.px-tbl.plan td:nth-child(7) { grid-column:6; }
+        table.px-tbl.plan td[data-l]::before { content:attr(data-l) ' '; color:var(--muted); font-weight:400; }
+        table.px-tbl.plan tr.tot { display:flex; flex-wrap:wrap; gap:2px 12px; padding:8px 6px; }
+        table.px-tbl.plan tr.tot td { display:block; border:0; padding:0; text-align:left; white-space:normal; }
+        table.px-tbl.plan tr.tot td:empty { display:none; }
+      }
       .px-act.grid { background:rgba(10,132,255,.16); color:#0a84ff; }
       .px-act.sell { background:rgba(255,159,10,.18); color:var(--orange); }
       .px-act.pv { background:rgba(48,209,88,.16); color:var(--green); }
@@ -863,7 +884,7 @@
         const box = this._el('exTblBox'); if (!box) return;
         const a = this._pvAttrs ? this._pvAttrs() : {};
         const rows = Array.isArray(a.table) ? a.table : [];
-        const key = JSON.stringify([a.generated_at, rows.length, TC('text')]);
+        const key = JSON.stringify([a.generated_at, rows.length, TC('text'), new Date().getHours()]);
         if (box.dataset.exKey === key) return;
         box.dataset.exKey = key;
         if (!rows.length) { box.innerHTML = '<div class="chart-empty">Plan jeszcze nie jest policzony albo nie ma danych (SOC, prognozy).</div>'; return; }
@@ -872,11 +893,11 @@
           if (r.day !== day) { day = r.day; html += `<tr class="day"><td colspan="8">${exEsc(pxDayLabel(day))}</td></tr>`; }
           const c = exNum(r.cost);
           html += `<tr class="${r.peak ? 'peak' : ''}"><td>${String(r.h).padStart(2, '0')}:00</td><td><span class="px-act ${exEsc(r.action)}">${exEsc(r.label)}</span></td>`
-            + `<td>${pxPrice(r.buy)}</td><td>${pxPrice(r.sell)}</td><td>${exFmt(r.pv, 1)}</td><td>${exFmt(r.load, 1)}</td><td>${exFmt(r.soc, 0, '%')}</td>`
+            + `<td data-l="Kup">${pxPrice(r.buy)}</td><td data-l="Sprz">${pxPrice(r.sell)}</td><td data-l="PV">${exFmt(r.pv, 1)}</td><td data-l="Dom">${exFmt(r.load, 1)}</td><td data-l="SOC">${exFmt(r.soc, 0, '%')}</td>`
             + `<td class="${c < -0.005 ? 'px-neg' : c > 0.005 ? 'px-pos' : ''}">${pxZl(c, true)}</td></tr>`;
         });
         const t = a.table_totals || {};
-        box.innerHTML = `<div class="px-tbl-wrap"><table class="px-tbl"><thead><tr><th>Godz.</th><th>Akcja</th><th>Kup zł</th><th>Sprz. zł</th><th>PV kWh</th><th>Dom kWh</th><th>SOC</th><th>Koszt</th></tr></thead><tbody>${html}`
+        box.innerHTML = (this._planSummaryHtml ? this._planSummaryHtml(rows) : '') + `<div class="px-tbl-wrap px-plan"><table class="px-tbl plan"><thead><tr><th>Godz.</th><th>Akcja</th><th>Kup zł</th><th>Sprz. zł</th><th>PV kWh</th><th>Dom kWh</th><th>SOC</th><th>Koszt</th></tr></thead><tbody>${html}`
           + `<tr class="tot"><td colspan="2">Razem</td><td colspan="4" style="text-align:left;">pobór ${exFmt(t.import_kwh, 1)} kWh · oddanie ${exFmt(t.export_kwh, 1)} kWh</td><td></td><td class="${exNum(t.cost) < 0 ? 'px-neg' : 'px-pos'}">${pxZl(t.cost, true)}</td></tr></tbody></table></div>`
           + '<div class="px-note">Szacunek z planu (bez strat i opłat stałych): koszt = pobór z sieci × cena zakupu − oddanie × cena sprzedaży; minus = przychód. Pomarańczowy pasek = godziny szczytu taryfy. Plan obejmuje najbliższe ~30 godzin.</div>';
       },

@@ -110,6 +110,8 @@
   // ---- Układ panelu (Ustawienia → Wygląd → Układ panelu): kolejność i ukrywanie kafelków, osobno dla każdej przeglądarki.
   // Kafelek to element z atrybutem data-tile w szablonie. Zmiana układu tylko przestawia / chowa istniejące elementy —
   // nie zmienia danych ani sterowania. Alerty (cena, próg falownika, status, „dlaczego”) nie są kafelkami i zawsze zostają.
+  const LOOK_SKIN_SUB = { classic: 'dotychczasowy wygląd (domyślny)', m3: 'tonalne karty, pigułkowa nawigacja', glass: 'rozmyte szklane karty, pływający pasek', matrix: 'czerń lub papier, kwadratowe piksele, bursztyn',
+    space: 'duże szklane okno, boczny pasek na szerokim ekranie', comfort: 'duży nagłówek, bardzo zaokrąglone płaskie karty' };
   const LAYOUT_KEY = 'bms_panel_layout';
   const LAYOUT_TABS = [
     { tab: 'main', label: 'Główny', tiles: [['main-active', 'Aktywne funkcje'], ['main-flow', 'Schemat przepływu mocy (dom)'], ['main-plan', 'Plan dnia']] },
@@ -389,10 +391,47 @@
     .section { margin-top: 16px; }
     /* Układ panelu: ukryty kafelek, odstępy po przestawieniu, komunikat gdy ukryto wszystko */
     [data-tile-off] { display: none !important; }
+    /* „Co EMS planuje na najbliższe 24 h” (tabela planu i mała karta) */
+    .ps { background: var(--surface); border-radius: 14px; padding: 10px 12px; margin: 0 0 12px; font-size: 13px; color: var(--text2); }
+    .ps-h { font-weight: 700; color: var(--text); margin-bottom: 4px; font-size: 13.5px; }
+    .ps-l { display: flex; gap: 8px; align-items: baseline; padding: 2px 0; line-height: 1.4; }
+    .ps-l i { font-style: normal; flex: none; width: 22px; text-align: center; }
+    .ps-l b { color: var(--text); font-weight: 600; }
+    .ps-n { font-size: 11px; color: var(--muted); margin-top: 4px; line-height: 1.4; }
+    /* okno „Wygląd” (przycisk 🎨) — korzysta z ramki okna powiadomień (.inb-ov / .inb) */
+    .look-skins { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 8px; }
+    .look-sk { text-align: left; border: 2px solid var(--line); background: var(--surface); color: var(--text); border-radius: 14px; padding: 10px 12px; cursor: pointer; font-family: inherit; display: flex; flex-direction: column; gap: 3px; }
+    .look-sk b { font-size: 14px; } .look-sk span { font-size: 11.5px; color: var(--muted); }
+    .look-sk.on { border-color: var(--accent); background: var(--seg-active); }
+    .look-row { display: flex; gap: 8px; }
+    .look-row button { flex: 1; padding: 10px; border-radius: 12px; border: 2px solid var(--line); background: var(--surface); color: var(--text); font-size: 14px; cursor: pointer; font-family: inherit; }
+    .look-row button.on { border-color: var(--accent); background: var(--seg-active); font-weight: 700; }
+    .look-note { font-size: 12px; color: var(--muted); margin: 4px 0 8px; }
+    .inb-btns button[disabled] { opacity: .4; cursor: default; }
+    /* tryb edycji układu: pasek u góry, sterowanie na kafelkach, zawartość kafelków przycięta i nieklikalna (żeby nic nie przełączyć przez pomyłkę) */
+    .edit-bar { position: sticky; top: 0; z-index: 30; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 6px 0; padding: 10px 12px; border-radius: 14px; background: var(--card); border: 2px solid var(--accent); color: var(--text); font-size: 12.5px; box-shadow: 0 4px 16px rgba(0,0,0,0.25); }
+    .edit-bar[hidden] { display: none; }
+    .edit-bar .eb-t { flex: 1 1 220px; color: var(--text2); } .edit-bar .eb-t b { color: var(--text); }
+    .edit-bar button { border: none; border-radius: 10px; padding: 8px 12px; font-weight: 600; font-size: 13px; cursor: pointer; background: var(--seg-bg); color: var(--text); font-family: inherit; }
+    .edit-bar button.ok { background: var(--accent); color: #fff; } .edit-bar button[disabled] { opacity: .4; cursor: default; }
+    .tile-ctl { display: flex; align-items: center; gap: 6px; padding: 6px 8px; margin-bottom: 6px; border-radius: 12px; background: var(--seg-bg); border: 1px dashed var(--accent); color: var(--text); font-size: 12.5px; }
+    .tc-h { cursor: grab; touch-action: none; user-select: none; -webkit-user-select: none; font-size: 20px; line-height: 1; padding: 4px 8px; color: var(--accent); }
+    .tc-n { flex: 1; min-width: 0; font-weight: 600; overflow-wrap: anywhere; }
+    .tile-ctl button { border: none; background: var(--surface); color: var(--text); border-radius: 8px; min-width: 34px; height: 32px; cursor: pointer; font-size: 14px; font-family: inherit; }
+    .tile-ctl button[disabled] { opacity: .35; cursor: default; }
+    .tile-ctl .tc-eye { padding: 0 10px; font-size: 12px; font-weight: 600; }
+    .app[data-edit] [data-tile] { scroll-margin: 120px 0 90px; position: relative; max-height: 150px; overflow: hidden; outline: 2px dashed var(--accent); outline-offset: 3px; border-radius: 14px; margin-bottom: 8px; }
+    .app[data-edit] [data-tile] > :not(.tile-ctl) { pointer-events: none; user-select: none; }
+    .app[data-edit] [data-tile-off] { display: block !important; opacity: .6; max-height: none; }
+    .app[data-edit] [data-tile-off] > :not(.tile-ctl) { display: none !important; }
+    .app[data-edit] [data-tile-off] .tc-n { text-decoration: line-through; }
+    .app[data-edit] [data-tile-off] .tc-eye { background: var(--accent); color: #fff; }
+    .app[data-edit] [data-tile].tile-drag { opacity: .85; outline-style: solid; box-shadow: 0 8px 28px rgba(0,0,0,0.35); z-index: 5; }
+    [data-tab-content="ems"] .section.collapsed > .tile-ctl { display: flex !important; }
     [data-tab-content][data-custom] [data-tile]:not([data-first]) { margin-top: 16px !important; }
     [data-tab-content][data-custom] [data-tile][data-first] { margin-top: 6px !important; }
     [data-tab-content="log"][data-custom] [data-tile][data-first] { margin-top: 16px !important; }
-    .app:not(.simple) [data-tab-content][data-all-hidden]::after { content: 'Wszystkie kafelki tej zakładki są ukryte. Przywrócisz je w: Ustawienia → Wygląd → Układ panelu.'; display: block; padding: 28px 12px; text-align: center; color: var(--muted); font-size: 13px; }
+    .app:not(.simple):not([data-edit]) [data-tab-content][data-all-hidden]::after { content: 'Wszystkie kafelki tej zakładki są ukryte. Przywrócisz je w: Ustawienia → Wygląd → Układ panelu.'; display: block; padding: 28px 12px; text-align: center; color: var(--muted); font-size: 13px; }
     .section-title { font-size: 12px; font-weight: 600; text-transform: uppercase; color: var(--muted); margin-bottom: 8px; padding-left: 6px; letter-spacing: 1px; }
     
     /* Poprawione style pogody, żeby ładnie się dopasowywały */
@@ -721,7 +760,8 @@
     .bell-n.calm { background: var(--accent); }
     .inb-ov { position: fixed; inset: 0; z-index: 60; background: rgba(0,0,0,0.45); display: flex; align-items: center; justify-content: center; padding: 16px; box-sizing: border-box; }
     .inb-ov[hidden] { display: none; }
-    .inb { width: 100%; max-width: 560px; max-height: 86vh; display: flex; flex-direction: column; background: var(--card); color: var(--text); border-radius: 20px; box-shadow: 0 10px 40px rgba(0,0,0,0.45); }
+    .inb { width: 100%; max-width: 560px; max-height: 86vh; display: flex; flex-direction: column; background-color: #1c1c1e; background-image: linear-gradient(var(--card), var(--card)); -webkit-backdrop-filter: blur(24px) saturate(1.3); backdrop-filter: blur(24px) saturate(1.3); color: var(--text); border-radius: 20px; box-shadow: 0 10px 40px rgba(0,0,0,0.45); }
+    :host([data-theme="light"]) .inb { background-color: #f0f0f4; }   /* pełne tło pod półprzezroczystą kartą (style Szkło, Przestrzeń) — okno jest zawsze czytelne */
     .inb-grip { display: none; }
     .inb-h { display: flex; align-items: center; gap: 8px; padding: 10px 16px 6px; }
     .inb-h b { font-size: 17px; flex: 1; }
@@ -2986,8 +3026,164 @@
         if (!isDef && vis[0]) vis[0].setAttribute('data-first', '');
         tc.toggleAttribute('data-all-hidden', vis.length === 0);
       });
+      if (this._layEdit) this._layEditInject();
       // pokazany ponownie kafelek mógł być rysowany, gdy był niewidoczny (szerokość 0) — wymuś ponowne rysowanie
       if (unhid) { this._lastFlowKey = this._lastM3Key = this._lastLogKey = null; this._lastLoadConsKey = this._lastForecast7dKey = this._lastHourlyFcKey = this._lastPvProdKey = this._lastPriceTableKey = this._lastWeatherKey = null; }
+    }
+    // ---------- okno „Wygląd” (🎨): styl, motyw, układ — dla każdego użytkownika, bez hasła ----------
+    _lookRender() {
+      const root = this.shadowRoot; if (!root) return;
+      let ov = root.getElementById('lookOv');
+      if (!ov) {
+        ov = document.createElement('div'); ov.id = 'lookOv'; ov.className = 'inb-ov'; ov.hidden = true;
+        ov.innerHTML = '<div class="inb" role="dialog" aria-modal="true" aria-label="Wygląd panelu"></div>';
+        ov.addEventListener('click', (ev) => {
+          if (ev.target === ov) { this._lookClose(); return; }
+          const b = ev.target.closest ? ev.target.closest('[data-look]') : null; if (b) this._lookClick(b);
+        });
+        ov.addEventListener('keydown', (ev) => {
+          if (ev.key === 'Escape') { ev.stopPropagation(); this._lookClose(); return; }
+          if (ev.key !== 'Tab') return;
+          const f = [...ov.querySelectorAll('button:not([disabled])')]; if (!f.length) return;
+          const a = root.activeElement, i = f.indexOf(a);
+          if (ev.shiftKey && i <= 0) { ev.preventDefault(); f[f.length - 1].focus(); } else if (!ev.shiftKey && i === f.length - 1) { ev.preventDefault(); f[0].focus(); }
+        });
+        root.appendChild(ov);
+      }
+      ov.hidden = !this._lookOpen;
+      const btn = this._el('lookBtn'); if (btn) btn.setAttribute('aria-expanded', this._lookOpen ? 'true' : 'false');
+      if (!this._lookOpen) return;
+      const cur = this._resolveSkin(), th = this._resolveTheme(), st = this._layoutState();
+      const skins = Object.keys(SKINS).map((k) => `<button type="button" class="look-sk ${cur === k ? 'on' : ''}" data-look="skin" data-skin="${k}" aria-pressed="${cur === k}"><b>${bmsEsc(SKINS[k])}</b><span>${bmsEsc(LOOK_SKIN_SUB[k] || '')}</span></button>`).join('');
+      const hadFocus = ov.contains(root.activeElement) ? root.activeElement : null, fk = hadFocus && (hadFocus.dataset.look + '|' + (hadFocus.dataset.skin || hadFocus.dataset.m || ''));
+      ov.firstChild.innerHTML = `<div class="inb-grip"></div><div class="inb-h"><b>🎨 Wygląd panelu</b><button type="button" class="inb-x" data-look="close" aria-label="Zamknij">✕</button></div>
+        <div class="inb-body">
+          <div class="inb-sec"><span>Styl</span></div><div class="look-skins">${skins}</div>
+          <div class="inb-sec"><span>Motyw</span></div>
+          <div class="look-row"><button type="button" data-look="theme" data-m="light" class="${th === 'light' ? 'on' : ''}" aria-pressed="${th === 'light'}">☀️ Jasny</button><button type="button" data-look="theme" data-m="dark" class="${th === 'dark' ? 'on' : ''}" aria-pressed="${th === 'dark'}">🌙 Ciemny</button></div>
+          <div class="inb-sec"><span>Układ panelu</span></div>
+          <div class="look-note">Przestawiaj i ukrywaj kafelki wykresów, planów i ustawień bezpośrednio na panelu. Ukrycie kafelka niczego nie wyłącza w EMS — alerty zawsze zostają.${st.custom ? ' Masz własny układ.' : ''}</div>
+          <div class="inb-btns"><button type="button" class="ok" data-look="edit">✎ Edytuj układ na panelu</button><button type="button" data-look="reset-all" ${st.custom ? '' : 'disabled'}>↺ Przywróć domyślny</button></div>
+          <div class="look-note" style="margin-top:10px;">Styl, motyw i układ zapisują się w tej przeglądarce — każdy użytkownik i urządzenie ma własny wygląd.</div>
+        </div>`;
+      const f = fk && [...ov.querySelectorAll('[data-look]')].find((b) => (b.dataset.look + '|' + (b.dataset.skin || b.dataset.m || '')) === fk && !b.disabled);
+      const target = f || ov.querySelector('.inb-x'); if (target && !hadFocus || f) target.focus();
+    }
+    _lookOpenSet(open) {
+      this._lookOpen = !!open; this._lookRender();
+      if (!open) { const b = this._el('lookBtn'); if (b && b.focus) b.focus(); }
+    }
+    _lookClose() { this._lookOpenSet(false); }
+    _lookClick(b) {
+      const a = b.dataset.look;
+      if (a === 'close') this._lookClose();
+      else if (a === 'skin') { this._setSkin(b.dataset.skin); this._lookRender(); }
+      else if (a === 'theme') { this._setTheme(b.dataset.m, true); this._lookRender(); }
+      else if (a === 'edit') { this._lookOpen = false; this._lookRender(); this._layEditOn(); }
+      else if (a === 'reset-all') { this._layoutReset(); this._lookRender(); }
+    }
+    // ---------- tryb edycji układu na panelu ----------
+    _layEditBar() {
+      const bar = this._el('editBar'); if (!bar) return;
+      bar.hidden = !this._layEdit; if (!this._layEdit) { bar.innerHTML = ''; return; }
+      const g = LAYOUT_TABS.find((x) => x.tab === this._activeTab && !x.fixed);
+      bar.innerHTML = `<div class="eb-t"><b>✎ Edycja układu.</b> Przeciągnij ⠿ albo użyj ↑ ↓. „Ukryj” chowa kafelek — zostaje szary pasek z „Pokaż”. ${g ? `Zakładka: <b>${bmsEsc(g.label)}</b>.` : 'Ta zakładka nie ma kafelków — wybierz inną na dolnym pasku.'}</div>
+        <button type="button" data-lay="reset-tab" ${g ? '' : 'disabled'}>↺ Ta zakładka</button><button type="button" class="ok" data-lay="done">Gotowe</button>`;
+    }
+    _layEditOn() {
+      const app = this.shadowRoot && this.shadowRoot.querySelector('.app'); if (!app) return;
+      this._layEdit = true; app.setAttribute('data-edit', '');
+      if (!LAYOUT_TABS.some((g) => g.tab === this._activeTab && !g.fixed)) { const m = this.shadowRoot.querySelector('.tab[data-tab="main"]'); if (m) m.click(); }
+      this._applyLayout(); this._layEditBar();
+      const ok = this.shadowRoot.querySelector('#editBar [data-lay="done"]'); if (ok && ok.focus) ok.focus();
+    }
+    _layEditOff() {
+      const app = this.shadowRoot && this.shadowRoot.querySelector('.app'); if (!app) return;
+      this._layEdit = false; app.removeAttribute('data-edit');
+      this.shadowRoot.querySelectorAll('.tile-ctl').forEach((n) => n.remove());
+      this._layEditBar(); this._applyLayout();
+    }
+    _layEditInject() {
+      const root = this.shadowRoot; if (!root) return;
+      const L = this._layoutLoad(), hid = new Set(L.hidden);
+      LAYOUT_TABS.forEach((g) => {
+        const label = Object.fromEntries(g.tiles), ord = this._layoutOrder(g, L);
+        g.tiles.forEach(([id]) => {
+          const tile = root.querySelector(`[data-tile="${id}"]`); if (!tile) return;
+          let ctl = tile.querySelector(':scope > .tile-ctl');
+          if (!ctl) { ctl = document.createElement('div'); ctl.className = 'tile-ctl'; tile.insertBefore(ctl, tile.firstChild); }
+          ctl.dataset.ctlFor = id;
+          const nm = bmsEsc(label[id]), i = ord.indexOf(id), off = hid.has(id);
+          const mv = g.fixed ? '' : `<button type="button" data-lay="up" aria-label="Przesuń wyżej: ${nm}" title="Wyżej" ${i <= 0 ? 'disabled' : ''}>↑</button><button type="button" data-lay="down" aria-label="Przesuń niżej: ${nm}" title="Niżej" ${i >= ord.length - 1 ? 'disabled' : ''}>↓</button>`;
+          ctl.innerHTML = `${g.fixed ? '' : '<span class="tc-h" role="img" aria-label="Przeciągnij, aby przestawić" title="Przeciągnij">⠿</span>'}<span class="tc-n">${nm}</span>${mv}<button type="button" class="tc-eye" data-lay="eye" aria-label="${off ? 'Pokaż' : 'Ukryj'}: ${nm}">${off ? '👁 Pokaż' : '✕ Ukryj'}</button>`;
+        });
+      });
+    }
+    _layTabOf(id) { return (LAYOUT_TABS.find((g) => g.tiles.some((t) => t[0] === id)) || {}).tab; }
+    _layoutSetOrder(tab, ids) {
+      const g = LAYOUT_TABS.find((x) => x.tab === tab); if (!g || g.fixed) return false;
+      const L = this._layoutLoad(), def = g.tiles.map((t) => t[0]);
+      const ord = []; ids.forEach((id) => { if (def.includes(id) && !ord.includes(id)) ord.push(id); }); def.forEach((id) => { if (!ord.includes(id)) ord.push(id); });
+      if (ord.join() === def.join()) delete L.order[tab]; else L.order[tab] = ord;
+      this._layoutSave(L); this._applyLayout(); return true;
+    }
+    _layWire(wrap) {
+      wrap.addEventListener('click', (ev) => {
+        const b = ev.target && ev.target.closest ? ev.target.closest('[data-lay]') : null; if (!b || !this._layEdit) return;
+        const a = b.dataset.lay, ctl = b.closest('.tile-ctl'), id = ctl && ctl.dataset.ctlFor;
+        if (a === 'done') { this._layEditOff(); return; }
+        if (a === 'reset-tab') { this._layoutReset(this._activeTab); return; }
+        if (!id) return;
+        if (a === 'up' || a === 'down') this._layoutMove(this._layTabOf(id), id, a === 'up' ? -1 : 1);
+        else if (a === 'eye') this._layoutToggle(id);
+        // kontrolki są rysowane od nowa — oddaj fokus temu samemu przyciskowi i zostaw kafelek w zasięgu wzroku
+        const tile = this.shadowRoot.querySelector(`[data-tile="${id}"]`);
+        if (tile) {
+          const nb = tile.querySelector(`:scope > .tile-ctl [data-lay="${a}"]:not([disabled])`) || tile.querySelector(':scope > .tile-ctl [data-lay="eye"]');
+          if (nb && nb.focus) nb.focus({ preventScroll: true });
+          if (a !== 'eye' && tile.scrollIntoView) tile.scrollIntoView({ block: 'nearest' });
+        }
+      });
+      wrap.addEventListener('pointerdown', (ev) => {
+        const h = ev.target && ev.target.closest ? ev.target.closest('.tc-h') : null;
+        if (h && this._layEdit) this._layDragStart(ev, h);
+      });
+      this.shadowRoot.addEventListener('keydown', (ev) => { if (ev.key === 'Escape' && this._layEdit && !this._lookOpen) this._layEditOff(); });
+    }
+    _scrollParent(el) {
+      let n = el;
+      while (n) {
+        n = n.parentNode || n.host;
+        if (n && n.nodeType === 1) { const o = getComputedStyle(n).overflowY; if ((o === 'auto' || o === 'scroll') && n.scrollHeight > n.clientHeight + 1) return n; }
+      }
+      return document.scrollingElement || document.documentElement;
+    }
+    _layDragStart(ev, handle) {
+      if (ev.button !== undefined && ev.button !== 0) return;
+      const ctl = handle.closest('.tile-ctl'), tile = ctl && ctl.parentElement, cont = tile && tile.parentElement;
+      if (!tile || !tile.dataset.tile || !cont) return;
+      ev.preventDefault();
+      try { handle.setPointerCapture(ev.pointerId); } catch (e) { /* brak przechwytu — działamy na zdarzeniach uchwytu */ }
+      tile.classList.add('tile-drag');
+      const sibs = () => [...cont.children].filter((n) => n.dataset && n.dataset.tile);
+      const sp = this._scrollParent(tile);
+      let y = ev.clientY, timer = null;
+      const swap = () => {
+        const s = sibs(), i = s.indexOf(tile), prev = s[i - 1], next = s[i + 1];
+        // przestawiamy sąsiadów, a nie przeciągany kafelek — jego węzeł (z uchwytem) zostaje w DOM, więc przechwycenie wskaźnika nie jest zrywane
+        if (prev) { const r = prev.getBoundingClientRect(); if (y < r.top + r.height / 2) { cont.insertBefore(prev, tile.nextSibling); return; } }
+        if (next) { const r = next.getBoundingClientRect(); if (y > r.top + r.height / 2) cont.insertBefore(next, tile); }
+      };
+      const edge = () => { const vh = window.innerHeight || 800; if (y < 80) sp.scrollTop -= 14; else if (y > vh - 90) sp.scrollTop += 14; };
+      const move = (e) => { y = e.clientY; swap(); };
+      const done = () => {
+        handle.removeEventListener('pointermove', move); handle.removeEventListener('pointerup', done); handle.removeEventListener('pointercancel', done);
+        clearInterval(timer); tile.classList.remove('tile-drag');
+        try { handle.releasePointerCapture(ev.pointerId); } catch (e) { /* ignoruj */ }
+        this._layoutSetOrder(this._layTabOf(tile.dataset.tile), sibs().map((n) => n.dataset.tile));
+      };
+      handle.addEventListener('pointermove', move); handle.addEventListener('pointerup', done); handle.addEventListener('pointercancel', done);
+      timer = setInterval(() => { edge(); swap(); }, 40);
     }
     _applyTheme(force) {
       const mode = force || this._resolveTheme();
@@ -3028,6 +3224,7 @@
             <div class="date" id="date"></div>
           </div>
           <div class="hdr-r">
+          <button type="button" class="bell" id="lookBtn" aria-label="Wygląd panelu" aria-haspopup="dialog" title="Wygląd panelu: styl, motyw, układ kafelków">🎨</button>
           <button type="button" class="bell" id="bell" aria-label="Powiadomienia i propozycje" title="Powiadomienia i propozycje">🔔<span class="bell-n" id="bellN" hidden></span></button>
           <div class="theme-seg" role="group" aria-label="Motyw">
             <button type="button" data-theme-set="light" title="Jasny" aria-label="Motyw jasny">☀️</button>
@@ -3035,6 +3232,7 @@
           </div>
           </div>
         </div>
+        <div class="edit-bar" id="editBar" role="region" aria-label="Edycja układu panelu" hidden></div>
         <nav class="tabs bottom" id="tabsNav">
           <button class="tab active" data-tab="main" title="Główny" aria-label="Główny"><span class="ti">${TAB_SVG.main}</span><span class="tl">Główny</span><span class="tls">Główny</span></button>
           <button class="tab" data-tab="charts" title="Plan i wykresy" aria-label="Plan i wykresy"><span class="ti">${TAB_SVG.charts}</span><span class="tl">Plan</span><span class="tls">Plan</span></button>
@@ -3382,6 +3580,8 @@
       });
       this._applyTheme();
       this._applyLayout();
+      this._layWire(wrap);
+      { const lb = this._el('lookBtn'); if (lb) lb.addEventListener('click', () => this._lookOpenSet(!this._lookOpen)); }
       this._bindNodePop(wrap);
       wrap.addEventListener('click', (ev) => {
         const t = ev.target && ev.target.closest ? ev.target.closest('[data-mod-retry]') : null;
@@ -3397,6 +3597,7 @@
         btn.addEventListener('click', () => {
           const tab = btn.dataset.tab;
           this._activeTab = tab;
+          if (this._layEdit) this._layEditBar();
           if (tab === 'log') { this._lastLogKey = null; this._safe(() => this._renderLogTab()); }
           wrap.querySelectorAll('.tab').forEach(b => b.classList.toggle('active', b === btn));
           wrap.querySelectorAll('.tab-content').forEach(c => c.style.display = c.dataset.tabContent === tab ? '' : 'none');
@@ -4364,6 +4565,54 @@
           <div class="m3-leg"><span style="background:var(--m3-gridc);color:var(--m3-gridt)">z sieci</span><span style="background:var(--m3-sellc);color:var(--m3-sellt)">sprzedaż</span><span style="background:var(--m3-pvc);color:var(--m3-pvt)">PV</span><span style="background:var(--seg-active);color:var(--text)">z baterii</span></div></div>`;
       }
       box.innerHTML = `<div class="m3-home">${hero}${flow}${kpis}${strip}</div>`;
+    }
+
+    // ---------- „Co EMS planuje na najbliższe 24 h”: opis planu godzinowego (tabela planu, mała karta) ----------
+    _planSummary(rows0, nowMs) {
+      const now = nowMs || Date.now(), HR = 3600000;
+      const rows = (Array.isArray(rows0) ? rows0 : []).map((r) => (r && r.t ? Object.assign({}, r, { ts: Date.parse(r.t) }) : null)).filter((r) => r && isFinite(r.ts)).sort((a, b) => a.ts - b.ts);
+      const cur = rows.filter((r) => r.ts + HR > now && r.ts < now + 24 * HR).slice(0, 24);
+      if (!cur.length) return null;
+      const wins = []; let cu = null;
+      cur.forEach((r) => {
+        const k = r.action === 'grid' || r.action === 'sell' || r.action === 'pv' ? r.action : null;
+        if (k && cu && cu.k === k && r.ts === cu.end) { cu.end = r.ts + HR; cu.n++; } else { if (cu) wins.push(cu); cu = k ? { k, start: r.ts, end: r.ts + HR, n: 1 } : null; }
+      });
+      if (cu) wins.push(cu);
+      const num = (v) => (v !== null && v !== '' && v !== undefined && isFinite(Number(v)) ? Number(v) : null);
+      let min = null, cost = 0, imp = 0, exp = 0;
+      cur.forEach((r) => { const v = num(r.soc); if (v !== null && (min === null || v < min.soc)) min = { soc: v, ts: r.ts }; cost += num(r.cost) || 0; imp += num(r.import_kwh) || 0; exp += num(r.export_kwh) || 0; });
+      const last = cur[cur.length - 1], le = num(last.soc);
+      return { cur, wins, min, end: le === null ? null : { soc: le, ts: last.ts + HR }, cost, imp, exp, now };
+    }
+    _planSummaryHtml(rows, nowMs) {
+      const s = this._planSummary(rows, nowMs); if (!s) return '';
+      const E = bmsEsc, today = this._todayKey(), tom = this._tomorrowKey(), dk = (ts) => this._dateKey(new Date(ts));
+      const hh = (ts) => String(new Date(ts).getHours()).padStart(2, '0') + ':00';
+      const day = (ts) => { const k = dk(ts); return k === today ? '' : (k === tom ? 'jutro ' : k.slice(8, 10) + '.' + k.slice(5, 7) + ' '); };
+      const win = (w) => `${w.start <= s.now ? 'teraz' : day(w.start) + hh(w.start)}–${hh(w.end)} (${w.n} h)`;
+      const fz = (v) => Math.abs(v).toFixed(2).replace('.', ',') + ' zł';
+      const line = (ico, label, k, none) => {
+        const w = s.wins.filter((x) => x.k === k);
+        const t = w.length ? w.slice(0, 3).map(win).join(', ') + (w.length > 3 ? ` i jeszcze ${w.length - 3}` : '') : none;
+        return `<div class="ps-l"><i aria-hidden="true">${ico}</i><span><b>${E(label)}:</b> ${E(t)}</span></div>`;
+      };
+      const soc = s.min ? `<div class="ps-l"><i aria-hidden="true">🔋</i><span><b>Bateria:</b> najniżej ${Math.round(s.min.soc)}% (${E(day(s.min.ts) + hh(s.min.ts))})${s.end ? `, na koniec okresu ${Math.round(s.end.soc)}% (${E(day(s.end.ts) + hh(s.end.ts))})` : ''}</span></div>` : '';
+      const bil = s.cost > 0.005 ? 'koszt ' + fz(s.cost) : (s.cost < -0.005 ? 'przychód ' + fz(s.cost) : 'bilans około 0 zł');
+      return `<div class="ps" role="group" aria-label="Plan EMS na najbliższe 24 godziny"><div class="ps-h">🧭 Co EMS planuje na najbliższe 24 h</div>
+        ${line('⚡', 'Ładowanie z sieci', 'grid', 'nie planuje')}${line('☀️', 'Ładowanie z PV', 'pv', 'brak')}${line('💰', 'Sprzedaż z baterii', 'sell', 'nie planuje')}${soc}
+        <div class="ps-l"><i aria-hidden="true">💵</i><span><b>Szacunek:</b> ${E(bil)} · pobór ${s.imp.toFixed(1).replace('.', ',')} kWh, oddanie ${s.exp.toFixed(1).replace('.', ',')} kWh</span></div>
+        <div class="ps-n">To szacunek z prognoz — EMS przelicza plan na bieżąco i może go zmienić.</div></div>`;
+    }
+    // bieżące moce i SOC (jak na ekranie głównym) — dla małej karty
+    _flowNow() {
+      let pv = Math.max(0, this._num('pv_power'));
+      if (pv < 1) {
+        const pv1 = parseFloat(this._st(this._inv('sensor', 'pv1_power'))) || 0, pv2 = parseFloat(this._st(this._inv('sensor', 'pv2_power'))) || 0;
+        if (pv1 + pv2 > 1) pv = pv1 + pv2;
+      }
+      const battRaw = this._num('battery_power');
+      return this._skFin({ pv, load: Math.max(0, this._num('load_power')), grid: this._num('grid_power'), batt: INVERT_BATTERY_SIGN ? -battRaw : battRaw, soc: this._num('soc') });
     }
 
     // ---------- wspólny ekran główny stylów Szkło / Matryca / Przestrzeń / Komfort ----------
@@ -5387,6 +5636,100 @@
   Object.assign(BmsPanel.prototype, DEV_STUBS);
   // <<MODULES-END>>
 
+  // ======================= MAŁA KARTA (bms-mini-card) =======================
+  // Osobna, niewielka karta do wstawienia w dowolnym dashboardzie HA: bateria, moce, pasek planu 24 h i opis, co EMS zaplanował.
+  // Dziedziczy odczyt encji z karty głównej, ale nie ładuje modułów, historii ani pogody.
+  const MINI_CSS = `
+    .mini { padding: 14px 16px; color: var(--text); }
+    .mini[data-nav] { cursor: pointer; }
+    .mini-h { display: flex; align-items: baseline; gap: 8px; justify-content: space-between; margin-bottom: 10px; }
+    .mini-t { font-size: 15px; font-weight: 700; } .mini-sub { font-size: 12px; color: var(--muted); text-align: right; }
+    .mini-top { display: flex; align-items: center; gap: 14px; }
+    .mini-ring { flex: none; width: 104px; } .mini-ring svg { width: 100%; height: auto; display: block; }
+    .mini-nums { flex: 1; min-width: 0; display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+    .mini-n { background: var(--surface); border-radius: 12px; padding: 8px 10px; display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+    .mini-n i { font-style: normal; font-size: 14px; line-height: 1.2; } .mini-n b { font-size: 15px; white-space: nowrap; } .mini-n span { font-size: 11px; color: var(--muted); }
+    .mini-strip { display: flex; align-items: flex-end; gap: 2px; height: 46px; margin-top: 14px; }
+    .mini-strip i { flex: 1; min-width: 0; border-radius: 3px 3px 1px 1px; opacity: .92; }
+    .mini-strip i.now { outline: 2px solid var(--text); outline-offset: 1px; }
+    .mini-ticks { display: flex; justify-content: space-between; font-size: 10.5px; color: var(--muted); margin-top: 4px; }
+    .mini-leg { display: flex; gap: 10px; flex-wrap: wrap; font-size: 10.5px; color: var(--muted); margin-top: 4px; } .mini-leg b { display: inline-block; width: 8px; height: 8px; border-radius: 2px; margin-right: 4px; }
+    .mini .ps { margin: 12px 0 0; }
+    .mini-empty { padding: 18px 8px; text-align: center; color: var(--muted); font-size: 13px; }
+  `;
+  let MINI_SHEET;
+  const miniSheet = () => {
+    if (MINI_SHEET !== undefined) return MINI_SHEET;
+    try { const sh = new CSSStyleSheet(); sh.replaceSync(STYLES + SKIN_M3 + SKIN_COMMON + SKIN_GLASS + SKIN_MATRIX + SKIN_SPACE + SKIN_COMFORT + MINI_CSS); MINI_SHEET = sh; } catch (e) { MINI_SHEET = null; }
+    return MINI_SHEET;
+  };
+  class BmsMini extends BmsPanel {
+    static getStubConfig() { return { title: 'Centrum Energii' }; }
+    getCardSize() { return 6; }
+    getGridOptions() { return { columns: 12, rows: 'auto', min_columns: 6 }; }
+    setConfig(config) {
+      this._config = Object.assign({ title: 'Centrum Energii', show_flow: true, show_strip: true, show_summary: true }, config || {});
+      this._miniKey = null;
+      if (this._hass && this.shadowRoot) this._miniDraw();
+    }
+    connectedCallback() { /* bez pętli animacji karty głównej */ }
+    disconnectedCallback() { /* nic do sprzątania */ }
+    set hass(hass) {
+      this._hass = hass;
+      try { const bs = Number(this._rsAttrs().battery_charge_sign); if (bs === 1 || bs === -1) INVERT_BATTERY_SIGN = (bs === -1); } catch (e) { /* zostaje poprzednia wartość */ }
+      if (!this.shadowRoot) this.attachShadow({ mode: 'open' });
+      if (!this._miniInit) {
+        this._miniInit = true;
+        const sh = miniSheet();
+        if (sh) this.shadowRoot.adoptedStyleSheets = [sh];
+        else { const st = document.createElement('style'); st.textContent = STYLES + SKIN_M3 + SKIN_COMMON + SKIN_GLASS + SKIN_MATRIX + SKIN_SPACE + SKIN_COMFORT + MINI_CSS; this.shadowRoot.appendChild(st); }
+        const box = document.createElement('div'); box.id = 'miniBox'; this.shadowRoot.appendChild(box);
+        box.addEventListener('click', () => {
+          const p = this._config && this._config.navigation_path; if (!p || typeof p !== 'string') return;
+          try { history.pushState(null, '', p); window.dispatchEvent(new CustomEvent('location-changed', { detail: { replace: false } })); } catch (e) { /* brak nawigacji */ }
+        });
+        box.addEventListener('keydown', (ev) => { if ((ev.key === 'Enter' || ev.key === ' ') && ev.target === box.firstElementChild && box.firstElementChild.hasAttribute('data-nav')) { ev.preventDefault(); box.click(); } });
+      }
+      this._applyTheme();
+      this._miniDraw();
+    }
+    _miniDraw() {
+      const box = this.shadowRoot && this.shadowRoot.getElementById('miniBox'); if (!box || !this._hass) return;
+      const cfg = this._config || { title: 'Centrum Energii', show_flow: true, show_strip: true, show_summary: true };
+      if (!this._hass.states[this._eid('sensor', 'plan_view')] && !this._hass.states[this._eid('sensor', 'reserve_soc')] && !isFinite(this._num('soc', NaN))) {
+        const html = '<div class="chart-card mini"><div class="mini-empty">Brak danych EMS — sprawdź, czy integracja „EMS komp-dec” jest uruchomiona.</div></div>';
+        if (this._miniKey !== html) { this._miniKey = html; box.innerHTML = html; } return;
+      }
+      const o = this._flowNow(), m = this._homeModel(o), pvA = this._pvAttrs(), rows = Array.isArray(pvA.table) ? pvA.table : [];
+      const hour = new Date().getHours(), nav = !!(cfg.navigation_path && typeof cfg.navigation_path === 'string');
+      const key = JSON.stringify([cfg, Math.round(o.pv / 50), Math.round(o.load / 50), Math.round(o.grid / 50), Math.round(o.batt / 50), Math.round(o.soc), m.flr, m.tgt, hour, pvA.generated_at, rows.length, THEME.mode, this.getAttribute('data-skin')]);
+      if (key === this._miniKey) return;
+      this._miniKey = key;
+      const E = bmsEsc, kw = (w) => (Math.abs(w) < 1000 ? Math.round(Math.abs(w)) + ' W' : (Math.abs(w) / 1000).toFixed(1).replace('.', ',') + ' kW');
+      const TH = m.TH, bcol = o.batt > TH ? 'var(--green)' : (o.batt < -TH ? 'var(--orange)' : 'var(--accent)');
+      const r = 46, c = 2 * Math.PI * r, soc = Math.max(0, Math.min(100, o.soc)), at = (rad, p) => [60 + rad * Math.cos((p * 360 - 90) * Math.PI / 180), 60 + rad * Math.sin((p * 360 - 90) * Math.PI / 180)];
+      let ring = `<circle cx="60" cy="60" r="${r}" fill="none" style="stroke:var(--seg-bg)" stroke-width="13"/><circle cx="60" cy="60" r="${r}" fill="none" style="stroke:${bcol}" stroke-width="13" stroke-linecap="round" stroke-dasharray="${(c * soc / 100).toFixed(1)} ${c.toFixed(1)}" transform="rotate(-90 60 60)"/>`;
+      if (m.hasFl) { const [x1, y1] = at(r - 9, m.flr / 100), [x2, y2] = at(r + 9, m.flr / 100); ring += `<path d="M${x1.toFixed(1)} ${y1.toFixed(1)}L${x2.toFixed(1)} ${y2.toFixed(1)}" style="stroke:var(--text)" stroke-width="2.4" stroke-linecap="round"><title>rezerwa falownika ${Math.round(m.flr)}%</title></path>`; }
+      ring += `<text x="60" y="70" text-anchor="middle" font-weight="700" font-size="30" style="fill:var(--text);font-family:inherit">${Math.round(soc)}<tspan font-size="15" dy="-10">%</tspan></text>`;
+      const gl = o.grid > TH ? 'z sieci' : (o.grid < -TH ? 'do sieci' : 'sieć');
+      const nums = cfg.show_flow === false ? '' : `<div class="mini-nums">
+        <div class="mini-n"><i aria-hidden="true">☀️</i><b>${E(kw(o.pv))}</b><span>produkcja PV</span></div>
+        <div class="mini-n"><i aria-hidden="true">🏠</i><b>${E(kw(o.load))}</b><span>zużycie domu</span></div>
+        <div class="mini-n"><i aria-hidden="true">⚡</i><b>${E(kw(o.grid))}</b><span>${E(gl)}</span></div>
+        <div class="mini-n"><i aria-hidden="true">🔋</i><b>${E(kw(o.batt))}</b><span>${o.batt > TH ? 'ładowanie' : (o.batt < -TH ? 'rozładowanie' : 'spoczynek')}</span></div></div>`;
+      const cmap = { grid: '#0a84ff', sell: '#ff9f0a', pv: '#30d158', home: '#a78bfa', idle: 'var(--seg-bg)' };   // stałe kolory akcji — czytelne w każdym stylu
+      const plan = m.plan;
+      const strip = cfg.show_strip === false || plan.length < 6 ? '' : `<div class="mini-strip" role="img" aria-label="Plan baterii na najbliższe 24 godziny">${plan.map((p, i) => `<i class="${i === 0 ? 'now' : ''}" style="height:${Math.max(14, Math.min(100, isFinite(Number(p.soc)) ? Number(p.soc) : 0))}%;background:${cmap[p.action] || cmap.idle}" title="${String(p.h).padStart(2, '0')}:00 — ${E(p.label || '')}${isFinite(Number(p.soc)) ? ', SOC ' + Math.round(Number(p.soc)) + '%' : ''}"></i>`).join('')}</div>
+        <div class="mini-ticks">${[0, 6, 12, 18].filter((i) => i < plan.length).map((i) => `<span>${i === 0 ? 'teraz' : String(plan[i].h).padStart(2, '0') + ':00'}</span>`).join('')}<span>+24 h</span></div>
+        <div class="mini-leg"><span><b style="background:${cmap.grid}"></b>z sieci</span><span><b style="background:${cmap.sell}"></b>sprzedaż</span><span><b style="background:${cmap.pv}"></b>PV</span><span><b style="background:${cmap.home}"></b>bateria → dom</span><span>wysokość = planowany SOC</span></div>`;
+      const sum = cfg.show_summary === false ? '' : (this._planSummaryHtml(rows) || '<div class="ps"><div class="ps-h">🧭 Co EMS planuje na najbliższe 24 h</div><div class="ps-n">Plan jeszcze nie jest policzony albo brakuje danych (SOC, prognozy).</div></div>');
+      const sub = [m.battTxt, m.pace].filter(Boolean).join(' · ');
+      box.innerHTML = `<div class="chart-card mini" ${nav ? 'data-nav="1" role="link" tabindex="0"' : ''} aria-label="${E(cfg.title || 'Centrum Energii')}">
+        <div class="mini-h"><span class="mini-t">${E(cfg.title || 'Centrum Energii')}</span><span class="mini-sub">${E(sub)}</span></div>
+        <div class="mini-top"><div class="mini-ring"><svg viewBox="0 0 120 120" role="img" aria-label="Poziom baterii ${Math.round(soc)}%">${ring}</svg></div>${nums}</div>${strip}${sum}</div>`;
+    }
+  }
+
   if (!customElements.get('bms-panel-card')) {
     try { customElements.define('bms-panel-card', BmsPanel); }
     catch (e) { console.error('EMS PANEL: define failed', e); }
@@ -5394,5 +5737,12 @@
   window.customCards = window.customCards || [];
   if (!window.customCards.some(c => c && c.type === 'bms-panel-card')) {
     window.customCards.push({ type: 'bms-panel-card', name: 'Centrum Energii', description: 'EMS Panel', preview: true });
+  }
+  if (!customElements.get('bms-mini-card')) {
+    try { customElements.define('bms-mini-card', BmsMini); }
+    catch (e) { console.error('EMS PANEL: define mini failed', e); }
+  }
+  if (!window.customCards.some(c => c && c.type === 'bms-mini-card')) {
+    window.customCards.push({ type: 'bms-mini-card', name: 'Centrum Energii — mała karta', description: 'Bateria, moce i plan EMS na najbliższe 24 h', preview: true });
   }
 })();
