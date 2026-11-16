@@ -420,7 +420,7 @@
     .tile-ctl button { border: none; background: var(--surface); color: var(--text); border-radius: 8px; min-width: 34px; height: 32px; cursor: pointer; font-size: 14px; font-family: inherit; }
     .tile-ctl button[disabled] { opacity: .35; cursor: default; }
     .tile-ctl .tc-eye { padding: 0 10px; font-size: 12px; font-weight: 600; }
-    .app[data-edit] [data-tile] { scroll-margin: 120px 0 90px; position: relative; max-height: 150px; overflow: hidden; outline: 2px dashed var(--accent); outline-offset: 3px; border-radius: 14px; margin-bottom: 8px; }
+    .app[data-edit] [data-tile] { position: relative; max-height: 150px; overflow: hidden; outline: 2px dashed var(--accent); outline-offset: 3px; border-radius: 14px; margin-bottom: 8px; }
     .app[data-edit] [data-tile] > :not(.tile-ctl) { pointer-events: none; user-select: none; }
     .app[data-edit] [data-tile-off] { display: block !important; opacity: .6; max-height: none; }
     .app[data-edit] [data-tile-off] > :not(.tile-ctl) { display: none !important; }
@@ -3141,7 +3141,7 @@
         if (tile) {
           const nb = tile.querySelector(`:scope > .tile-ctl [data-lay="${a}"]:not([disabled])`) || tile.querySelector(':scope > .tile-ctl [data-lay="eye"]');
           if (nb && nb.focus) nb.focus({ preventScroll: true });
-          if (a !== 'eye' && tile.scrollIntoView) tile.scrollIntoView({ block: 'nearest' });
+          if (a !== 'eye') this._layReveal(tile);
         }
       });
       wrap.addEventListener('pointerdown', (ev) => {
@@ -3149,6 +3149,19 @@
         if (h && this._layEdit) this._layDragStart(ev, h);
       });
       this.shadowRoot.addEventListener('keydown', (ev) => { if (ev.key === 'Escape' && this._layEdit && !this._lookOpen) this._layEditOff(); });
+    }
+    // Pokaż kafelek w widocznej części ekranu: pod paskiem edycji i nad dolnym marginesem.
+    // Liczone ręcznie, bo scrollIntoView + scroll-margin bywa ignorowane (shadow DOM, starsze przeglądarki).
+    _layReveal(tile) {
+      if (!tile || !tile.getBoundingClientRect) return;
+      const bar = this.shadowRoot.getElementById('editBar');
+      const top = (bar && !bar.hidden ? bar.getBoundingClientRect().bottom : 0) + 8;
+      const bottom = (window.innerHeight || 800) - 90;
+      const r = tile.getBoundingClientRect();
+      let d = 0;
+      if (r.top < top) d = r.top - top;
+      else if (r.bottom > bottom) d = Math.min(r.bottom - bottom, r.top - top);
+      if (d) { const sp = this._scrollParent(tile); sp.scrollTop += d; }
     }
     _scrollParent(el) {
       let n = el;

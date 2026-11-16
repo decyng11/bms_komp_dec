@@ -51,19 +51,33 @@ const sleep = (ms) => new Promise(r => setTimeout(r, ms));
   await sr(() => __el.shadowRoot.querySelector('.tab[data-tab="charts"]').click());
   await sleep(600);
   ok(await sr(() => /Zakładka: <b>Plan<\/b>|Zakładka: Plan/.test(__el.shadowRoot.getElementById('editBar').innerHTML.replace(/<[^>]+>/g, m => m)) || /Plan/.test(__el.shadowRoot.getElementById('editBar').textContent)), 'pasek edycji pokazuje bieżącą zakładkę');
-  await sr(() => __el.shadowRoot.querySelector('[data-tile="ch-plan24"]').scrollIntoView({ block: 'start' }));
-  await sleep(300);
+  // przewiń jawnie (bez scrollIntoView/scroll-margin, które w różnych wersjach Chromium działają różnie): kafelek 140 px od góry, pod paskiem edycji
+  await sr(() => { const t = __el.shadowRoot.querySelector('[data-tile="ch-plan24"]'); window.scrollBy(0, t.getBoundingClientRect().top - 140); });
+  const snap = () => sr(() => { const t = __el.shadowRoot.querySelector('[data-tile="ch-plan24"]').getBoundingClientRect(); return Math.round(t.top) + ':' + Math.round(window.scrollY); });
+  let prevSnap = '', stable = 0; for (let i = 0; i < 40 && stable < 3; i++) { await sleep(100); const cur = await snap(); stable = cur === prevSnap ? stable + 1 : 0; prevSnap = cur; }
+  ok(stable >= 3, 'układ strony ustabilizowany przed przeciąganiem: ' + prevSnap);
   const geo = await sr(() => { const g = (id) => { const r = __el.shadowRoot.querySelector(`[data-tile="${id}"]`).getBoundingClientRect(); return { top: r.top, bottom: r.bottom, h: r.height }; };
     const h = __el.shadowRoot.querySelector('[data-tile="ch-plan24"] .tc-h').getBoundingClientRect(); return { handle: [h.left + h.width / 2, h.top + h.height / 2], t3: g('ch-override'), t4: g('ch-history7') }; });
   ok(geo.t4.bottom < 880, 'kafelki w edycji są niskie (przycięte), cztery mieszczą się na ekranie: ' + JSON.stringify(geo.t4));
+  ok(await sr((p) => { const n = __el.shadowRoot.elementFromPoint(p[0], p[1]); return !!(n && n.closest && n.closest('.tc-h')); }, geo.handle), 'uchwyt ⠿ jest na wierzchu (nie zasłania go pasek edycji): ' + JSON.stringify(geo.handle));
   await e.page.mouse.move(geo.handle[0], geo.handle[1]); await e.page.mouse.down();
   const ty = geo.t3.top + geo.t3.h * 0.75;
   for (let i = 1; i <= 12; i++) { await e.page.mouse.move(geo.handle[0], geo.handle[1] + (ty - geo.handle[1]) * i / 12); await sleep(30); }
   await e.page.mouse.up(); await sleep(200);
   const ch = await ids('charts');
   ok(ch.indexOf('ch-plan24') === 2 && ch.slice(0, 2).join() === 'ch-hourly,ch-override', 'przeciągnięcie ⠿ przestawia kafelek: ' + ch.slice(0, 4).join());
-  ok(await sr(() => JSON.parse(localStorage.getItem('bms_panel_layout')).order.charts.slice(0, 3).join() === 'ch-hourly,ch-override,ch-plan24'), 'po przeciągnięciu układ zapisany');
+  ok(await sr(() => { const o = (JSON.parse(localStorage.getItem('bms_panel_layout') || '{}').order || {}).charts || []; return o.slice(0, 3).join() === 'ch-hourly,ch-override,ch-plan24'; }), 'po przeciągnięciu układ zapisany');
   ok(await sr(() => !__el.shadowRoot.querySelector('.tile-drag')), 'po puszczeniu znacznik przeciągania zdjęty');
+  // _layReveal: kafelek schowany pod paskiem edycji albo pod dolną krawędzią wraca w pole widzenia (bez scroll-margin)
+  const rv = await sr(() => { const s = __el.shadowRoot, tiles = [...s.querySelectorAll('[data-tab-content="charts"] > [data-tile]')], t = tiles[4], bar = s.getElementById('editBar');
+    window.scrollBy(0, t.getBoundingClientRect().top + 30); const before = t.getBoundingClientRect().top;
+    const barB = bar.getBoundingClientRect().bottom;
+    __el._layReveal(t); const a1 = t.getBoundingClientRect().top;
+    window.scrollTo(0, 0); const before2 = t.getBoundingClientRect().bottom;
+    __el._layReveal(t); const a2 = t.getBoundingClientRect();
+    return { before, a1, barB, before2, a2b: a2.bottom, vh: innerHeight }; });
+  ok(rv.before < rv.barB && rv.a1 >= rv.barB, '_layReveal: kafelek spod paska edycji wraca na widok ' + JSON.stringify(rv));
+  ok(rv.before2 > rv.vh - 90 && rv.a2b <= rv.vh - 90 + 1, '_layReveal: kafelek spod dolnej krawędzi wraca na widok');
   // „Ta zakładka” cofa tylko bieżącą
   await sr(() => __el.shadowRoot.querySelector('#editBar [data-lay="reset-tab"]').click());
   ok((await ids('charts'))[0] === 'ch-plan24' && await sr(() => localStorage.getItem('bms_panel_layout') === null || !JSON.parse(localStorage.getItem('bms_panel_layout')).order.charts), 'reset zakładki w pasku edycji');
