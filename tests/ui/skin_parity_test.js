@@ -52,6 +52,32 @@ const TOK = () => {
     }
   }
 
+  // urządzenia dodane w zakładce „Urządzenia”: te same liczby, ikony i nazwy w opisie węzłów we wszystkich stylach
+  {
+    const e = await openCard(b, { admin: false });
+    await e.q(() => {
+      const S = (v, a) => ({ state: String(v), attributes: a || {}, last_updated: new Date().toISOString(), last_changed: new Date().toISOString() });
+      const st = window.__states;
+      st['sensor.bms_soc'] = S(48); st['sensor.bms_pv_power'] = S(2100); st['sensor.bms_load_power'] = S(1240); st['sensor.bms_grid_power'] = S(-800); st['sensor.bms_battery_power'] = S(-403);
+      st['sensor.bms_reserve_soc'] = S(30, { price_buy: 1.29, price_sell: 0.305, capacity_kwh: 10, inverter_floor: 25 });
+      st['sensor.bms_devices'] = S(3, { devices: [
+        { id: 'hp', name: 'Pompa ciepła', icon: '🔥', category: 'x', room: 'Kotłownia', power: 412, today_kwh: 3.84, today_cost: 3.1, running: true },
+        { id: 'ac', name: 'Klimatyzacja', icon: '❄️', category: 'x', room: '', power: 255, today_kwh: 0.92, today_cost: 0.74, running: true },
+        { id: 'bo', name: 'Bojler CWU', icon: '🚿', category: 'x', room: '', power: 0, today_kwh: 1.2, today_cost: 0.96, running: false }] });
+      __el.hass = __mk(); __el._setTheme('dark');
+    });
+    const R = {};
+    for (const sk of SK) { await e.q((sk) => __el._setSkin(sk), sk); await sleep(500); R[sk] = await e.q(TOK); R[sk].dv = await e.q(() => [...__el.shadowRoot.querySelectorAll('#nodesBox .nf-dv')].map(g => g.getAttribute('aria-label')).join(' | ')); }
+    const base = new Set(R.classic.nums);
+    for (const sk of SK.slice(1)) {
+      const have = new Set(R[sk].nums), miss = [...base].filter(x => !have.has(x)), extra = [...have].filter(x => !base.has(x));
+      ok(!miss.length && !extra.length, `urządzenia: ${sk} ma te same liczby co klasyczny` + (miss.length ? ' · brakuje: ' + miss.join(',') : '') + (extra.length ? ' · nadmiarowe: ' + extra.join(',') : ''));
+    }
+    ok(['412', '255'].every(x => base.has(x)), 'urządzenia: moce 412 W i 255 W są na schemacie');
+    ok(SK.every(sk => R[sk].dv === R.classic.dv && R.classic.dv.split(' | ').length === 3), 'urządzenia: identyczny opis trzech satelitów we wszystkich stylach');
+    await e.page.context().close();
+  }
+
   // moc sieci 10 W: M3 pokazuje rzeczywistą wartość, a nie „0 W”
   {
     const e = await openCard(b, { admin: false });

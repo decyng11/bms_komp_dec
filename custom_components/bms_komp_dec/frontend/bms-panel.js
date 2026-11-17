@@ -819,6 +819,13 @@
     .nf-s { font-size: 13px; fill: var(--muted); }
     .nf-big .nf-v { font-size: 23px; } .nf-big .nf-s { font-size: 16px; } .nf-big .nf-d { font-size: 15px; } .nf-big .nf-soc { font-size: 28px; }
     .nf-d { font-size: 12px; fill: var(--text2); paint-order: stroke; stroke: var(--card); stroke-width: 4px; stroke-linejoin: round; }
+    .nf-dvw { font-size: 13px; font-weight: 700; fill: var(--text); font-family: inherit; font-variant-numeric: tabular-nums; }
+    .nf-dvw.off { font-weight: 500; fill: var(--muted); }
+    .nf-dvm { font-size: 13px; font-weight: 700; fill: var(--text2); font-family: inherit; }
+    .nf-big .nf-dvw { font-size: 16px; }
+    .np-run { font-style: normal; font-size: 10px; font-weight: 700; padding: 1px 6px; border-radius: 8px; background: color-mix(in srgb, var(--green, #34c759) 22%, transparent); color: var(--green, #34c759); vertical-align: 1px; }
+    .np-go { display: none; width: 100%; margin-top: 8px; padding: 7px 10px; background: none; border: 1px solid var(--line); border-radius: 10px; color: var(--accent); font: inherit; font-size: 12px; cursor: pointer; }
+    .node-pop.pin .np-go { display: block; }
     .pl-row { margin: 14px 0; }
     .pl-h { display: flex; justify-content: space-between; gap: 8px; font-size: 13px; flex-wrap: wrap; }
     .lh-wrap { margin-top: 10px; border-top: 1px solid var(--line); padding-top: 8px; }
@@ -4714,7 +4721,8 @@
       const plan = rows.filter(r => r.day > todayK || (r.day === todayK && r.h >= nowH))
         .sort((a, b) => (a.day === b.day ? a.h - b.h : (a.day < b.day ? -1 : 1))).slice(0, 24);
       const chipsH = this._skChips(Object.assign({}, o, { flr, tgt }), 'm3');
-      const key = JSON.stringify([THEME.mode, Math.round(o.pv / 10), Math.round(o.load / 10), Math.round(o.grid / 10), Math.round(o.batt / 10),
+      const dv = this._devNodes();
+      const key = JSON.stringify([THEME.mode, dv.sig, Math.round(o.pv / 10), Math.round(o.load / 10), Math.round(o.grid / 10), Math.round(o.batt / 10),
         Math.round(soc), flr, tgt, cap, isFinite(profit) ? profit.toFixed(2) : null, pb, ps, o.D.pv, nowH, plan.map(r => r.action).join(','), JSON.stringify(o.dayTxt || {}), chipsH.sig]);
       if (key === this._lastM3Key) return;
       this._lastM3Key = key;
@@ -4743,14 +4751,16 @@
       const bTxt = `🔋 ${o.batt > TH ? '+' : (o.batt < -TH ? '−' : '')}${this._fmtW(Math.abs(o.batt))}`;
       const dt = o.dayTxt || {};
       const dayRow = (dt.pv || dt.home || dt.grid || dt.batt) ? `<div class="m3-day">${[['☀', dt.pv], ['🏠', dt.home], ['⚡', dt.grid], ['🔋', dt.batt]].filter((x) => x[1]).map((x) => `<span>${x[0]} ${bmsEsc(x[1])}</span>`).join('')}</div>` : '';
+      const dvp = this._devPills(dv, 136);
       const flow = `<div class="m3-flow"><div class="m3-ct">Przepływ mocy<small>teraz</small></div>
-        <svg viewBox="0 0 340 140" role="img" aria-label="Przepływ mocy">
+        <svg viewBox="0 0 340 ${Math.max(140, Math.ceil(dvp.bottom) + 4)}" role="img" aria-label="Przepływ mocy">
           <g fill="none" stroke-linecap="round">${line('pv')}${line('grid')}${line('batt')}${line('home')}</g>
           <circle cx="${hub.x}" cy="${hub.y}" r="6" fill="var(--seg-bg)" stroke="var(--muted2)"/>
           ${pill(125, 4, 90, 'var(--m3-pvc)', 'var(--m3-pvt)', '☀ ' + this._fmtW(o.pv))}
           ${pill(4, 84, 116, 'var(--m3-gridc)', 'var(--m3-gridt)', gTxt)}
           ${pill(220, 84, 116, 'var(--seg-active)', 'var(--text)', bTxt)}
           ${pill(125, 106, 90, 'var(--tonal)', 'var(--on-tonal)', '🏠 ' + this._fmtW(o.load))}
+          ${dvp.svg}
           <rect class="nf-hit" data-k="pv" x="120" y="0" width="100" height="38"/><rect class="nf-hit" data-k="grid" x="0" y="80" width="124" height="38"/><rect class="nf-hit" data-k="batt" x="216" y="80" width="124" height="38"/><rect class="nf-hit" data-k="home" x="120" y="102" width="100" height="38"/>
         </svg>${dayRow}</div>`;
       // kafelki
@@ -4768,7 +4778,7 @@
           <div class="m3-leg"><span style="background:var(--m3-gridc);color:var(--m3-gridt)">z sieci</span><span style="background:var(--m3-sellc);color:var(--m3-sellt)">sprzedaż</span><span style="background:var(--m3-pvc);color:var(--m3-pvt)">PV</span><span style="background:var(--seg-active);color:var(--text)">z baterii</span></div></div>`;
       }
       box.innerHTML = `<div class="m3-home">${hero}${flow}${kpis}${chipsH.html}${strip}</div>`;
-      this._bindCapInput(box);
+      this._bindCapInput(box); this._devPopRefresh();
     }
 
     // ---------- „Co EMS planuje na najbliższe 24 h”: opis planu godzinowego (tabela planu, mała karta) ----------
@@ -4823,6 +4833,111 @@
     // Dane jak w stylu Material 3 (bateria z rezerwą i celem, przepływ mocy, zysk/PV/cena, plan 24 h); różni się tylko sposób rysowania.
     // zabezpieczenie: moce i SOC zawsze skończone (brak odczytu = 0), żeby na ekranie nie pojawiło się „NaN W”
     _skFin(o) { const f = (v) => (isFinite(v) ? Number(v) : 0); return Object.assign({}, o, { pv: f(o.pv), load: f(o.load), grid: f(o.grid), batt: f(o.batt), soc: Math.max(0, Math.min(100, f(o.soc))) }); }
+
+    // ---------- urządzenia przy węźle „dom” (wszystkie style) ----------
+    // Pokazujemy WYŁĄCZNIE urządzenia już dodane w zakładce „Urządzenia” (sensor.bms_devices → atrybut devices — to samo źródło
+    // co kafelki „Urządzenia — teraz”); brak urządzeń = nic na schemacie. Na schemacie: ikona + moc, reszta danych (nazwa, stan,
+    // dziś kWh i zł, pokój) w okienku po dotknięciu. Do 4 miejsc; przy większej liczbie 3 urządzenia + „+N” z resztą w okienku.
+    _devNodes() {
+      const st = this._hass && this._hass.states ? this._hass.states[this._eid('sensor', 'devices')] : null;
+      if (this._dvNSt === st && this._dvN) return this._dvN;          // HA podmienia obiekt stanu przy zmianie — stary wynik jest aktualny
+      const a = st && st.attributes, raw = a && Array.isArray(a.devices) ? a.devices : [];
+      const num = (v) => { if (v === null || v === undefined || v === '') return null; const n = Number(v); return isFinite(n) ? n : null; };
+      const q = (p) => (p < 50 ? Math.round(p) : Math.round(p / 5) * 5);   // do klucza przerysowania: drobne drgania mocy nie przerysowują schematu
+      const all = raw.filter((d) => d && d.id !== undefined && d.id !== null && d.id !== '').map((d, i) => {
+        const p = num(d.power), run = !!d.running;
+        return { id: String(d.id), key: 'dev:' + d.id, i, name: String(d.name || d.id), icon: String(d.icon || '🔌'), room: String(d.room || ''), cat: String(d.category || ''),
+          power: p, kwh: num(d.today_kwh), cost: num(d.today_cost), run, w: p === null ? '—' : this._fmtW(Math.max(0, p)), qw: p === null ? null : q(Math.max(0, p)) };
+      });
+      const MAX = 4;
+      let items = all, rest = [];
+      if (all.length > MAX) {
+        // przy nadmiarze: najpierw pracujące, potem największe dzienne zużycie; wyświetlane w kolejności z zakładki
+        const pick = all.slice().sort((x, y) => (y.run - x.run) || ((y.kwh || 0) - (x.kwh || 0)) || (x.i - y.i)).slice(0, MAX - 1).sort((x, y) => x.i - y.i);
+        const ids = new Set(pick.map((x) => x.id));
+        rest = all.filter((x) => !ids.has(x.id));
+        const sum = rest.reduce((s, x) => s + (x.power || 0), 0);
+        items = pick.concat([{ id: '+', key: 'dev:+', more: true, n: rest.length, name: `Pozostałe urządzenia (${rest.length})`, icon: '', room: '', cat: '', power: sum,
+          kwh: null, cost: null, run: rest.some((x) => x.run), w: this._fmtW(sum), qw: q(sum), rest }]);
+      }
+      const sig = JSON.stringify(all.map((x) => [x.id, x.name, x.icon, x.run ? 1 : 0, x.qw, x.kwh === null ? null : x.kwh.toFixed(2), x.cost === null ? null : x.cost.toFixed(2), x.room]));
+      this._dvNSt = st; return (this._dvN = { items, all, sig, n: all.length });
+    }
+    // okienko po dotknięciu satelity: te same dane co kafelek w zakładce „Urządzenia” (ikona, nazwa, moc, „pracuje”, dziś kWh · zł, pokój)
+    _devPopHtml(k) {
+      const D = this._devNodes(), it = D.items.find((x) => x.key === k);
+      if (!it) return '';
+      const qa = (s) => bmsEsc(s).replace(/"/g, '&quot;');
+      const kwh = (v) => (v === null ? '—' : v.toFixed(2).replace('.', ',') + ' kWh'), zl = (v) => (v === null ? '—' : v.toFixed(2).replace('.', ',') + ' zł');
+      const pw = (d) => (d.power === null ? '—' : this._fmtW(Math.max(0, d.power)));
+      const x = '<button class="np-x" type="button" aria-label="Zamknij">×</button>';
+      const go = this._laySimple() ? '' : '<button class="np-go" type="button" data-go="dev">Wszystkie urządzenia →</button>';
+      if (it.more) {
+        const rows = it.rest.map((d) => `<span>${bmsEsc(d.icon)} ${bmsEsc(d.name)}${d.run ? ' · pracuje' : ''}</span><b>${pw(d)} · dziś ${kwh(d.kwh)} · ${zl(d.cost)}</b>`).join('');
+        return `<div class="np-head"><span>${bmsEsc(it.name)}</span><span>${x}</span></div><div class="np-det">${rows}</div>${go}`;
+      }
+      const rows = [['Stan', it.run ? 'pracuje' : 'nie pracuje'], ['Dziś', kwh(it.kwh)], ['Koszt dziś', zl(it.cost)]];
+      if (it.room) rows.push(['Pokój', bmsEsc(it.room)]);
+      return `<div class="np-head"><span>${bmsEsc(it.icon)} ${bmsEsc(it.name)}${it.run ? ' <em class="np-run">pracuje</em>' : ''}</span><span><b>${pw(it)}</b>${x}</span></div>
+        <div class="np-det" data-dev="${qa(it.id)}">${rows.map(([l, v]) => `<span>${l}</span><b>${v}</b>`).join('')}</div>${go}`;
+    }
+    // odświeża otwarte okienko urządzenia (po przerysowaniu schematu); zniknęło urządzenie → zamyka okienko
+    _devPopRefresh() {
+      const k = this._popK; if (!k || String(k).slice(0, 4) !== 'dev:') return;
+      const pop = this._el('nodePop'); if (!pop || pop.hidden) return;
+      const h = this._devPopHtml(k);
+      if (!h) { this._hidePop(); return; }
+      if (pop.dataset.h !== h) { pop.dataset.h = h; pop.innerHTML = h; this._placePop(); }
+    }
+    // Rysowanie satelitów jako fragment SVG. o: { cx, top, step, r, g1, g2, minX, maxX, st } — cx: oś węzła „dom”, top: dół jego opisów,
+    // st: kolory stylu { fill, on, off, flow, matrix }. Zwraca { svg, bottom } (bottom = dolna krawędź rysunku) albo pustkę, gdy brak urządzeń.
+    _devSat(D, o) {
+      const items = D.items, n = items.length;
+      if (!n) return { svg: '', bottom: o.top };
+      const span = (n - 1) * o.step;
+      const x0 = Math.max(o.minX, Math.min(o.maxX - span, o.cx - span / 2));
+      const xs = items.map((_, i) => x0 + i * o.step);
+      const rail = o.top + o.g1, drop = rail + o.g2, cy = drop + o.r, lab = cy + o.r + o.lh, st = o.st;
+      const anyRun = items.some((x) => x.run);
+      const qa = (s) => bmsEsc(s).replace(/"/g, '&quot;');
+      const f = (v) => +v.toFixed(1);
+      let s = anyRun
+        ? `<path d="M${o.cx} ${o.top} L${o.cx} ${rail}" class="nf-line" stroke="${st.flow}" stroke-width="2.5"/>`
+        : `<path d="M${o.cx} ${o.top} L${o.cx} ${rail}" class="nf-idle"/>`;
+      if (n > 1 || xs[0] !== o.cx) s += `<path d="M${f(Math.min(o.cx, xs[0]))} ${rail} L${f(Math.max(o.cx, xs[n - 1]))} ${rail}" class="nf-idle"/>`;
+      items.forEach((it, i) => {
+        const x = f(xs[i]), col = it.run ? st.on : st.off;
+        s += `<g class="nf-dv${it.run ? ' on' : ''}" role="img" aria-label="${qa(it.name)}: ${qa(it.w)}${it.run ? ', pracuje' : ''}"><title>${bmsEsc(it.name)}</title>`
+          + (it.run ? `<path d="M${x} ${rail} L${x} ${drop}" class="nf-line" stroke="${st.on}" stroke-width="2"/>` : `<path d="M${x} ${rail} L${x} ${drop}" class="nf-idle"/>`)
+          + (st.matrix ? `<circle cx="${x}" cy="${f(cy)}" r="${o.r}" fill="none" stroke="${col}" stroke-width="${it.run ? 1.6 : 1.1}"/>`
+            : `<circle cx="${x}" cy="${f(cy)}" r="${o.r}" style="fill:${st.fill};stroke:${col}" stroke-width="${it.run ? 2.5 : 1.8}"/>`)
+          + (it.more ? `<text x="${x}" y="${f(cy + o.r * 0.3)}" text-anchor="middle" class="nf-dvm">+${it.n}</text>`
+            : `<text x="${x}" y="${f(cy + o.r * 0.32)}" text-anchor="middle" font-size="${Math.round(o.r * 0.9)}"${it.run ? '' : ' opacity=".55"'}>${bmsEsc(it.icon)}</text>`)
+          + `<text x="${x}" y="${f(lab)}" text-anchor="middle" class="nf-dvw${it.run ? '' : ' off'}">${bmsEsc(it.w)}</text></g>`
+          + `<rect class="nf-hit" data-k="${qa(it.key)}" x="${f(x - o.step / 2)}" y="${f(cy - o.r - 3)}" width="${o.step}" height="${f(lab + 7 - (cy - o.r - 3))}"/>`;
+      });
+      return { svg: s, bottom: lab + 8 };
+    }
+    // Material 3: satelity jako pigułki w jednym rzędzie pod pigułką „dom”; y0 = dół pigułki „dom”. Zwraca { svg, bottom }
+    _devPills(D, y0) {
+      const items = D.items, n = items.length;
+      if (!n) return { svg: '', bottom: y0 };
+      const gap = 6, pw = Math.min(100, Math.floor((322 - (n - 1) * gap) / n)), tot = n * pw + (n - 1) * gap, x0 = (340 - tot) / 2;
+      const rail = y0 + 10, py = rail + 8, ph = 26, qa = (s) => bmsEsc(s).replace(/"/g, '&quot;');
+      const anyRun = items.some((x) => x.run);
+      let s = anyRun ? `<path d="M170 ${y0} L170 ${rail}" class="nf-line" stroke="var(--accent)" stroke-width="2.5"/>` : `<path d="M170 ${y0} L170 ${rail}" class="nf-idle"/>`;
+      const first = x0 + pw / 2, last = x0 + (n - 1) * (pw + gap) + pw / 2;
+      if (n > 1) s += `<path d="M${Math.min(170, first)} ${rail} L${Math.max(170, last)} ${rail}" class="nf-idle"/>`;
+      items.forEach((it, i) => {
+        const x = x0 + i * (pw + gap), mid = x + pw / 2;
+        s += `<g class="nf-dv${it.run ? ' on' : ''}" role="img" aria-label="${qa(it.name)}: ${qa(it.w)}${it.run ? ', pracuje' : ''}"><title>${bmsEsc(it.name)}</title>`
+          + `<path d="M${mid} ${rail} L${mid} ${py}" ${it.run ? 'class="nf-line" stroke="var(--accent)" stroke-width="2"' : 'class="nf-idle"'}/>`
+          + `<rect x="${x}" y="${py}" width="${pw}" height="${ph}" rx="${ph / 2}" fill="${it.run ? 'var(--tonal)' : 'var(--seg-bg)'}"/>`
+          + `<text x="${mid}" y="${py + 17}" text-anchor="middle" fill="${it.run ? 'var(--on-tonal)' : 'var(--muted)'}" style="font-weight:${it.run ? 700 : 500}">${it.more ? '+' + it.n : bmsEsc(it.icon)} ${bmsEsc(it.w)}</text></g>`
+          + `<rect class="nf-hit" data-k="${qa(it.key)}" x="${x}" y="${py - 4}" width="${pw}" height="${ph + 8}"/>`;
+      });
+      return { svg: s, bottom: py + ph + 4 };
+    }
     _homeModel(o) {
       const ra = this._rsAttrs(), pvA = this._pvAttrs(), TH = 20, soc = o.soc, flr = Number(ra.inverter_floor);
       let cap = parseFloat(ra.capacity_kwh);
@@ -4843,7 +4958,7 @@
       }
       const battTxt = o.batt > TH ? `+${this._fmtW(o.batt)} ładowanie` : (o.batt < -TH ? `−${this._fmtW(-o.batt)} rozładowanie` : 'bateria w spoczynku');
       return { o, TH, soc, flr, cap, tgt, profit, pb: Number(ra.price_buy), ps: Number(ra.price_sell), plan, hasFl, hasT, pace, battTxt, nowH,
-        act: { pv: o.pv > TH, home: o.load > TH, grid: Math.abs(o.grid) > TH, batt: Math.abs(o.batt) > TH } };
+        act: { pv: o.pv > TH, home: o.load > TH, grid: Math.abs(o.grid) > TH, batt: Math.abs(o.batt) > TH }, dev: this._devNodes() };
     }
     // tekst z kwadratowych pikseli (styl Matryca); zwraca gotowy <svg> oraz jego wymiary i same znaczniki
     _skDots(text, cell, color) {
@@ -4912,9 +5027,12 @@
       const dl = (x, y, t, a) => (t ? `<text x="${x}" y="${y}" text-anchor="${a || 'middle'}" font-size="${mx ? 7.5 : 9}" style="fill:var(--muted);font-family:inherit"${mx ? ' letter-spacing=".5"' : ''}>${mx ? bmsEsc(t).toUpperCase() : bmsEsc(t)}</text>` : '');
       const defs = kind === 'sphere' ? '<defs><radialGradient id="skhl" cx=".3" cy=".2" r=".9"><stop offset="0" stop-color="#fff" stop-opacity=".5"/><stop offset=".6" stop-color="#fff" stop-opacity="0"/></radialGradient><filter id="skbl"><feGaussianBlur stdDeviation="3"/></filter></defs>' : '';
       const dot = mx ? `<rect x="${hub[0] - 4.5}" y="${hub[1] - 4.5}" width="9" height="9" rx="1.5" style="fill:var(--sk-acc)"/>` : `<circle cx="${hub[0]}" cy="${hub[1]}" r="5" style="fill:var(--text)"/>`;
-      return `<svg viewBox="0 0 340 178" role="img" aria-label="Przepływ mocy">${defs}<g fill="none">${ln('pv')}${ln('grid')}${ln('batt')}${ln('home')}</g>${dot}${node('pv')}${node('grid')}${node('batt')}${node('home')}
+      // urządzenia z zakładki „Urządzenia”: rząd satelitów pod węzłem „dom” (nic nie dodano → schemat bez zmian)
+      const sat = this._devSat(m.dev, { cx: 170, top: 162, step: 56, r: 15, g1: 18, g2: 10, lh: 14, minX: 40, maxX: 300,
+        st: { fill: 'var(--sk-idle)', on: mx ? 'var(--sk-on)' : 'var(--green)', off: mx ? 'var(--sk-off)' : 'var(--sk-hi)', flow: mx ? 'var(--sk-on)' : 'var(--accent)', matrix: mx } });
+      return `<svg viewBox="0 0 340 ${Math.max(178, Math.ceil(sat.bottom) + 4)}" role="img" aria-label="Przepływ mocy">${defs}<g fill="none">${ln('pv')}${ln('grid')}${ln('batt')}${ln('home')}</g>${dot}${node('pv')}${node('grid')}${node('batt')}${node('home')}
         ${tx(206, 24, this._fmtW(o.pv), 'produkcja PV', 'start')}${tx(50, 136, this._fmtW(Math.abs(o.grid)), gSub)}${tx(290, 136, bV, bSub)}${tx(200, 128, this._fmtW(o.load), 'dom', 'start')}${dl(206, 52, dt.pv, 'start')}${dl(200, 156, dt.home, 'start')}${dl(48, 168, dt.grid)}${dl(292, 168, dt.batt)}
-        <rect class="nf-hit" data-k="pv" x="140" y="0" width="190" height="60"/><rect class="nf-hit" data-k="grid" x="0" y="66" width="100" height="112"/><rect class="nf-hit" data-k="batt" x="240" y="66" width="100" height="112"/><rect class="nf-hit" data-k="home" x="140" y="100" width="190" height="78"/></svg>`;
+        <rect class="nf-hit" data-k="pv" x="140" y="0" width="190" height="60"/><rect class="nf-hit" data-k="grid" x="0" y="66" width="100" height="112"/><rect class="nf-hit" data-k="batt" x="240" y="66" width="100" height="112"/><rect class="nf-hit" data-k="home" x="140" y="100" width="190" height="78"/>${sat.svg}</svg>`;
     }
     // pasek planu na 24 h: kolorowe słupki (Szkło, Przestrzeń, Komfort) albo kolumny pikseli wg planowanego SOC z markerami akcji (Matryca)
     _skStrip(m, kind) {
@@ -4943,7 +5061,7 @@
     _drawSkinHome(box, o0, skin) {
       const o = this._skFin(o0), m = this._homeModel(o), mx = skin === 'matrix';
       const chipsH = this._skChips(Object.assign({}, o, { flr: m.flr, tgt: m.tgt }), 'sk');
-      const key = JSON.stringify([skin, THEME.mode, Math.round(o.pv / 10), Math.round(o.load / 10), Math.round(o.grid / 10), Math.round(o.batt / 10), Math.round(m.soc), m.flr, m.tgt, m.cap,
+      const key = JSON.stringify([skin, THEME.mode, m.dev.sig, Math.round(o.pv / 10), Math.round(o.load / 10), Math.round(o.grid / 10), Math.round(o.batt / 10), Math.round(m.soc), m.flr, m.tgt, m.cap,
         isFinite(m.profit) ? m.profit.toFixed(2) : null, m.pb, m.ps, o.D.pv, m.nowH, m.plan.map(r => r.action + ':' + r.soc).join(','), JSON.stringify(o.dayTxt || {}), chipsH.sig]);
       if (key === this._lastM3Key) return;
       this._lastM3Key = key;
@@ -4960,7 +5078,7 @@
       const kpis = `<div class="sk-kpis">${kpi('Zysk dziś', pTxt + (isFinite(m.profit) ? ' zł' : ''), 'bilans EMS', isFinite(m.profit) && m.profit < 0 ? 'var(--red)' : 'var(--green)', pTxt === '—' ? '-' : pTxt, 'zł · EMS')}
         ${kpi('PV dziś', o.D.pv === null ? '—' : f1(o.D.pv) + ' kWh', o.pv > m.TH ? 'teraz ' + this._fmtW(o.pv) : 'teraz brak', '', o.D.pv === null ? '-' : f1(o.D.pv), 'kWh · PV')}</div>`;
       box.innerHTML = `<div class="sk-home">${hero}${flow}${kpis}${chipsH.html}${this._skStrip(m, mx ? 'matrix' : 'bars')}</div>`;
-      this._bindCapInput(box);
+      this._bindCapInput(box); this._devPopRefresh();
     }
 
     _drawPowerflow() {
@@ -4998,7 +5116,8 @@
       const V = this._flowVariant || (cw > 0 && cw < 520 ? 'A' : '0');                    // '0' = bez zmian; A = przycięcie, B = większe, C = oba (telefon)
       const big = V === 'B' || V === 'C', crop = V === 'A' || V === 'C';
       const lh = big ? 20 : 16;
-      const key = [V, Math.round(pv / 10), Math.round(load / 10), Math.round(grid / 10), Math.round(batt / 10), Math.round(soc), THEME.mode, String(this._rsAttrs().inverter_floor), String(this._rsAttrs().capacity_kwh), (() => { try { return localStorage.getItem('bms_panel_capacity') || ''; } catch (e) { return ''; } })(), String((this._pvAttrs().table || []).length), Object.values(D).map(v => v === null ? 'x' : v.toFixed(1)).join(',')].join('|');
+      const DV = this._devNodes();
+      const key = [V, Math.round(pv / 10), Math.round(load / 10), Math.round(grid / 10), Math.round(batt / 10), Math.round(soc), THEME.mode, String(this._rsAttrs().inverter_floor), String(this._rsAttrs().capacity_kwh), (() => { try { return localStorage.getItem('bms_panel_capacity') || ''; } catch (e) { return ''; } })(), String((this._pvAttrs().table || []).length), Object.values(D).map(v => v === null ? 'x' : v.toFixed(1)).join(','), DV.sig].join('|');
       if (key === this._lastFlowKey) return;     // animacja jest w CSS — przerysowujemy tylko przy zmianie
       this._lastFlowKey = key;
 
@@ -5007,7 +5126,10 @@
       const dx = V === 'C' ? 28 : 0;
       const N = { pv: { x: 300, y: 45 }, home: { x: 115 + dx, y: H.y }, grid: { x: 485 - dx, y: H.y }, batt: { x: 300, y: (big ? 308 : 268) + 40 } };
       const R = big ? { pv: 38, home: 38, grid: 38, batt: 60 } : { pv: 32, home: 32, grid: 32, batt: 52 };
-      const vb = (crop ? (V === 'C' ? '52 0 496 ' : '45 0 510 ') : '0 0 600 ') + (big ? 440 : 380);
+      // urządzenia z zakładki „Urządzenia” pod węzłem „dom” (nic nie dodano → nic się nie zmienia)
+      const sat = this._devSat(DV, { cx: N.home.x, top: N.home.y + R.home + 21 + (dayTxt.home ? 2 : 1) * lh + 17, step: 48, r: 19, g1: 24, g2: 12, lh: 16, minX: 78 + dx, maxX: 222 + dx,
+        st: { fill: 'var(--card)', on: '#34c759', off: 'var(--line)', flow: '#0a84ff' } });
+      const vb = (crop ? (V === 'C' ? '52 0 496 ' : '45 0 510 ') : '0 0 600 ') + Math.max(big ? 440 : 380, Math.ceil(sat.bottom) + 6);
       const cl = (a, b, r) => {                              // punkt na odcinku a→b przesunięty o r od a
         const dx = b.x - a.x, dy = b.y - a.y, d = Math.hypot(dx, dy) || 1;
         return { x: a.x + dx / d * r, y: a.y + dy / d * r };
@@ -5076,12 +5198,13 @@
         <text x="${N.batt.x + R.batt + 26}" y="${N.batt.y - 4}" class="nf-v" fill="${batt < -TH ? '#ff9500' : (batt > TH ? '#34c759' : 'currentColor')}">${(batt < -TH ? '−' : (batt > TH ? '+' : '')) + this._fmtW(batt)}</text>
         <text x="${N.batt.x + R.batt + 26}" y="${N.batt.y + 2 + lh}" class="nf-s">${battTxt}</text>
         ${dayTxt.batt ? `<text x="${N.batt.x + R.batt + 26}" y="${N.batt.y + 3 + 2 * lh}" class="nf-d">${dayTxt.batt}</text>` : ''}
+        ${sat.svg}
         <rect class="nf-hit" data-k="pv" x="${N.pv.x - 60}" y="${N.pv.y - R.pv - 2}" width="120" height="${R.pv * 2 + 4 + 40}"/>
         <rect class="nf-hit" data-k="home" x="${N.home.x - 60}" y="${N.home.y - R.home - 2}" width="120" height="${R.home * 2 + 4 + 40}"/>
         <rect class="nf-hit" data-k="grid" x="${N.grid.x - 60}" y="${N.grid.y - R.grid - 2}" width="120" height="${R.grid * 2 + 4 + 40}"/>
         <rect class="nf-hit" data-k="batt" x="${N.batt.x - R.batt - 2}" y="${N.batt.y - R.batt - 2}" width="${R.batt * 2 + 4 + 150}" height="${R.batt * 2 + 4}"/>
       </svg>` + this._flowChips({ soc, batt, load, pv, grid, flr, tgt });
-      this._bindCapInput(box);
+      this._bindCapInput(box); this._devPopRefresh();
     }
 
     // Wspólne dane paska wskaźników pod schematem (styl klasyczny i wszystkie style): zgromadzone / do rezerwy / przy tym tempie /
@@ -5164,7 +5287,10 @@
         this._showPop(k, h);
         pop.classList.add('pin');
       });
-      pop.addEventListener('click', e => { if (e.target.closest('.np-x')) this._hidePop(); });
+      pop.addEventListener('click', e => {
+        if (e.target.closest('.np-x')) { this._hidePop(); return; }
+        if (e.target.closest('.np-go')) { this._hidePop(); const t = this.shadowRoot.querySelector('.tab[data-tab="dev"]'); if (t) t.click(); }
+      });
       this.shadowRoot.addEventListener('click', e => {
         if (!this._popPinned) return;
         if (e.target.closest && (e.target.closest('.nf-hit') || e.target.closest('.node-pop'))) return;
@@ -5177,7 +5303,7 @@
       const pop = this._el('nodePop');
       this._popK = null; this._popPinned = false;
       if (pop) {
-        pop.hidden = true; pop.classList.remove('pin');
+        pop.hidden = true; pop.classList.remove('pin'); delete pop.dataset.h;
         const wrap = pop.parentElement;
         if (wrap && wrap.dataset && wrap.dataset.h0) { wrap.style.height = ''; delete wrap.dataset.h0; }   // karta wraca do swojej wysokości
       }
@@ -5189,6 +5315,14 @@
       const changed = this._popK !== k;
       this._popK = k;
       pop.hidden = false;
+      if (String(k).slice(0, 4) === 'dev:') {                  // urządzenie: dane z czujnika, bez historii
+        const h = this._devPopHtml(k);
+        if (!h) { this._hidePop(); return; }
+        if (changed || pop.dataset.h !== h) { pop.dataset.h = h; pop.innerHTML = h; }
+        this._placePop();
+        return;
+      }
+      delete pop.dataset.h;
       this._placePop();
       if (!changed) return;
       const c = this._nodeHist && this._nodeHist[k];
@@ -5201,7 +5335,7 @@
     _placePop() {
       const pop = this._el('nodePop');
       if (!pop || pop.hidden || !this._popK) return;
-      const hit = this.shadowRoot.querySelector(`.nf-hit[data-k="${this._popK}"]`);
+      const hit = [...this.shadowRoot.querySelectorAll('.nf-hit')].find(h => h.dataset.k === this._popK);   // identyfikator urządzenia bywa dowolny — bez selektora CSS
       if (!hit) return;
       const wrap = pop.parentElement;
       const card = wrap.getBoundingClientRect();
