@@ -17,6 +17,7 @@ const js=fs.readFileSync(require('path').resolve(__dirname, '../../custom_compon
    el._lastLoadConsKey=null; el.shadowRoot.querySelector('[data-tab=charts]').click(); window.__el=el;
   },[days]);
   await p.waitForTimeout(500);
+  await p.evaluate(()=>{const d=window.__el.shadowRoot.querySelector('details.lh-wrap'); if(d) d.open=true;});   // sekcja jest domyślnie zwinięta
   const box=p.locator('bms-panel-card >> #loadHistTable'); await box.screenshot({path:`shots/lh_${name}.png`}); console.log(await box.innerText());
  }
  console.log('ERR',JSON.stringify(errs)); await b.close();

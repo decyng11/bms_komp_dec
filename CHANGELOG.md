@@ -1,3 +1,13 @@
+# EMS komp-dec — w przygotowaniu (po 0.9.5.4, jeszcze niewydane)
+
+- **Wszystkie style pokazują na ekranie głównym te same dane.** Wcześniej Material 3, Szkło, Matryca, Przestrzeń i Komfort gubiły część informacji, które miał styl klasyczny, a klasyczny nie miał „Zysku dziś”. Teraz każdy styl pokazuje: „Do rezerwy”, „Przy tym tempie” (także gdy bateria stoi — wtedy liczone z bieżącego zużycia domu), „Straty falownika (szac.)”, dzienne kWh przy PV, domu, sieci i baterii oraz „Zysk dziś”; styl klasyczny dostał „Zysk dziś”. Gdy integracja nie podaje pojemności baterii, pole do jej wpisania jest teraz w każdym stylu. Kliknięcie węzła (PV, dom, sieć, bateria) otwiera mini wykres 24 h we wszystkich stylach, nie tylko w klasycznym. Style różnią się już tylko wyglądem.
+- **Liczby z przecinkiem dziesiętnym na całym ekranie głównym** (dzienne kWh, wskaźniki, „Plan dnia”, ceny na pasku u góry) — wcześniej część miała kropkę („12.4 kWh”), a część przecinek.
+- **Material 3: moc sieci poniżej 20 W** pokazywała „sieć 0 W”; teraz pokazuje rzeczywistą wartość (jak pozostałe style).
+- **Brak czujnika „EMS Bilans dziś”** nie pokazuje już „+0,00 zł” (w stylach i w trybie prostym) — jest „—”.
+- Kafelek „Kupno” w stylach usunięty — powielał pasek cen u góry (kupno i sprzedaż).
+- **„Ostatnie 14 dni: rzeczywiste vs prognoza” jest domyślnie zwinięte** (czternaście wierszy zajmowało pół ekranu); rozwiniesz je kliknięciem w nagłówek.
+- Nowy test pilnujący zgodności danych między stylami.
+
 # EMS komp-dec — zmiany w 0.9.5.4 (z 0.9.5.3)
 
 - **Układ panelu: własna kolejność i ukrywanie kafelków.** Nowy przycisk 🎨 w nagłówku (dostępny dla każdego użytkownika — bez uprawnień administratora i bez hasła) otwiera okno „Wygląd": styl, motyw i układ. „Edytuj układ na panelu" włącza tryb edycji: na każdym kafelku Główny / Plan / EMS / Zysk i log (i na pasku pogody) pojawiają się ⠿ (przeciąganie), ↑ ↓ oraz „Ukryj". Ukryty kafelek zostaje na miejscu jako szary pasek z „Pokaż", więc nic się nie gubi; w trybie edycji zawartość kafelków jest nieklikalna, żeby nic nie przełączyć przez pomyłkę. Układ zapisuje się w tej przeglądarce — każdy użytkownik i urządzenie ma własny, więc nie wpływa na innych domowników. „Przywróć domyślny" cofa zmiany; gdy ukryjesz wszystko na zakładce, panel podpowiada, gdzie to przywrócić. Ukrycie kafelka niczego nie wyłącza w EMS — tylko go nie pokazuje; alerty (cena, próg falownika, status, „dlaczego") nie są kafelkami i zawsze zostają widoczne. Ta sama lista z przyciskami jest też w Ustawienia → Wygląd. Domyślny układ jest taki sam jak dotąd.

@@ -165,11 +165,15 @@
     :host([data-skin="m3"]) .m3-ct small { font-size: 12px; font-weight: 400; color: var(--muted); }
     :host([data-skin="m3"]) .m3-flow svg { width: 100%; height: auto; display: block; }
     :host([data-skin="m3"]) .m3-flow text { font-family: inherit; font-size: 12px; font-weight: 600; }
-    :host([data-skin="m3"]) .m3-kpis { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+    :host([data-skin="m3"]) .m3-kpis { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
+    :host([data-skin="m3"]) .m3-cap { padding: 11px 13px; border-radius: 20px; background: var(--card); }
+    :host([data-skin="m3"]) .m3-day { display: flex; flex-wrap: wrap; gap: 2px 12px; justify-content: center; font-size: 11px; color: var(--muted); padding: 2px 8px 4px; }
     :host([data-skin="m3"]) .m3-kpi { background: var(--card); border-radius: 20px; padding: 11px 13px; min-width: 0; }
     :host([data-skin="m3"]) .m3-kpi .l { font-size: 10.5px; font-weight: 600; letter-spacing: .6px; text-transform: uppercase; color: var(--muted); }
     :host([data-skin="m3"]) .m3-kpi .v { font-size: 20px; font-weight: 500; margin-top: 3px; letter-spacing: -.3px; white-space: nowrap; }
     :host([data-skin="m3"]) .m3-kpi .s { font-size: 11px; color: var(--muted); margin-top: 1px; }
+    :host([data-skin="m3"]) .m3-chip .v { font-size: 14px; white-space: normal; line-height: 1.25; }
+    :host([data-skin="m3"]) .m3-chips > :last-child:nth-child(odd) { grid-column: 1 / -1; }
     :host([data-skin="m3"]) .m3-strip-card { background: var(--card); border-radius: 24px; padding: 12px 16px 12px; }
     :host([data-skin="m3"]) .m3-strip { display: flex; gap: 2px; height: 30px; margin-top: 10px; }
     :host([data-skin="m3"]) .m3-strip i { flex: 1; border-radius: 4px; }
@@ -243,11 +247,15 @@
     ${skSel('.sk-ct small')} { font-size: 12px; font-weight: 500; color: var(--muted); }
     ${skSel('.sk-flow')} { padding: 12px 16px 6px; }
     ${skSel('.sk-flow svg')} { width: 100%; height: auto; display: block; }
-    ${skSel('.sk-kpis')} { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+    ${skSel('.sk-kpis')} { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+    ${skSel('.sk-extra')} { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+    ${skSel('.sk-cap')} { padding: 11px 14px; font-size: 12px; }
     ${skSel('.sk-kpi')} { padding: 11px 14px; min-width: 0; }
     ${skSel('.sk-kpi .l')} { font-size: 11px; font-weight: 600; letter-spacing: .5px; text-transform: uppercase; color: var(--muted); }
     ${skSel('.sk-kpi .v')} { font-size: 20px; font-weight: 600; letter-spacing: -.3px; margin-top: 3px; white-space: nowrap; }
     ${skSel('.sk-kpi .s')} { font-size: 11.5px; color: var(--muted); margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    ${skSel('.sk-chip .v')} { font-size: 14px; white-space: normal; line-height: 1.25; }
+    ${skSel('.sk-chips > :last-child:nth-child(odd)')} { grid-column: 1 / -1; }
     ${skSel('.sk-strip-card')} { padding: 12px 16px 10px; }
     ${skSel('.sk-strip')} { display: flex; gap: 2.5px; height: 26px; margin-top: 10px; }
     ${skSel('.sk-strip i')} { flex: 1; border-radius: 7px; }
@@ -257,8 +265,8 @@
     ${skSel('.sk-leg b')} { display: inline-block; width: 9px; height: 9px; border-radius: 3px; margin-right: 5px; vertical-align: -1px; }
     ${skSel('.sk-dots')} { display: block; max-width: 100%; }
     @container sk (min-width: 640px) {
-      ${skSel('.sk-home')} { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); grid-template-areas: "hero flow" "kpis strip"; }
-      ${skSel('.sk-hero')} { grid-area: hero; } ${skSel('.sk-flow')} { grid-area: flow; } ${skSel('.sk-kpis')} { grid-area: kpis; } ${skSel('.sk-strip-card')} { grid-area: strip; }
+      ${skSel('.sk-home')} { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); grid-template-areas: "hero flow" "kpis strip" "extra strip"; }
+      ${skSel('.sk-hero')} { grid-area: hero; } ${skSel('.sk-flow')} { grid-area: flow; } ${skSel('.sk-kpis')} { grid-area: kpis; } ${skSel('.sk-strip-card')} { grid-area: strip; } ${skSel('.sk-extra')} { grid-area: extra; }
     }
   `;
 
@@ -294,6 +302,7 @@
     & .sk-kpis { gap: 0; border: 1px solid var(--line); border-radius: 18px; background: var(--card); overflow: hidden; }
     & .sk-kpi { border: none; border-radius: 0; background: transparent; }
     & .sk-kpi + .sk-kpi { border-left: 1px dotted var(--line); }
+    & .sk-chips .sk-kpi { border-top: 1px dotted var(--line); } & .sk-chips .sk-kpi:nth-child(-n+2) { border-top: none; } & .sk-chips .sk-kpi:nth-child(odd) { border-left: none; }
     & .btn { background: transparent; border: 1px solid var(--line); border-radius: 14px; box-shadow: none; text-transform: uppercase; letter-spacing: .5px; font-size: 12px; }
     & .btn.active { border-color: var(--accent); color: var(--accent); }
     & .row { background: var(--card); border-bottom: 1px dotted var(--line); }
@@ -3345,7 +3354,7 @@
               <canvas id="chartLoadCons"></canvas>
               <div class="chart-footer" style="border-top:0;margin-top:2px;padding-top:2px;"><span class="stat"><i class="dot" style="background:#34d399"></i>rzeczywiste</span><span class="stat"><i class="dot" style="background:#60a5fa"></i>prognoza wydana dzień wcześniej</span><span class="stat"><i class="dot" style="background:#ff9f0a"></i>tempo dnia (szacunek na koniec doby)</span><span class="stat"><i class="dot" style="background:#fbbf24"></i>jutro — prognoza i zakres</span></div>
               <div class="chart-footer" id="loadConsFooter"></div>
-              <details class="lh-wrap" open><summary>Ostatnie 14 dni: rzeczywiste vs prognoza</summary><div id="loadHistTable"></div></details>
+              <details class="lh-wrap"><summary>Ostatnie 14 dni: rzeczywiste vs prognoza</summary><div id="loadHistTable"></div></details>
             </div>
           </div>
           <div class="section" data-tile="ch-fc7d">
@@ -4112,7 +4121,7 @@
       const num = (v) => (v === null || v === undefined || v === '' || isNaN(Number(v))) ? null : Number(v);
       const buy = num(a.price_buy), sell = num(a.price_sell);
       if (buy === null && sell === null) { el.style.display = 'none'; return; }
-      const f = (v) => v === null ? '—' : v.toFixed(2);
+      const f = (v) => v === null ? '—' : this._fx(v, 2);
       el.style.display = '';
       el.innerHTML = `<div class="price-pill buy" title="Aktualna cena kupna energii">🛒 Kupno <b>${f(buy)}</b> zł/kWh</div>`
         + `<div class="price-pill sell${sell !== null && sell < 0 ? ' neg' : ''}" title="Aktualna cena sprzedaży (RCE)">💰 Sprzedaż <b>${f(sell)}</b> zł/kWh</div>`;
@@ -4343,7 +4352,7 @@
         return `<div class="sm-seg"><button type="button" data-simple-sw="${k}" data-v="on" class="${on ? 'active' : ''}" ${un ? 'disabled' : ''}>Tak</button><button type="button" data-simple-sw="${k}" data-v="off" class="${!on && !un ? 'active' : ''}" ${un ? 'disabled' : ''}>Nie</button></div>`; };
       const auto = AUTO.filter(([k]) => sw(k) !== '' && sw(k) !== 'unavailable');
       const offN = auto.filter(([k]) => sw(k) !== 'on').length;
-      const profit = Number(this._st(this._eid('sensor', 'profit_today')));
+      const profit = this._profitToday();
       const key = JSON.stringify([tariff, ra.price_buy, ra.price_sell, sw('sell_enabled'), sw('grid_charge_enabled'), auto.map(([k]) => sw(k)), isFinite(profit) ? profit.toFixed(2) : null]);
       if (w.dataset.k === key) return;
       w.dataset.k = key;
@@ -4422,6 +4431,10 @@
     }
 
     // ===== PRZEPŁYW MOCY (węzły) + PLAN DNIA =====
+    // liczba z przecinkiem dziesiętnym (jak reszta panelu); brak wartości → „—”
+    _fx(v, d) { const n = Number(v); return v === null || v === undefined || v === '' || !isFinite(n) ? '—' : n.toFixed(d === undefined ? 1 : d).replace('.', ','); }
+    // zysk dzisiaj z sensora „EMS Bilans dziś”; brak czujnika lub „unknown” → NaN (a nie 0 zł)
+    _profitToday() { const raw = this._st(this._eid('sensor', 'profit_today')); return raw === '' ? NaN : Number(raw); }
     _fmtW(w) {
       const a = Math.abs(w);
       return a >= 1000 ? (a / 1000).toFixed(2).replace('.', ',') + ' kW' : Math.round(a) + ' W';
@@ -4514,30 +4527,25 @@
       const rows = Array.isArray(pvA.table) ? pvA.table.filter(r => r && r.day) : [];
       const endRow = rows.filter(r => r.day === this._todayKey() && r.h === 23).pop();
       const tgt = endRow ? Number(endRow.soc) : NaN;
-      const profit = Number(this._st(this._eid('sensor', 'profit_today')));
+      const profit = this._profitToday();
       const pb = Number(ra.price_buy), ps = Number(ra.price_sell);
       const now = new Date(), nowH = now.getHours();
       const todayK = this._todayKey();
       const plan = rows.filter(r => r.day > todayK || (r.day === todayK && r.h >= nowH))
         .sort((a, b) => (a.day === b.day ? a.h - b.h : (a.day < b.day ? -1 : 1))).slice(0, 24);
+      const chipsH = this._skChips(Object.assign({}, o, { flr, tgt }), 'm3');
       const key = JSON.stringify([THEME.mode, Math.round(o.pv / 10), Math.round(o.load / 10), Math.round(o.grid / 10), Math.round(o.batt / 10),
-        Math.round(soc), flr, tgt, cap, isFinite(profit) ? profit.toFixed(2) : null, pb, ps, o.D.pv, nowH, plan.map(r => r.action).join(',')]);
+        Math.round(soc), flr, tgt, cap, isFinite(profit) ? profit.toFixed(2) : null, pb, ps, o.D.pv, nowH, plan.map(r => r.action).join(','), JSON.stringify(o.dayTxt || {}), chipsH.sig]);
       if (key === this._lastM3Key) return;
       this._lastM3Key = key;
       const f1 = (v) => (Math.round(v * 10) / 10).toFixed(1).replace('.', ',');
       const zl = (v) => (isFinite(v) ? v.toFixed(2).replace('.', ',') : '—');
       // karta baterii
       const hasFl = isFinite(flr) && flr > 0 && flr < 100, hasT = isFinite(tgt) && tgt > 0 && tgt <= 100;
-      let pace = '';
-      if (cap > 0) {
-        const usable = Math.max(0, cap * (soc - (hasFl ? flr : 20)) / 100);
-        if (o.batt > TH && soc < 99.5) pace = `pełna ok. ${this._fmtAt((100 - soc) / 100 * cap / (o.batt / 1000))}`;
-        else if (o.batt < -TH && usable > 0) pace = `do rezerwy ok. ${this._fmtAt(usable / (-o.batt / 1000))}`;
-      }
       const battTxt = o.batt > TH ? `+${this._fmtW(o.batt)} ładowanie` : (o.batt < -TH ? `−${this._fmtW(-o.batt)} rozładowanie` : 'bateria w spoczynku');
       const hero = `<div class="m3-hero">
         <div class="m3-top"><div><div class="m3-lbl">Bateria</div><div class="m3-big">${Math.round(soc)}<span>%</span></div></div>
-          <div class="m3-right">${cap > 0 ? `<b>${f1(cap * soc / 100)} kWh</b><br>` : ''}${bmsEsc(battTxt)}${pace ? `<br>${bmsEsc(pace)}` : ''}</div></div>
+          <div class="m3-right">${cap > 0 ? `<b>${f1(cap * soc / 100)} kWh</b><br>` : ''}${bmsEsc(battTxt)}</div></div>
         <div class="m3-lp"><div class="v" style="width:${Math.max(0, Math.min(100, soc))}%"></div>${hasFl ? `<div class="m" style="left:${flr}%"></div>` : ''}${hasT ? `<div class="m" style="left:${tgt}%"></div>` : ''}</div>
         <div class="m3-lg">${hasFl ? `<span style="left:${flr}%">rezerwa ${Math.round(flr)}%</span>` : ''}${hasT ? `<span style="left:${tgt}%">plan na koniec dnia ${Math.round(tgt)}%</span>` : ''}</div></div>`;
       // schemat przepływu: pigułki PV / sieć / bateria / dom wokół węzła
@@ -4551,8 +4559,10 @@
         const d = rev ? `M${x2} ${y2}L${x1} ${y1}` : (k === 'home' && dir.home > 0 ? `M${x2} ${y2}L${x1} ${y1}` : `M${x1} ${y1}L${x2} ${y2}`);
         return act[k] ? `<path d="${d}" class="nf-line" stroke="${col[k]}" stroke-width="3"/>` : `<path d="${d}" class="nf-idle"/>`; };
       const pill = (x, y, w, bg, fg, txt) => `<rect x="${x}" y="${y}" width="${w}" height="30" rx="15" fill="${bg}"/><text x="${x + w / 2}" y="${y + 20}" text-anchor="middle" fill="${fg}">${txt}</text>`;
-      const gTxt = Math.abs(o.grid) > TH ? `${o.grid > 0 ? '⚡ import' : '⚡ eksport'} ${this._fmtW(Math.abs(o.grid))}` : '⚡ sieć 0 W';
+      const gTxt = Math.abs(o.grid) > TH ? `${o.grid > 0 ? '⚡ import' : '⚡ eksport'} ${this._fmtW(Math.abs(o.grid))}` : '⚡ sieć ' + this._fmtW(Math.abs(o.grid));
       const bTxt = `🔋 ${o.batt > TH ? '+' : (o.batt < -TH ? '−' : '')}${this._fmtW(Math.abs(o.batt))}`;
+      const dt = o.dayTxt || {};
+      const dayRow = (dt.pv || dt.home || dt.grid || dt.batt) ? `<div class="m3-day">${[['☀', dt.pv], ['🏠', dt.home], ['⚡', dt.grid], ['🔋', dt.batt]].filter((x) => x[1]).map((x) => `<span>${x[0]} ${bmsEsc(x[1])}</span>`).join('')}</div>` : '';
       const flow = `<div class="m3-flow"><div class="m3-ct">Przepływ mocy<small>teraz</small></div>
         <svg viewBox="0 0 340 140" role="img" aria-label="Przepływ mocy">
           <g fill="none" stroke-linecap="round">${line('pv')}${line('grid')}${line('batt')}${line('home')}</g>
@@ -4561,12 +4571,12 @@
           ${pill(4, 84, 116, 'var(--m3-gridc)', 'var(--m3-gridt)', gTxt)}
           ${pill(220, 84, 116, 'var(--seg-active)', 'var(--text)', bTxt)}
           ${pill(125, 106, 90, 'var(--tonal)', 'var(--on-tonal)', '🏠 ' + this._fmtW(o.load))}
-        </svg></div>`;
+          <rect class="nf-hit" data-k="pv" x="120" y="0" width="100" height="38"/><rect class="nf-hit" data-k="grid" x="0" y="80" width="124" height="38"/><rect class="nf-hit" data-k="batt" x="216" y="80" width="124" height="38"/><rect class="nf-hit" data-k="home" x="120" y="102" width="100" height="38"/>
+        </svg>${dayRow}</div>`;
       // kafelki
       const kpis = `<div class="m3-kpis">
         <div class="m3-kpi"><div class="l">Zysk dziś</div><div class="v" style="color:${isFinite(profit) && profit < 0 ? 'var(--red)' : 'var(--green)'}">${isFinite(profit) ? (profit >= 0 ? '+' : '−') + zl(Math.abs(profit)) + ' zł' : '—'}</div><div class="s">bilans EMS</div></div>
-        <div class="m3-kpi"><div class="l">PV dziś</div><div class="v">${o.D.pv === null ? '—' : f1(o.D.pv) + ' kWh'}</div><div class="s">${o.pv > TH ? 'teraz ' + this._fmtW(o.pv) : 'teraz brak'}</div></div>
-        <div class="m3-kpi"><div class="l">Kupno</div><div class="v">${isFinite(pb) ? zl(pb) + ' zł' : '—'}</div><div class="s">${isFinite(ps) ? 'sprzedaż ' + zl(ps) : 'za kWh'}</div></div></div>`;
+        <div class="m3-kpi"><div class="l">PV dziś</div><div class="v">${o.D.pv === null ? '—' : f1(o.D.pv) + ' kWh'}</div><div class="s">${o.pv > TH ? 'teraz ' + this._fmtW(o.pv) : 'teraz brak'}</div></div></div>`;
       // pasek planu na 24 h
       const cmap = { grid: 'var(--m3-grid)', sell: 'var(--m3-sell)', pv: 'var(--m3-pv)', home: 'var(--m3-batt)', idle: 'var(--m3-idle)' };
       let strip = '';
@@ -4577,7 +4587,8 @@
           <div class="m3-ax">${ticks}</div>
           <div class="m3-leg"><span style="background:var(--m3-gridc);color:var(--m3-gridt)">z sieci</span><span style="background:var(--m3-sellc);color:var(--m3-sellt)">sprzedaż</span><span style="background:var(--m3-pvc);color:var(--m3-pvt)">PV</span><span style="background:var(--seg-active);color:var(--text)">z baterii</span></div></div>`;
       }
-      box.innerHTML = `<div class="m3-home">${hero}${flow}${kpis}${strip}</div>`;
+      box.innerHTML = `<div class="m3-home">${hero}${flow}${kpis}${chipsH.html}${strip}</div>`;
+      this._bindCapInput(box);
     }
 
     // ---------- „Co EMS planuje na najbliższe 24 h”: opis planu godzinowego (tabela planu, mała karta) ----------
@@ -4640,7 +4651,7 @@
       const todayK = this._todayKey(), nowH = new Date().getHours();
       const endRow = rows.filter(r => r.day === todayK && r.h === 23).pop();
       const tgt = endRow ? Number(endRow.soc) : NaN;
-      const profit = Number(this._st(this._eid('sensor', 'profit_today')));
+      const profit = this._profitToday();
       const plan = rows.filter(r => r.day > todayK || (r.day === todayK && r.h >= nowH))
         .sort((a, b) => (a.day === b.day ? a.h - b.h : (a.day < b.day ? -1 : 1))).slice(0, 24);
       const hasFl = isFinite(flr) && flr > 0 && flr < 100, hasT = isFinite(tgt) && tgt > 0 && tgt <= 100;
@@ -4717,10 +4728,13 @@
       const gSub = o.grid > TH ? 'import z sieci' : (o.grid < -TH ? 'eksport do sieci' : 'sieć');
       const bSub = o.batt > TH ? 'ładowanie' : (o.batt < -TH ? 'rozładowanie' : 'spoczynek');
       const bV = (o.batt > TH ? '+' : (o.batt < -TH ? '−' : '')) + this._fmtW(Math.abs(o.batt));
+      const dt = o.dayTxt || {};
+      const dl = (x, y, t, a) => (t ? `<text x="${x}" y="${y}" text-anchor="${a || 'middle'}" font-size="${mx ? 7.5 : 9}" style="fill:var(--muted);font-family:inherit"${mx ? ' letter-spacing=".5"' : ''}>${mx ? bmsEsc(t).toUpperCase() : bmsEsc(t)}</text>` : '');
       const defs = kind === 'sphere' ? '<defs><radialGradient id="skhl" cx=".3" cy=".2" r=".9"><stop offset="0" stop-color="#fff" stop-opacity=".5"/><stop offset=".6" stop-color="#fff" stop-opacity="0"/></radialGradient><filter id="skbl"><feGaussianBlur stdDeviation="3"/></filter></defs>' : '';
       const dot = mx ? `<rect x="${hub[0] - 4.5}" y="${hub[1] - 4.5}" width="9" height="9" rx="1.5" style="fill:var(--sk-acc)"/>` : `<circle cx="${hub[0]}" cy="${hub[1]}" r="5" style="fill:var(--text)"/>`;
-      return `<svg viewBox="0 0 340 168" role="img" aria-label="Przepływ mocy">${defs}<g fill="none">${ln('pv')}${ln('grid')}${ln('batt')}${ln('home')}</g>${dot}${node('pv')}${node('grid')}${node('batt')}${node('home')}
-        ${tx(206, 24, this._fmtW(o.pv), 'produkcja PV', 'start')}${tx(50, 136, this._fmtW(Math.abs(o.grid)), gSub)}${tx(290, 136, bV, bSub)}${tx(206, 128, this._fmtW(o.load), 'dom', 'start')}</svg>`;
+      return `<svg viewBox="0 0 340 178" role="img" aria-label="Przepływ mocy">${defs}<g fill="none">${ln('pv')}${ln('grid')}${ln('batt')}${ln('home')}</g>${dot}${node('pv')}${node('grid')}${node('batt')}${node('home')}
+        ${tx(206, 24, this._fmtW(o.pv), 'produkcja PV', 'start')}${tx(50, 136, this._fmtW(Math.abs(o.grid)), gSub)}${tx(290, 136, bV, bSub)}${tx(200, 128, this._fmtW(o.load), 'dom', 'start')}${dl(206, 52, dt.pv, 'start')}${dl(200, 156, dt.home, 'start')}${dl(48, 168, dt.grid)}${dl(292, 168, dt.batt)}
+        <rect class="nf-hit" data-k="pv" x="140" y="0" width="190" height="60"/><rect class="nf-hit" data-k="grid" x="0" y="66" width="100" height="112"/><rect class="nf-hit" data-k="batt" x="240" y="66" width="100" height="112"/><rect class="nf-hit" data-k="home" x="140" y="100" width="190" height="78"/></svg>`;
     }
     // pasek planu na 24 h: kolorowe słupki (Szkło, Przestrzeń, Komfort) albo kolumny pikseli wg planowanego SOC z markerami akcji (Matryca)
     _skStrip(m, kind) {
@@ -4748,8 +4762,9 @@
     }
     _drawSkinHome(box, o0, skin) {
       const o = this._skFin(o0), m = this._homeModel(o), mx = skin === 'matrix';
+      const chipsH = this._skChips(Object.assign({}, o, { flr: m.flr, tgt: m.tgt }), 'sk');
       const key = JSON.stringify([skin, THEME.mode, Math.round(o.pv / 10), Math.round(o.load / 10), Math.round(o.grid / 10), Math.round(o.batt / 10), Math.round(m.soc), m.flr, m.tgt, m.cap,
-        isFinite(m.profit) ? m.profit.toFixed(2) : null, m.pb, m.ps, o.D.pv, m.nowH, m.plan.map(r => r.action + ':' + r.soc).join(',')]);
+        isFinite(m.profit) ? m.profit.toFixed(2) : null, m.pb, m.ps, o.D.pv, m.nowH, m.plan.map(r => r.action + ':' + r.soc).join(','), JSON.stringify(o.dayTxt || {}), chipsH.sig]);
       if (key === this._lastM3Key) return;
       this._lastM3Key = key;
       const f1 = (v) => (Math.round(v * 10) / 10).toFixed(1).replace('.', ','), zl = (v) => (isFinite(v) ? v.toFixed(2).replace('.', ',') : '—');
@@ -4757,15 +4772,15 @@
       const g = mx ? ['□', '■'] : (skin === 'comfort' ? ['|', '○'] : ['|', '◆']);
       const big = m.cap > 0 ? (mx ? this._skDots(f1(m.cap * m.soc / 100) + ' KWH', 3.4, 'var(--sk-on)').svg : `${f1(m.cap * m.soc / 100)} kWh`) : '';
       const hero = `<div class="sk-card sk-hero">${this._skRing(m, ringKind)}<div class="sk-htx"><div class="sk-lbl">Bateria</div>${big ? `<div class="sk-big">${big}</div>` : ''}
-        <div class="sk-sub">${bmsEsc(m.battTxt)}${m.pace ? `<br>${bmsEsc(m.pace)}` : ''}</div>
+        <div class="sk-sub">${bmsEsc(m.battTxt)}</div>
         <div class="sk-note">${m.hasFl ? `${g[0]} rezerwa ${Math.round(m.flr)}%` : ''}${m.hasFl && m.hasT ? ' &nbsp; ' : ''}${m.hasT ? `${mx ? '<span style="color:var(--sk-acc)">' + g[1] + '</span>' : g[1]} plan na koniec dnia ${Math.round(m.tgt)}%` : ''}</div></div></div>`;
       const flow = `<div class="sk-card sk-flow"><div class="sk-ct">Przepływ mocy<small>teraz</small></div>${this._skFlow(m, flowKind)}</div>`;
       const kpi = (l, v, s, color, dotsTxt, unit) => `<div class="sk-kpi"><div class="l">${l}</div><div class="v"${color ? ` style="color:${color}"` : ''}>${mx && dotsTxt ? this._skDots(dotsTxt, 2.8, color || 'var(--sk-on)').svg : v}</div><div class="s">${mx ? unit : s}</div></div>`;
       const pTxt = isFinite(m.profit) ? (m.profit >= 0 ? '+' : '−') + zl(Math.abs(m.profit)) : '—';
       const kpis = `<div class="sk-kpis">${kpi('Zysk dziś', pTxt + (isFinite(m.profit) ? ' zł' : ''), 'bilans EMS', isFinite(m.profit) && m.profit < 0 ? 'var(--red)' : 'var(--green)', pTxt === '—' ? '-' : pTxt, 'zł · EMS')}
-        ${kpi('PV dziś', o.D.pv === null ? '—' : f1(o.D.pv) + ' kWh', o.pv > m.TH ? 'teraz ' + this._fmtW(o.pv) : 'teraz brak', '', o.D.pv === null ? '-' : f1(o.D.pv), 'kWh · PV')}
-        ${kpi('Kupno', isFinite(m.pb) ? zl(m.pb) + ' zł' : '—', isFinite(m.ps) ? 'sprzed. ' + zl(m.ps) : 'za kWh', '', isFinite(m.pb) ? zl(m.pb) : '-', 'zł/kWh')}</div>`;
-      box.innerHTML = `<div class="sk-home">${hero}${flow}${kpis}${this._skStrip(m, mx ? 'matrix' : 'bars')}</div>`;
+        ${kpi('PV dziś', o.D.pv === null ? '—' : f1(o.D.pv) + ' kWh', o.pv > m.TH ? 'teraz ' + this._fmtW(o.pv) : 'teraz brak', '', o.D.pv === null ? '-' : f1(o.D.pv), 'kWh · PV')}</div>`;
+      box.innerHTML = `<div class="sk-home">${hero}${flow}${kpis}${chipsH.html}${this._skStrip(m, mx ? 'matrix' : 'bars')}</div>`;
+      this._bindCapInput(box);
     }
 
     _drawPowerflow() {
@@ -4789,7 +4804,7 @@
         imp: this._num('energy_grid_import_today', null), exp: this._num('energy_grid_export_today', null),
         chg: this._num('energy_battery_charge_today', null), dis: this._num('energy_battery_discharge_today', null),
       };
-      const k1 = (v) => (v === null ? '—' : v.toFixed(1));
+      const k1 = (v) => this._fx(v, 1);
       const dayTxt = {
         pv: D.pv === null ? '' : `dziś ${k1(D.pv)} kWh`,
         home: D.load === null ? '' : `dziś ${k1(D.load)} kWh`,
@@ -4886,25 +4901,20 @@
         <rect class="nf-hit" data-k="grid" x="${N.grid.x - 60}" y="${N.grid.y - R.grid - 2}" width="120" height="${R.grid * 2 + 4 + 40}"/>
         <rect class="nf-hit" data-k="batt" x="${N.batt.x - R.batt - 2}" y="${N.batt.y - R.batt - 2}" width="${R.batt * 2 + 4 + 150}" height="${R.batt * 2 + 4}"/>
       </svg>` + this._flowChips({ soc, batt, load, pv, grid, flr, tgt });
-      const ci = box.querySelector('#capInput');
-      if (ci) ci.addEventListener('change', () => {
-        const v = parseFloat(String(ci.value).replace(',', '.'));
-        try { if (v > 0) localStorage.setItem('bms_panel_capacity', String(v)); else localStorage.removeItem('bms_panel_capacity'); } catch (e) { /* ignoruj */ }
-        this._lastFlowKey = null;
-        this._drawPowerflow();
-      });
+      this._bindCapInput(box);
     }
 
-    // pasek wskaźników pod schematem: zgromadzone / do rezerwy / przy tym tempie / straty falownika (+ legenda znaczników pierścienia)
-    _flowChips(o) {
+    // Wspólne dane paska wskaźników pod schematem (styl klasyczny i wszystkie style): zgromadzone / do rezerwy / przy tym tempie /
+    // straty falownika / zysk dziś. Style różnią się tylko rysowaniem — zestaw informacji jest ten sam.
+    // opt.hero: styl pokazuje zgromadzoną energię w karcie baterii u góry; opt.profit: dołóż „Zysk dziś” (style mają go w kafelku)
+    _homeChips(o, opt) {
+      opt = opt || {};
       const ra = this._rsAttrs();
       let cap = parseFloat(ra.capacity_kwh);
       if (!(cap > 0)) { try { cap = parseFloat(localStorage.getItem('bms_panel_capacity')); } catch (e) { cap = NaN; } }
       const hasFl = isFinite(o.flr) && o.flr > 0 && o.flr < 100;
       const FL = hasFl ? o.flr : 20;
-      const f1 = (v) => (Math.round(v * 10) / 10).toFixed(1);
-      const chip = (l, v, t) => `<div class="nf-chip"${t ? ` title="${bmsEsc(t)}"` : ''}><small>${bmsEsc(l)}</small><b>${bmsEsc(v)}</b></div>`;
-      let c = '';
+      const items = [];
       if (cap > 0) {
         const kwh = cap * o.soc / 100, usable = Math.max(0, cap * (o.soc - FL) / 100);
         let pace = '—', paceTip = '';
@@ -4912,15 +4922,43 @@
         else if (o.batt < -20) { const h = usable / (-o.batt / 1000); pace = `do ${Math.round(FL)}% ok. ${this._fmtAt(h)}`; paceTip = `przy obecnym rozładowaniu ${this._fmtW(-o.batt)}`; }
         else if (o.batt > 20 && o.soc < 99.5) { const h = (100 - o.soc) / 100 * cap / (o.batt / 1000); pace = `pełna ok. ${this._fmtAt(h)}`; paceTip = `przy obecnym ładowaniu ${this._fmtW(o.batt)}`; }
         else { const h = usable / (Math.max(o.load, 100) / 1000); pace = `do ${Math.round(FL)}% ok. ${this._fmtAt(h)}`; paceTip = `przy obecnym zużyciu domu ${this._fmtW(Math.max(o.load, 100))} (bez PV)`; }
-        c += chip('Zgromadzone', `~ ${f1(kwh)} kWh`) + chip(`Do rezerwy ${Math.round(FL)}%`, `${f1(usable)} kWh`) + chip('Przy tym tempie', pace, paceTip);
+        if (!opt.hero) items.push({ id: 'stored', l: 'Zgromadzone', v: `~ ${this._fx(kwh)} kWh` });
+        items.push({ id: 'usable', l: `Do rezerwy ${Math.round(FL)}%`, v: `${this._fx(usable)} kWh` }, { id: 'pace', l: 'Przy tym tempie', v: pace, t: paceTip });
       }
-      if (!(cap > 0)) c += `<div class="nf-cap" style="grid-column:1/-1;">Integracja nie podała pojemności baterii — wpisz ją, a pokażę zgromadzoną energię i czas do rezerwy: <input type="number" id="capInput" min="1" max="200" step="0.1" placeholder="kWh"> kWh</div>`;
       // straty z bilansu mocy (PV + sieć − dom − bateria); to szacunek, a nie pomiar falownika
       const loss = o.pv + o.grid - o.load - o.batt;
-      if (isFinite(loss) && (o.pv > 50 || Math.abs(o.batt) > 50)) c += chip('Straty falownika (szac.)', `${Math.max(0, Math.round(loss))} W`, 'Szacunek z bilansu mocy: PV + sieć − dom − bateria');
-      const leg = hasFl || isFinite(o.tgt)
-        ? `<div class="nf-leg">${hasFl ? `<span><i class="nf-k"></i>rezerwa ${Math.round(FL)}%</span>` : ''}${isFinite(o.tgt) ? `<span><i class="nf-t"></i>plan na koniec dnia ${Math.round(o.tgt)}%</span>` : ''}</div>` : '';
+      if (isFinite(loss) && (o.pv > 50 || Math.abs(o.batt) > 50)) items.push({ id: 'loss', l: 'Straty falownika (szac.)', v: `${Math.max(0, Math.round(loss))} W`, t: 'Szacunek z bilansu mocy: PV + sieć − dom − bateria' });
+      if (opt.profit) { const p = this._profitToday(); if (isFinite(p)) items.push({ id: 'profit', l: 'Zysk dziś', v: (p < 0 ? '−' : '+') + this._fx(Math.abs(p), 2) + ' zł', t: 'Bilans EMS z dzisiaj' }); }
+      return { items, capMissing: !(cap > 0), hasFl, FL };
+    }
+    _capPromptHtml(cls) {
+      return `<div class="${cls || ''} nf-cap" style="grid-column:1/-1;">Integracja nie podała pojemności baterii — wpisz ją, a pokażę zgromadzoną energię i czas do rezerwy: <input type="number" id="capInput" min="1" max="200" step="0.1" placeholder="kWh"> kWh</div>`;
+    }
+    _bindCapInput(box) {
+      const ci = box.querySelector('#capInput');
+      if (ci) ci.addEventListener('change', () => {
+        const v = parseFloat(String(ci.value).replace(',', '.'));
+        try { if (v > 0) localStorage.setItem('bms_panel_capacity', String(v)); else localStorage.removeItem('bms_panel_capacity'); } catch (e) { /* ignoruj */ }
+        this._lastFlowKey = null; this._lastM3Key = null;
+        this._drawPowerflow();
+      });
+    }
+    // styl klasyczny: legenda znaczników pierścienia + kafelki wskaźników
+    _flowChips(o) {
+      const H = this._homeChips(o, { profit: true });
+      const chip = (it) => `<div class="nf-chip"${it.t ? ` title="${bmsEsc(it.t)}"` : ''}><small>${bmsEsc(it.l)}</small><b>${bmsEsc(it.v)}</b></div>`;
+      const c = (H.capMissing ? this._capPromptHtml('') : '') + H.items.map(chip).join('');
+      const leg = H.hasFl || isFinite(o.tgt)
+        ? `<div class="nf-leg">${H.hasFl ? `<span><i class="nf-k"></i>rezerwa ${Math.round(H.FL)}%</span>` : ''}${isFinite(o.tgt) ? `<span><i class="nf-t"></i>plan na koniec dnia ${Math.round(o.tgt)}%</span>` : ''}</div>` : '';
       return leg + (c ? `<div class="nf-chips">${c}</div>` : '');
+    }
+    // style (Material 3, Szkło, Matryca, Przestrzeń, Komfort): te same wskaźniki jako kafelki w kolorach stylu; pre = 'm3' | 'sk'
+    _skChips(o, pre) {
+      const H = this._homeChips(o, { hero: true });
+      const tile = (it) => `<div class="${pre}-kpi ${pre}-chip"${it.t ? ` title="${bmsEsc(it.t)}"` : ''}><div class="l">${bmsEsc(it.l)}</div><div class="v">${bmsEsc(it.v)}</div></div>`;
+      const cap = H.capMissing ? this._capPromptHtml(pre === 'm3' ? 'm3-kpi m3-cap' : 'sk-card sk-cap') : '';
+      const chips = H.items.length ? `<div class="${pre}-kpis ${pre}-chips"">${H.items.map(tile).join('')}</div>` : '';
+      return { html: (cap || chips) ? (pre === 'm3' ? cap + chips : `<div class="sk-extra">${cap}${chips}</div>`) : '', sig: JSON.stringify([H.capMissing, H.items.map((x) => x.v)]) };
     }
 
     // ===== MINI WYKRES 24 h (popover przy węzłach) =====
@@ -5328,7 +5366,7 @@
       }
       const row = (icon, label, val, max, unit, col, note) => {
         const pct = max > 0 ? Math.max(0, Math.min(100, val / max * 100)) : 0;
-        return `<div class="pl-row"><div class="pl-h"><span>${icon} ${label}</span><b>${val.toFixed(1)}${max > 0 ? ' / ' + max.toFixed(1) : ''} ${unit}</b></div>
+        return `<div class="pl-row"><div class="pl-h"><span>${icon} ${label}</span><b>${this._fx(val, 1)}${max > 0 ? ' / ' + this._fx(max, 1) : ''} ${unit}</b></div>
           <div class="pl-bar"><div style="width:${pct.toFixed(0)}%;background:${col};"></div></div>${note ? `<div class="pl-n">${note}</div>` : ''}</div>`;
       };
       const rs = this._hass.states[this._eid('sensor', 'reserve_soc')];
@@ -5361,7 +5399,7 @@
           } else if (fcNow == null) {
             rel = 'brak prognozy godzinowej';
           }
-          return `<div class="pl-row"><div class="pl-h"><span>☀️ Moc PV teraz</span><b>${pvKw.toFixed(1)} kW${fcNow != null ? ` <small style="color:var(--muted);font-weight:500;">· prognoza ${fcNow.toFixed(1)} kW</small>` : ''}</b></div>
+          return `<div class="pl-row"><div class="pl-h"><span>☀️ Moc PV teraz</span><b>${this._fx(pvKw, 1)} kW${fcNow != null ? ` <small style="color:var(--muted);font-weight:500;">· prognoza ${this._fx(fcNow, 1)} kW</small>` : ''}</b></div>
             <div class="pl-bar" style="position:relative;overflow:visible;"><div style="width:${pct.toFixed(0)}%;background:#ffcc00;"></div>${mark != null ? `<span title="prognoza PV na tę godzinę" style="position:absolute;top:-2px;bottom:-2px;left:${mark.toFixed(1)}%;width:2px;background:var(--text);"></span>` : ''}</div>
             <div class="pl-n" style="display:flex;justify-content:space-between;"><span>0 — ${scale} kW</span><span>${rel}</span></div></div>`;
         })() +
@@ -5371,13 +5409,13 @@
           const kwhNow = unit * socNow / 100;
           const rsA = (this._hass.states[this._eid('sensor', 'reserve_soc')] || {}).attributes || {};
           const flr = Number(rsA.inverter_floor); const hasFl = isFinite(flr) && flr > 0 && flr < 100;
-          const note = `dziś naładowano ${ch.toFixed(1)} kWh · oddano ${dis.toFixed(1)} kWh`;
-          const flNote = hasFl ? ` · próg odcięcia falownika ${Math.round(flr)}%${unit > 0 ? ` (dostępne ~${Math.max(0, unit * (socNow - flr) / 100).toFixed(1)} kWh)` : ''}` : '';
-          return `<div class="pl-row"><div class="pl-h"><span>🔋 W baterii teraz</span><b>${unit > 0 ? kwhNow.toFixed(1) + ' kWh · ' : ''}${socNow.toFixed(0)}%</b></div>
+          const note = `dziś naładowano ${this._fx(ch, 1)} kWh · oddano ${this._fx(dis, 1)} kWh`;
+          const flNote = hasFl ? ` · próg odcięcia falownika ${Math.round(flr)}%${unit > 0 ? ` (dostępne ~${this._fx(Math.max(0, unit * (socNow - flr) / 100), 1)} kWh)` : ''}` : '';
+          return `<div class="pl-row"><div class="pl-h"><span>🔋 W baterii teraz</span><b>${unit > 0 ? this._fx(kwhNow, 1) + ' kWh · ' : ''}${socNow.toFixed(0)}%</b></div>
             <div class="pl-bar" style="position:relative;overflow:visible;"><div style="width:${socNow.toFixed(0)}%;background:#34c759;"></div>${hasFl ? `<span title="próg odcięcia falownika ${Math.round(flr)}%" style="position:absolute;top:-2px;bottom:-2px;left:${flr.toFixed(1)}%;width:2px;background:var(--red);"></span>` : ''}</div>
-            <div class="pl-n">${unit > 0 ? '0 — ' + unit.toFixed(1) + ' kWh · ' : ''}${note}${flNote}</div></div>`;
+            <div class="pl-n">${unit > 0 ? '0 — ' + this._fx(unit, 1) + ' kWh · ' : ''}${note}${flNote}</div></div>`;
         })() +
-        row('🔌', 'Sieć: eksport względem importu', exp, Math.max(exp, imp), 'kWh', '#af52de', `import ${imp.toFixed(1)} kWh` + (selfSuff != null ? ` · samowystarczalność ${Math.round(selfSuff)}%` : '')) +
+        row('🔌', 'Sieć: eksport względem importu', exp, Math.max(exp, imp), 'kWh', '#af52de', `import ${this._fx(imp, 1)} kWh` + (selfSuff != null ? ` · samowystarczalność ${Math.round(selfSuff)}%` : '')) +
         this._moneyTableHtml();
     }
 

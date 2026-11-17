@@ -50,11 +50,11 @@ let fails = 0; const ok = (c, m) => { if (!c) { fails++; console.log('FAIL', m);
   });
   await e.page.waitForTimeout(700);
   const m3 = await e.q(() => { const r = __el.shadowRoot; const q = (s) => r.querySelector(s);
-    return { hero: !!q('.m3-hero'), soc: (q('.m3-big') || {}).textContent, marks: r.querySelectorAll('.m3-lp .m').length, pills: r.querySelectorAll('.m3-flow svg rect').length,
-      kpis: r.querySelectorAll('.m3-kpi').length, strip: r.querySelectorAll('.m3-strip i').length, oldSvg: !!q('#nodesBox .nf-svg') }; });
+    return { hero: !!q('.m3-hero'), soc: (q('.m3-big') || {}).textContent, marks: r.querySelectorAll('.m3-lp .m').length, pills: r.querySelectorAll('.m3-flow svg rect:not(.nf-hit)').length,
+      kpis: r.querySelectorAll('.m3-kpis:not(.m3-chips) .m3-kpi').length, strip: r.querySelectorAll('.m3-strip i').length, oldSvg: !!q('#nodesBox .nf-svg') }; });
   ok(m3.hero && /^\d+%$/.test(m3.soc || '') , 'M3: karta baterii z SOC: ' + m3.soc);
   ok(m3.marks >= 1, 'M3: znaczniki rezerwy / celu na pasku baterii: ' + m3.marks);
-  ok(m3.pills === 4 && m3.kpis === 3, 'M3: cztery pigułki przepływu i trzy kafelki');
+  ok(m3.pills === 4 && m3.kpis === 2, 'M3: cztery pigułki przepływu i dwa kafelki (zysk, PV dziś; wskaźniki osobno)');
   ok(m3.strip === 24, 'M3: pasek planu ma 24 godziny: ' + m3.strip);
   ok(!m3.oldSvg, 'M3: stary schemat kółek ukryty');
   await e.q(() => __el._setSkin('classic'));
@@ -77,12 +77,12 @@ let fails = 0; const ok = (c, m) => { if (!c) { fails++; console.log('FAIL', m);
     palettes[sk] = card + '|' + dk;
     const h = await e.q(() => { const r = __el.shadowRoot; const q = (s) => r.querySelector(s);
       return { hero: !!q('.sk-hero svg.sk-ring'), flow: !!q('.sk-flow svg'), flowTxt: (q('.sk-flow svg') || { textContent: '' }).textContent,
-        kpis: r.querySelectorAll('.sk-kpi').length, bars: r.querySelectorAll('.sk-strip i').length, dotsStrip: !!q('.sk-strip-card svg.sk-dots'),
-        kpiDots: r.querySelectorAll('.sk-kpi .v svg.sk-dots').length, bigDots: !!q('.sk-ring rect') , oldSvg: !!q('#nodesBox .nf-svg'), m3: !!q('.m3-hero'),
+        kpis: r.querySelectorAll('.sk-kpis:not(.sk-chips) .sk-kpi').length, bars: r.querySelectorAll('.sk-strip i').length, dotsStrip: !!q('.sk-strip-card svg.sk-dots'),
+        kpiDots: r.querySelectorAll('.sk-kpis:not(.sk-chips) .sk-kpi .v svg.sk-dots').length, bigDots: !!q('.sk-ring rect') , oldSvg: !!q('#nodesBox .nf-svg'), m3: !!q('.m3-hero'),
         nodesBg: getComputedStyle(q('.chart-card.nodes-card')).backgroundColor }; });
-    ok(h.hero && h.flow && h.kpis === 3, sk + ': karta baterii z pierścieniem, schemat przepływu i trzy kafelki');
+    ok(h.hero && h.flow && h.kpis === 2, sk + ': karta baterii z pierścieniem, schemat przepływu i dwa kafelki (zysk, PV dziś)');
     ok(/3,20 kW/.test(h.flowTxt) && /1,10 kW/.test(h.flowTxt) && /800 W/.test(h.flowTxt), sk + ': schemat pokazuje moce PV / dom / sieć: ' + h.flowTxt.replace(/\s+/g, ' ').slice(0, 80));
-    if (sk === 'matrix') ok(h.dotsStrip && h.kpiDots === 3 && h.bigDots, 'matrix: pasek planu, wartości kafelków i pierścień z kwadratowych pikseli');
+    if (sk === 'matrix') ok(h.dotsStrip && h.kpiDots === 2 && h.bigDots, 'matrix: pasek planu, wartości kafelków i pierścień z kwadratowych pikseli');
     else ok(h.bars === 24, sk + ': pasek planu ma 24 godziny: ' + h.bars);
     ok(!h.oldSvg && !h.m3, sk + ': stary schemat kółek i układ Material 3 ukryte');
     ok(/rgba\(0, 0, 0, 0\)|transparent/.test(h.nodesBg), sk + ': zewnętrzna karta schematu przezroczysta (bez podwójnej ramki): ' + h.nodesBg);

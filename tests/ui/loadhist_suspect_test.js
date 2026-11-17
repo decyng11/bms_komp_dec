@@ -50,6 +50,9 @@ const js = fs.readFileSync(require('path').resolve(__dirname, '../../custom_comp
   ok('notatka: za mało historii', /za mało dni historii/.test(r.text), r.text.slice(-200));
   r = await render(R, null);
   ok('bez strojenia (stary backend): brak notatki', !/Samostrojenie/.test(r.text));
+  // sekcja „Ostatnie 14 dni” domyślnie zwinięta (czternaście wierszy zajmuje pół ekranu); klik w nagłówek ją rozwija
+  const dt = await p.evaluate(() => { const d = window.__el.shadowRoot.querySelector('details.lh-wrap'); if (!d) return null; const a = d.open; d.querySelector('summary').click(); return { start: a, after: d.open }; });
+  ok('„Ostatnie 14 dni” startuje zwinięte, klik rozwija', dt && dt.start === false && dt.after === true, dt);
   ok('bez błędów strony', errs.length === 0, errs);
   console.log(fails ? `FAILS ${fails}` : 'ALL OK'); await b.close();
 })();
