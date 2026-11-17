@@ -124,6 +124,81 @@
       ['log-accuracy', 'Trafność prognoz'], ['log-report', 'Raport miesięczny'], ['log-health', 'Zdrowie i sprawność baterii'], ['log-auto', 'Funkcje automatyczne'], ['log-journal', 'Dziennik decyzji']] },
     { tab: '*', label: 'Wszystkie zakładki', fixed: true, tiles: [['weather', 'Pogoda i prognoza PV (7 dni)']] },
   ];
+  const LAYOUT_HOME = {}, LAYOUT_LABEL = {};
+  LAYOUT_TABS.forEach((g) => g.tiles.forEach((t) => { LAYOUT_HOME[t[0]] = g.tab; LAYOUT_LABEL[t[0]] = t[1]; }));
+  // ---- Wygląd per użytkownik Home Assistant: styl, motyw i układ podążają za kontem (dane użytkownika HA, komendy websocket
+  // frontend/get_user_data i frontend/set_user_data — dostępne dla każdego zalogowanego użytkownika, nie tylko administratora).
+  // localStorage zostaje szybkim cache'em (panel rysuje się od razu), a nowszy zapis (znacznik czasu) wygrywa. Brak user.id,
+  // starszy HA albo błąd połączenia → wygląd zapisuje się tylko w tej przeglądarce, bez komunikatów. Przeglądarka współdzielona
+  // przez dwóch użytkowników nie dziedziczy wyglądu poprzedniego: po zmianie konta lokalny cache jest czyszczony i ściągany od nowa.
+  const PREFS_KEY = 'bms_komp_dec_prefs', PREFS_META = 'bms_panel_prefs_meta';
+  const PREFS = {
+    subs: new Set(), hass: null, uid: '', off: false, bad: false, busy: false, last: 0, timer: null, fails: 0,
+    active() { return !!(this.uid && !this.off && !this.bad); },
+    meta() { let m = null; try { m = JSON.parse(localStorage.getItem(PREFS_META) || 'null'); } catch (e) { m = null; } return m && typeof m === 'object' ? { u: String(m.u || ''), t: Number(m.t) || 0 } : { u: '', t: 0 }; },
+    setMeta(m) { try { localStorage.setItem(PREFS_META, JSON.stringify(m)); } catch (e) { /* storage niedostępny */ } },
+    read() {
+      const g = (k) => { try { return localStorage.getItem(k); } catch (e) { return null; } };
+      let layout = null; try { layout = JSON.parse(g(LAYOUT_KEY) || 'null'); } catch (e) { layout = null; }
+      const skin = g(SKIN_KEY), theme = g(THEME_KEY);
+      return { v: 1, skin: Object.prototype.hasOwnProperty.call(SKINS, skin) ? skin : null, theme: theme === 'light' || theme === 'dark' ? theme : null, layout: layout && typeof layout === 'object' ? layout : null };
+    },
+    write(p) {
+      const set = (k, v) => { try { if (v === null || v === undefined) localStorage.removeItem(k); else localStorage.setItem(k, v); } catch (e) { /* storage niedostępny */ } };
+      set(SKIN_KEY, p && Object.prototype.hasOwnProperty.call(SKINS, p.skin) ? p.skin : null);
+      set(THEME_KEY, p && (p.theme === 'light' || p.theme === 'dark') ? p.theme : null);
+      set(LAYOUT_KEY, p && p.layout && typeof p.layout === 'object' && !Array.isArray(p.layout) ? JSON.stringify(p.layout) : null);
+    },
+    has(p) { return !!(p.skin || p.theme || p.layout); },
+    // wywoływane przy każdym nowym obiekcie hass; synchronizacja startuje raz na użytkownika
+    attach(card, hass) {
+      const fresh = !this.subs.has(card); this.subs.add(card);
+      if (!hass || typeof hass.callWS !== 'function') return;
+      this.hass = hass;
+      const uid = hass.user && hass.user.id ? String(hass.user.id) : '';
+      if (!uid || this.off) return;
+      if (uid === this.uid) { if (fresh) this.pull(false); return; }   // nowa karta na otwartej stronie: odśwież z konta (nie częściej niż co 30 s)
+      this.uid = uid; this.fails = 0; this.begin();
+    },
+    begin() {
+      const m = this.meta();
+      if (m.u && m.u !== this.uid) { this.write(null); this.setMeta({ u: this.uid, t: 0 }); this.notify(); }   // inny użytkownik tej samej przeglądarki
+      else if (m.u !== this.uid) this.setMeta({ u: this.uid, t: m.t });                                          // pierwszy kontakt: lokalne ustawienia zostają, zostaną wysłane na konto
+      this.pull(true);
+    },
+    pull(force) {
+      const h = this.hass, uid = this.uid; if (!h || !uid || this.off || this.busy) return;
+      const now = Date.now(); if (!force && now - this.last < 30000) return;
+      this.last = now; this.busy = true;
+      Promise.resolve().then(() => h.callWS({ type: 'frontend/get_user_data', key: PREFS_KEY })).then((r) => {
+        this.busy = false; if (uid !== this.uid) return;
+        this.fails = 0; this.bad = false;
+        const sv = r && r.value && typeof r.value === 'object' && r.value.v === 1 ? r.value : null, st = Number(sv && sv.t) || 0, m = this.meta();
+        if (sv && st > m.t) { this.write(sv); this.setMeta({ u: uid, t: st }); this.notify(); }
+        else if (m.t > st || (!sv && this.has(this.read()))) { if (!m.t) this.setMeta({ u: uid, t: Date.now() }); this.push(); }
+      }).catch((e) => { this.busy = false; this.bad = true; this.fails++; if (this.fails >= 3 || (e && (e.code === 'unknown_command' || e.code === 'unauthorized'))) this.off = true; });
+    },
+    // lokalna zmiana (styl, motyw, układ): znacznik czasu + wysłanie na konto z krótkim opóźnieniem (seria kliknięć = jeden zapis)
+    touch() {
+      if (!this.uid) return;
+      this.setMeta({ u: this.uid, t: Date.now() });
+      if (this.off) return;
+      clearTimeout(this.timer); this.timer = setTimeout(() => this.push(), 1200);
+    },
+    push() {
+      const h = this.hass; if (!h || !this.uid || this.off) return;
+      const m = this.meta(), val = Object.assign(this.read(), { t: m.t || Date.now() });
+      Promise.resolve().then(() => h.callWS({ type: 'frontend/set_user_data', key: PREFS_KEY, value: val })).then(() => { this.fails = 0; this.bad = false; }).catch((e) => {
+        this.fails++; this.bad = true;
+        if (e && e.code === 'unknown_command') { this.off = true; return; }
+        if (this.fails <= 3) { clearTimeout(this.timer); this.timer = setTimeout(() => this.push(), this.fails * 15000); }
+      });
+    },
+    notify() {
+      this.subs.forEach((c) => { try { if (!c.isConnected) { this.subs.delete(c); return; } c._prefsApplied(); } catch (e) { /* karta mogła zostać zdjęta */ } });
+    },
+  };
+  try { document.addEventListener('visibilitychange', () => { if (!document.hidden) PREFS.pull(false); }); } catch (e) { /* brak dokumentu */ }
   const SKIN_M3 = `
     :host([data-skin="m3"]) { --bg:#f4fbf8; --card:#e8f1ed; --surface:rgba(23,29,27,0.06); --line:rgba(111,121,117,0.22); --text:#171d1b; --text2:#3f4945; --muted:#566360; --muted2:#6f7975; --accent:#0b6b5d; --green:#1b6c2e; --orange:#8a5a00; --red:#ba1a1a; --input-bg:#f4fbf8; --seg-bg:#dde8e4; --seg-active:#bdf0e3; --shadow:0 1px 2px rgba(0,0,0,0.10),0 1px 3px 1px rgba(0,0,0,0.06); --pf-bg:#e8f1ed; --tonal:#d4e8e1; --on-tonal:#0e201c; --tert:#e1dcff; --on-tert:#1d1a47; --tab-on:#bdf0e3; --tab-on-fg:#00201b; --tab-off:#3f4945; --tab-bg:#e3ede9; --tab-line:transparent; --m3-pv:#c98a00; --m3-pvc:#ffe3a0; --m3-pvt:#6d4b00; --m3-grid:#0a7ea8; --m3-gridc:#c2e8ff; --m3-gridt:#004c69; --m3-sell:#7a55c2; --m3-sellc:#e9deff; --m3-sellt:#3b2470; --m3-batt:#0b6b5d; --m3-idle:#d5dfdb; color-scheme: light; }
     :host([data-skin="m3"][data-theme="dark"]) { --bg:#0f1513; --card:#1a201e; --surface:rgba(255,255,255,0.06); --line:rgba(255,255,255,0.10); --text:#dee4e0; --text2:#bfc9c4; --muted:#9aa5a0; --muted2:#89938f; --accent:#7fd8c6; --green:#8fd99b; --orange:#f3c04f; --red:#ffb4ab; --input-bg:#222826; --seg-bg:#262b29; --seg-active:#005046; --shadow:none; --pf-bg:#1a201e; --tonal:#33433e; --on-tonal:#d4e8e1; --tert:#42407a; --on-tert:#e1dcff; --tab-on:#005046; --tab-on-fg:#bdf0e3; --tab-off:#bfc9c4; --tab-bg:#1b211f; --m3-pv:#f3c04f; --m3-pvc:#5a4300; --m3-pvt:#ffe3a0; --m3-grid:#7bd0f6; --m3-gridc:#004d67; --m3-gridt:#c2e8ff; --m3-sell:#cfbcff; --m3-sellc:#4a3c80; --m3-sellt:#e9deff; --m3-batt:#7fd8c6; --m3-idle:#2a302e; color-scheme: dark; }
@@ -423,12 +498,16 @@
     .edit-bar .eb-t { flex: 1 1 220px; color: var(--text2); } .edit-bar .eb-t b { color: var(--text); }
     .edit-bar button { border: none; border-radius: 10px; padding: 8px 12px; font-weight: 600; font-size: 13px; cursor: pointer; background: var(--seg-bg); color: var(--text); font-family: inherit; }
     .edit-bar button.ok { background: var(--accent); color: #fff; } .edit-bar button[disabled] { opacity: .4; cursor: default; }
-    .tile-ctl { display: flex; align-items: center; gap: 6px; padding: 6px 8px; margin-bottom: 6px; border-radius: 12px; background: var(--seg-bg); border: 1px dashed var(--accent); color: var(--text); font-size: 12.5px; }
+    .tile-ctl { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 6px 8px; margin-bottom: 6px; border-radius: 12px; background: var(--seg-bg); border: 1px dashed var(--accent); color: var(--text); font-size: 12.5px; }
     .tc-h { cursor: grab; touch-action: none; user-select: none; -webkit-user-select: none; font-size: 20px; line-height: 1; padding: 4px 8px; color: var(--accent); }
-    .tc-n { flex: 1; min-width: 0; font-weight: 600; overflow-wrap: anywhere; }
+    .tc-n { flex: 1 1 150px; min-width: 0; font-weight: 600; overflow-wrap: anywhere; }
+    .tc-b { display: flex; align-items: center; gap: 6px; margin-left: auto; }
     .tile-ctl button { border: none; background: var(--surface); color: var(--text); border-radius: 8px; min-width: 34px; height: 32px; cursor: pointer; font-size: 14px; font-family: inherit; }
     .tile-ctl button[disabled] { opacity: .35; cursor: default; }
     .tile-ctl .tc-eye { padding: 0 10px; font-size: 12px; font-weight: 600; }
+    .tile-ctl select { height: 32px; max-width: 118px; border: none; border-radius: 8px; background: var(--surface); color: var(--text); font-size: 12px; font-weight: 600; font-family: inherit; padding: 0 6px; cursor: pointer; }
+    .tc-n small { font-weight: 400; color: var(--muted); }
+    .edit-bar .eb-n { margin-top: 4px; color: var(--accent); font-weight: 600; } .edit-bar .eb-n:empty { display: none; }
     .app[data-edit] [data-tile] { position: relative; max-height: 150px; overflow: hidden; outline: 2px dashed var(--accent); outline-offset: 3px; border-radius: 14px; margin-bottom: 8px; }
     .app[data-edit] [data-tile] > :not(.tile-ctl) { pointer-events: none; user-select: none; }
     .app[data-edit] [data-tile-off] { display: block !important; opacity: .6; max-height: none; }
@@ -436,10 +515,11 @@
     .app[data-edit] [data-tile-off] .tc-n { text-decoration: line-through; }
     .app[data-edit] [data-tile-off] .tc-eye { background: var(--accent); color: #fff; }
     .app[data-edit] [data-tile].tile-drag { opacity: .85; outline-style: solid; box-shadow: 0 8px 28px rgba(0,0,0,0.35); z-index: 5; }
-    [data-tab-content="ems"] .section.collapsed > .tile-ctl { display: flex !important; }
+    .section[data-tile^="ems-"].collapsed > .tile-ctl { display: flex !important; }
     [data-tab-content][data-custom] [data-tile]:not([data-first]) { margin-top: 16px !important; }
     [data-tab-content][data-custom] [data-tile][data-first] { margin-top: 6px !important; }
     [data-tab-content="log"][data-custom] [data-tile][data-first] { margin-top: 16px !important; }
+    .app:not(.simple) [data-tab-content][data-empty]::after { content: 'Ta zakładka nie ma teraz kafelków. Przenieś tu kafelki z innych zakładek: ✎ Edytuj układ → „⇄ Przenieś…” (Ustawienia → Wygląd → Układ panelu).'; display: block; padding: 28px 12px; text-align: center; color: var(--muted); font-size: 13px; }
     .app:not(.simple):not([data-edit]) [data-tab-content][data-all-hidden]::after { content: 'Wszystkie kafelki tej zakładki są ukryte. Przywrócisz je w: Ustawienia → Wygląd → Układ panelu.'; display: block; padding: 28px 12px; text-align: center; color: var(--muted); font-size: 13px; }
     .section-title { font-size: 12px; font-weight: 600; text-transform: uppercase; color: var(--muted); margin-bottom: 8px; padding-left: 6px; letter-spacing: 1px; }
     
@@ -576,10 +656,10 @@
     .app.simple .tab[data-tab="charts"], .app.simple .tab[data-tab="log"], .app.simple .tab[data-tab="dev"] { display: none !important; }
     .app.simple .weather-global { display: none; }
     .app.simple [data-tab-content="ems"] > :not(#simpleWrap) { display: none !important; }
-    [data-tab-content="ems"] .section-title.collapsible { cursor: pointer; user-select: none; }
-    [data-tab-content="ems"] .section-title.collapsible::after { content: ' ▾'; opacity: .5; }
-    [data-tab-content="ems"] .section.collapsed > :not(.section-title) { display: none !important; }
-    [data-tab-content="ems"] .section.collapsed > .section-title.collapsible::after { content: ' ▸'; }
+    .section[data-tile^="ems-"] .section-title.collapsible { cursor: pointer; user-select: none; }
+    .section[data-tile^="ems-"] .section-title.collapsible::after { content: ' ▾'; opacity: .5; }
+    .section[data-tile^="ems-"].collapsed > :not(.section-title) { display: none !important; }
+    .section[data-tile^="ems-"].collapsed > .section-title.collapsible::after { content: ' ▸'; }
     .badge { padding: 5px 10px; border-radius: 16px; background: var(--surface); color: var(--muted); font-size: 12px; font-weight: 600; transition: all 0.3s; border: 1px solid var(--line); }
     .badge.on { background: rgba(16,185,129,0.15); color: #10b981; border-color: #10b981; box-shadow: 0 0 8px rgba(16,185,129,0.3); }
     .badge.danger.on { background: rgba(244,63,94,0.15); color: #f43f5e; border-color: #f43f5e; box-shadow: 0 0 8px rgba(244,63,94,0.4); }
@@ -938,6 +1018,7 @@
 
     set hass(hass) {
       this._hass = hass;
+      PREFS.attach(this, hass);
       try {
         const bs = Number(this._rsAttrs().battery_charge_sign);
         if (bs === 1 || bs === -1) INVERT_BATTERY_SIGN = (bs === -1);
@@ -968,7 +1049,7 @@
     }
 
     connectedCallback() {
-      if (this._rendered && this._activeTab === 'main') this._startFlowLoop();
+      if (this._rendered && this._tileOn('main-flow')) this._startFlowLoop();
     }
 
     _dateKey(d) {
@@ -988,7 +1069,7 @@
     _startFlowLoop() {
       this._stopFlowLoop();
       const loop = () => {
-        if (this._activeTab === 'main') this._drawPowerflow();
+        if (this._tileOn('main-flow')) this._drawPowerflow();
         this._flowRaf = requestAnimationFrame(loop);
       };
       this._flowRaf = requestAnimationFrame(loop);
@@ -2756,7 +2837,9 @@
       const body = this._el('logTabBody');
       if (!body || !this._hass) return;
       const root = this.shadowRoot;
-      if (root && root.activeElement && body.contains(root.activeElement) && root.activeElement.tagName === 'INPUT') return;
+      const act = root && root.activeElement;
+      if (act && act.tagName === 'INPUT' && act.closest && act.closest('[data-tile^="log-"]')) return;
+      if (this._layEdit && root.querySelector('[data-tile^="log-"]')) return;   // w trakcie edycji układu nie przebudowujemy kafelków pod rękami
 
       const st = (domain, key) => this._hass.states[this._eid(domain, key)];
       const logSt = st('sensor', 'decision_log');
@@ -2872,6 +2955,8 @@
         ? `<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:6px;">${chip(cnt(e => e.kind === 'command'), 'komend', '#10b981')}${chip(cnt(e => e.kind === 'guard'), 'blokad / zabezpieczeń', '#f59e0b')}${chip(cnt(e => e.kind === 'auto'), 'zmian automatu', '#60a5fa')}${chip(cnt(e => e.level === 'warn' || e.level === 'error'), 'ostrzeżeń', '#f87171')}</div>${todayRows}${todays.length > 12 ? `<div style="font-size:11px;color:var(--muted);padding-top:6px;">…i ${todays.length - 12} więcej — pełna lista w dzienniku niżej.</div>` : ''}`
         : `<div class="chart-empty">Dziś EMS nie wykonał jeszcze żadnych komend ani zmian.</div>`;
 
+      // kafelki Zysku i logu powstają od nowa — usuń stare kopie, także te przeniesione na inne zakładki (nowe trafią tam w _applyLayout)
+      root.querySelectorAll('[data-tile^="log-"]').forEach((n) => { if (!body.contains(n)) n.remove(); });
       body.innerHTML = `
         <div class="section" data-tile="log-bilans" style="margin-top:6px;">
           <div class="section-title">💰 Bilans w PLN</div>
@@ -2936,7 +3021,7 @@
     }
     _setTheme(mode, persist) {
       if (mode !== 'light' && mode !== 'dark') return;
-      if (persist) { try { localStorage.setItem(THEME_KEY, mode); } catch (e) { /* ignoruj */ } }
+      if (persist) { try { localStorage.setItem(THEME_KEY, mode); } catch (e) { /* ignoruj */ } PREFS.touch(); }
       this._applyTheme(mode);
     }
     _resolveSkin() {
@@ -2946,7 +3031,7 @@
     }
     _setSkin(skin, persist = true) {
       if (!Object.prototype.hasOwnProperty.call(SKINS, skin)) return;
-      if (persist) { try { localStorage.setItem(SKIN_KEY, skin); } catch (e) { /* ignoruj */ } }
+      if (persist) { try { localStorage.setItem(SKIN_KEY, skin); } catch (e) { /* ignoruj */ } PREFS.touch(); }
       this._applySkin(skin);
     }
     _applySkin(force) {
@@ -2955,64 +3040,130 @@
       if (skin === 'classic') this.removeAttribute('data-skin'); else this.setAttribute('data-skin', skin);
       if (prev !== skin) { this._lastFlowKey = null; this._lastM3Key = null; if (this._rendered) this._safe(() => this._drawPowerflow()); }
     }
-    // ---------- układ panelu: kolejność i ukrywanie kafelków (localStorage, osobno dla przeglądarki) ----------
+    // ---------- układ panelu: kolejność, ukrywanie i przenoszenie kafelków między zakładkami ----------
+    // Zapis: localStorage (cache) + dane użytkownika HA (PREFS) — układ podąża za kontem.
+    // Model: order[zakładka] = kafelki leżące na tej zakładce, w tej kolejności. Kafelek wpisany pod CUDZĄ zakładką został tam przeniesiony
+    // (ląduje na końcu); kafelek niewpisany nigdzie leży u siebie, w domyślnym miejscu — nowe kafelki z aktualizacji dochodzą więc na końcu
+    // własnej zakładki. Kafelka „Pogoda” (zakładka „*”) nie da się przenieść.
     _layoutGroups() { return LAYOUT_TABS; }
+    _layHomeOf(id) { return LAYOUT_HOME[id]; }
+    _layLabel(id) { return LAYOUT_LABEL[id] || id; }
+    _layTabLabel(tab) { return (LAYOUT_TABS.find((x) => x.tab === tab) || {}).label || tab; }
+    // zakładka, na której kafelek leży teraz (po przeniesieniach); liczona w _applyLayout
+    _layTabOf(id) { return (this._lay && this._lay.place[id]) || LAYOUT_HOME[id]; }
+    // zakładka X „potrzebuje” rysowania kafelków zakładki home, gdy jest aktywna sama X albo leży na niej choć jeden kafelek z home
+    _tabNeeds(home) { const a = this._activeTab; if (a === home) return true; const s = this._lay && this._lay.on[a]; return !!(s && s.has(home)); }
+    _tileOn(id) { return this._layTabOf(id) === this._activeTab; }
+    _laySimple() { try { return !!this._hass && this._simpleOn(); } catch (e) { return false; } }
+    _layoutPlace(order) {
+      const place = {};
+      LAYOUT_TABS.forEach((g) => {
+        const a = order && order[g.tab]; if (g.fixed || !Array.isArray(a)) return;
+        a.forEach((id) => { const h = LAYOUT_HOME[id]; if (h && h !== '*' && h !== g.tab && !place[id]) place[id] = g.tab; });
+      });
+      return place;
+    }
     _layoutLoad() {
-      const out = { order: {}, hidden: [] };
+      const out = { order: {}, hidden: [], place: {} };
       let j = null; try { j = JSON.parse(localStorage.getItem(LAYOUT_KEY) || 'null'); } catch (e) { j = null; }
       if (!j || typeof j !== 'object') return out;
-      const known = new Set(); LAYOUT_TABS.forEach((g) => g.tiles.forEach((t) => known.add(t[0])));
-      if (Array.isArray(j.hidden)) out.hidden = [...new Set(j.hidden.filter((id) => known.has(id)))];
+      if (Array.isArray(j.hidden)) out.hidden = [...new Set(j.hidden.filter((id) => LAYOUT_HOME[id]))];
       if (j.order && typeof j.order === 'object') {
-        LAYOUT_TABS.forEach((g) => { const a = j.order[g.tab]; if (Array.isArray(a)) out.order[g.tab] = a.filter((id) => g.tiles.some((t) => t[0] === id)); });
+        out.place = this._layoutPlace(j.order);
+        LAYOUT_TABS.forEach((g) => {
+          const a = j.order[g.tab]; if (g.fixed || !Array.isArray(a)) return;
+          const seen = new Set();
+          out.order[g.tab] = a.filter((id) => LAYOUT_HOME[id] && (out.place[id] || LAYOUT_HOME[id]) === g.tab && !seen.has(id) && seen.add(id));
+        });
       }
       return out;
     }
+    // układ obowiązujący na ekranie: w trybie prostym przeniesienia są ignorowane (zakładki Plan / Log / Urządzenia nie istnieją)
+    _layoutEff() { const L = this._layoutLoad(); if (this._laySimple()) L.place = {}; return L; }
     _layoutSave(L) {
+      const place = this._layoutPlace(L.order);
+      LAYOUT_TABS.forEach((g) => {
+        const a = L.order[g.tab]; if (!Array.isArray(a)) return;
+        // lista równa domyślnej niczego nie zmienia — nie zapisujemy jej (domyślna = własne kafelki zakładki, które nie wyjechały gdzie indziej)
+        if (g.fixed || a.join() === g.tiles.map((t) => t[0]).filter((id) => !place[id]).join()) delete L.order[g.tab];
+      });
       try {
         const empty = !L.hidden.length && !Object.keys(L.order).length;
-        if (empty) localStorage.removeItem(LAYOUT_KEY); else localStorage.setItem(LAYOUT_KEY, JSON.stringify({ v: 1, order: L.order, hidden: L.hidden }));
+        if (empty) localStorage.removeItem(LAYOUT_KEY); else localStorage.setItem(LAYOUT_KEY, JSON.stringify({ v: 2, order: L.order, hidden: L.hidden }));
       } catch (e) { /* storage niedostępny */ }
+      PREFS.touch();
     }
-    // pełna kolejność kafelków zakładki: zapisana, a nowe (nieznane zapisowi) dochodzą na końcu w domyślnym porządku
+    // pełna kolejność kafelków zakładki: zapisana, a niewpisane (własne, nieprzeniesione) dochodzą na końcu w domyślnym porządku
     _layoutOrder(g, L) {
-      const def = g.tiles.map((t) => t[0]), seen = new Set(), res = [];
-      ((L && L.order && L.order[g.tab]) || []).forEach((id) => { if (def.includes(id) && !seen.has(id)) { seen.add(id); res.push(id); } });
-      def.forEach((id) => { if (!seen.has(id)) res.push(id); });
+      const place = (L && L.place) || {}, here = (id) => (place[id] || LAYOUT_HOME[id]) === g.tab, seen = new Set(), res = [];
+      ((L && L.order && L.order[g.tab]) || []).forEach((id) => { if (here(id) && !seen.has(id)) { seen.add(id); res.push(id); } });
+      g.tiles.forEach(([id]) => { if (here(id) && !seen.has(id)) { seen.add(id); res.push(id); } });
       return res;
     }
     _layoutState() {
       const L = this._layoutLoad(), orders = {};
       LAYOUT_TABS.forEach((g) => { orders[g.tab] = this._layoutOrder(g, L); });
-      return { orders, hidden: new Set(L.hidden), custom: L.hidden.length > 0 || Object.keys(L.order).length > 0 };
+      return { orders, place: L.place, hidden: new Set(L.hidden), custom: L.hidden.length > 0 || Object.keys(L.order).length > 0 };
     }
     _layoutMove(tab, id, dir) {
       const g = LAYOUT_TABS.find((x) => x.tab === tab); if (!g || g.fixed) return false;
       const L = this._layoutLoad(), ord = this._layoutOrder(g, L), i = ord.indexOf(id), j = i + (dir < 0 ? -1 : 1);
       if (i < 0 || j < 0 || j >= ord.length) return false;
       [ord[i], ord[j]] = [ord[j], ord[i]];
-      const def = g.tiles.map((t) => t[0]);
-      if (ord.join() === def.join()) delete L.order[g.tab]; else L.order[g.tab] = ord;
-      this._layoutSave(L); this._applyLayout(); return true;
+      L.order[g.tab] = ord; this._layoutSave(L); this._applyLayout(); return true;
+    }
+    // przeniesienie kafelka na inną zakładkę — ląduje na jej końcu
+    _layoutMoveTo(id, tab) {
+      const to = LAYOUT_TABS.find((x) => x.tab === tab && !x.fixed), home = LAYOUT_HOME[id];
+      if (!to || !home || home === '*') return false;
+      const L = this._layoutLoad(), from = LAYOUT_TABS.find((x) => x.tab === (L.place[id] || home));
+      if (!from || from.tab === to.tab) return false;
+      L.order[from.tab] = this._layoutOrder(from, L).filter((x) => x !== id);
+      L.order[to.tab] = this._layoutOrder(to, L).filter((x) => x !== id).concat(id);
+      this._layoutSave(L); this._applyLayout(); this._layRefreshTab();
+      return true;
+    }
+    _layoutSetOrder(tab, ids) {
+      const g = LAYOUT_TABS.find((x) => x.tab === tab); if (!g || g.fixed) return false;
+      const L = this._layoutLoad(), cur = this._layoutOrder(g, L), ord = [];
+      ids.forEach((id) => { if (cur.includes(id) && !ord.includes(id)) ord.push(id); }); cur.forEach((id) => { if (!ord.includes(id)) ord.push(id); });
+      L.order[g.tab] = ord; this._layoutSave(L); this._applyLayout(); return true;
     }
     _layoutToggle(id) {
-      if (!LAYOUT_TABS.some((g) => g.tiles.some((t) => t[0] === id))) return false;
+      if (!LAYOUT_HOME[id]) return false;
       const L = this._layoutLoad(), h = new Set(L.hidden);
       if (h.has(id)) h.delete(id); else h.add(id);
       L.hidden = [...h]; this._layoutSave(L); this._applyLayout(); return true;
+    }
+    // kafelek wraca na swoją zakładkę: jeśli ta ma własną listę kolejności, wstawiamy go na jego domyślne miejsce (a nie na koniec)
+    _layBackHome(L, id) {
+      const h = LAYOUT_HOME[id], g = LAYOUT_TABS.find((x) => x.tab === h), list = L.order[h];
+      if (!g || !Array.isArray(list) || list.includes(id)) return;
+      const def = g.tiles.map((t) => t[0]); let at = 0;
+      for (let i = def.indexOf(id) - 1; i >= 0; i--) { const k = list.indexOf(def[i]); if (k >= 0) { at = k + 1; break; } }
+      list.splice(at, 0, id);
     }
     _layoutReset(tab) {
       const L = this._layoutLoad();
       if (!tab) { L.order = {}; L.hidden = []; } else {
         const g = LAYOUT_TABS.find((x) => x.tab === tab); if (!g) return false;
-        delete L.order[tab]; const ids = new Set(g.tiles.map((t) => t[0])); L.hidden = L.hidden.filter((id) => !ids.has(id));
+        // własne kafelki zakładki wracają na nią, a obce, które tu leżą, wracają do swoich zakładek; wszystkie przestają być ukryte
+        const mine = new Set(g.tiles.map((t) => t[0])), foreign = this._layoutOrder(g, L).filter((id) => !mine.has(id)), all = new Set([...mine, ...foreign]);
+        delete L.order[tab];
+        Object.keys(L.order).forEach((k) => { L.order[k] = L.order[k].filter((id) => !mine.has(id)); });
+        foreign.forEach((id) => this._layBackHome(L, id));
+        L.hidden = L.hidden.filter((id) => !all.has(id));
       }
-      this._layoutSave(L); this._applyLayout(); return true;
+      this._layoutSave(L); this._applyLayout(); this._layRefreshTab();
+      return true;
     }
+    // Rozmieszcza kafelki w DOM według układu; zwraca true, gdy któryś kafelek zmienił zakładkę (wtedy trzeba go narysować na nowym miejscu)
     _applyLayout() {
-      const root = this.shadowRoot; if (!root) return;
-      const L = this._layoutLoad(), hid = new Set(L.hidden);
-      let unhid = false;
+      const root = this.shadowRoot; if (!root) return false;
+      const L = this._layoutEff(), hid = new Set(L.hidden), place = {}, on = {};
+      let unhid = false, moved = false;
+      LAYOUT_TABS.forEach((g) => { if (g.fixed) return; this._layoutOrder(g, L).forEach((id) => { place[id] = g.tab; (on[g.tab] || (on[g.tab] = new Set())).add(LAYOUT_HOME[id]); }); });
+      this._lay = { place, on };
       LAYOUT_TABS.forEach((g) => {
         if (g.fixed) {
           g.tiles.forEach(([id]) => { const el = root.querySelector(`[data-tile="${id}"]`); if (el) { if (!hid.has(id) && el.hasAttribute('data-tile-off')) unhid = true; el.toggleAttribute('data-tile-off', hid.has(id)); } });
@@ -3020,24 +3171,70 @@
         }
         const tc = root.querySelector(`[data-tab-content="${g.tab}"]`); if (!tc) return;
         const cont = g.tab === 'log' ? tc.querySelector('#logTabBody') : tc;
-        const tiles = cont ? [...cont.children].filter((n) => n.dataset && n.dataset.tile) : [];
-        if (!tiles.length) return;
-        const want = this._layoutOrder(g, L).map((id) => tiles.find((n) => n.dataset.tile === id)).filter(Boolean);
-        if (!want.every((n, i) => n === tiles[i])) {
-          const ref = tiles[tiles.length - 1].nextSibling;
-          want.forEach((n) => cont.insertBefore(n, ref));
+        const ord = this._layoutOrder(g, L), def = g.tiles.map((t) => t[0]);
+        const want = ord.map((id) => root.querySelector(`[data-tile="${id}"]`)).filter(Boolean);
+        if (cont) {
+          const cur = [...cont.children].filter((n) => n.dataset && n.dataset.tile);
+          if (want.length !== cur.length || !want.every((n, i) => n === cur[i])) {
+            // kafelki trafiają za ostatni kafelek zakładki (a gdy jej puste — na koniec kontenera); przeniesiony z innej zakładki ląduje więc na końcu
+            const ref = cur.length ? cur[cur.length - 1].nextSibling : null;
+            want.forEach((n) => { if (n.parentNode !== cont) moved = true; cont.insertBefore(n, ref); });
+          }
         }
-        const def = g.tiles.map((t) => t[0]);
-        const isDef = want.every((n, i) => n.dataset.tile === def[i]) && !def.some((id) => hid.has(id));
-        tiles.forEach((n) => { if (!hid.has(n.dataset.tile) && n.hasAttribute('data-tile-off')) unhid = true; n.toggleAttribute('data-tile-off', hid.has(n.dataset.tile)); n.removeAttribute('data-first'); });
+        const isDef = ord.join() === def.join() && !ord.some((id) => hid.has(id));
+        want.forEach((n) => { const off = hid.has(n.dataset.tile); if (!off && n.hasAttribute('data-tile-off')) unhid = true; n.toggleAttribute('data-tile-off', off); n.removeAttribute('data-first'); });
         const vis = want.filter((n) => !hid.has(n.dataset.tile));
         tc.toggleAttribute('data-custom', !isDef);
         if (!isDef && vis[0]) vis[0].setAttribute('data-first', '');
-        tc.toggleAttribute('data-all-hidden', vis.length === 0);
+        tc.toggleAttribute('data-all-hidden', ord.length > 0 && ord.every((id) => hid.has(id)));
+        tc.toggleAttribute('data-empty', ord.length === 0);
       });
       if (this._layEdit) this._layEditInject();
-      // pokazany ponownie kafelek mógł być rysowany, gdy był niewidoczny (szerokość 0) — wymuś ponowne rysowanie
-      if (unhid) { this._lastFlowKey = this._lastM3Key = this._lastLogKey = null; this._lastLoadConsKey = this._lastForecast7dKey = this._lastHourlyFcKey = this._lastPvProdKey = this._lastPriceTableKey = this._lastWeatherKey = null; }
+      // pokazany ponownie lub przeniesiony kafelek mógł być rysowany, gdy był niewidoczny (szerokość 0) — wymuś ponowne rysowanie
+      if (unhid || moved) { this._lastFlowKey = this._lastM3Key = this._lastLogKey = null; this._lastLoadConsKey = this._lastForecast7dKey = this._lastHourlyFcKey = this._lastPvProdKey = this._lastPriceTableKey = this._lastWeatherKey = null; }
+      return moved;
+    }
+    // po zmianie układu: narysuj to, co trafiło na aktywną zakładkę (to samo, co przy wejściu na nią)
+    _layRefreshTab() {
+      if (this._tabNeeds('log')) { this._lastLogKey = null; this._safe(() => this._renderLogTab()); }
+      if (this._tileOn('main-flow')) { if (!this._flowRaf) this._startFlowLoop(); } else this._stopFlowLoop();
+      if (this._tabNeeds('ems') || this._tabNeeds('charts')) this._safe(() => this._exEnsure());
+      if (this._tabNeeds('charts')) this._chartsEnter();
+      this._render();
+    }
+    // wejście na zakładkę (kliknięcie w pasek): rysujemy to, czego potrzebują kafelki, które na niej leżą (własne i przeniesione)
+    _tabEnter(tab) {
+      if (this._layEdit) this._layEditBar();
+      if (this._tabNeeds('log')) { this._lastLogKey = null; this._safe(() => this._renderLogTab()); }
+      if (this._tileOn('main-flow')) this._startFlowLoop(); else this._stopFlowLoop();
+      if (tab === 'diag') this._safe(() => this._dgOpen());
+      else if (this._dg) this._dgDestroyChart();
+      if (tab === 'ems' || tab === 'diag' || tab === 'charts' || this._tabNeeds('ems') || this._tabNeeds('charts')) this._safe(() => this._exEnsure());
+      if (tab === 'dev') this._safe(() => this._devEnsure());
+      if (this._tabNeeds('charts')) this._chartsEnter();
+    }
+    _chartsEnter() {
+      this._lastLoadConsKey = null; this._lastForecast7dKey = null; this._lastHourlyFcKey = null; this._lastPvProdKey = null; this._lastPriceTableKey = null;
+      if (!this._history24h) this._fetchHistory24h();
+      if (!this._historyData) this._fetchHistoryData(this._historyRange);
+      setTimeout(() => {
+        this._renderLoadConsumptionChart(); this._renderForecast7dChart(); this._renderHourlyForecastChart();
+        this._renderPvProductionChart(); this._renderPriceTable(); this._renderHistoryChart();
+      }, 100);
+    }
+    // nowe ustawienia z konta (inne urządzenie): zastosuj motyw, styl i układ
+    _prefsApplied() {
+      this._applyTheme();
+      if (!this._rendered) return;
+      if (!this._layEdit) { this._applyLayout(); this._layRefreshTab(); }
+      if (this._lookOpen) this._lookRender();
+      if (this._activeTab === 'diag' && this._dgRenderSection) this._safe(() => this._dgRenderSection());
+    }
+    _prefsPull(force) { PREFS.pull(!!force); }
+    // tekst o miejscu zapisu wyglądu (okno 🎨 i Ustawienia)
+    _prefsNote() {
+      return PREFS.active() ? 'Styl, motyw i układ zapisują się na Twoim koncie Home Assistant — widzisz je tak samo na każdym urządzeniu, a pozostali użytkownicy mają własny wygląd.'
+        : 'Styl, motyw i układ zapisują się w tej przeglądarce (nie udało się połączyć z kontem Home Assistant — wygląd nie przejdzie na inne urządzenia).';
     }
     // ---------- okno „Wygląd” (🎨): styl, motyw, układ — dla każdego użytkownika, bez hasła ----------
     _lookRender() {
@@ -3071,9 +3268,9 @@
           <div class="inb-sec"><span>Motyw</span></div>
           <div class="look-row"><button type="button" data-look="theme" data-m="light" class="${th === 'light' ? 'on' : ''}" aria-pressed="${th === 'light'}">☀️ Jasny</button><button type="button" data-look="theme" data-m="dark" class="${th === 'dark' ? 'on' : ''}" aria-pressed="${th === 'dark'}">🌙 Ciemny</button></div>
           <div class="inb-sec"><span>Układ panelu</span></div>
-          <div class="look-note">Przestawiaj i ukrywaj kafelki wykresów, planów i ustawień bezpośrednio na panelu. Ukrycie kafelka niczego nie wyłącza w EMS — alerty zawsze zostają.${st.custom ? ' Masz własny układ.' : ''}</div>
+          <div class="look-note">Przestawiaj, ukrywaj i przenoś na inne zakładki kafelki wykresów, planów i ustawień bezpośrednio na panelu. Ukrycie kafelka niczego nie wyłącza w EMS — alerty zawsze zostają.${st.custom ? ' Masz własny układ.' : ''}</div>
           <div class="inb-btns"><button type="button" class="ok" data-look="edit">✎ Edytuj układ na panelu</button><button type="button" data-look="reset-all" ${st.custom ? '' : 'disabled'}>↺ Przywróć domyślny</button></div>
-          <div class="look-note" style="margin-top:10px;">Styl, motyw i układ zapisują się w tej przeglądarce — każdy użytkownik i urządzenie ma własny wygląd.</div>
+          <div class="look-note" style="margin-top:10px;">${bmsEsc(this._prefsNote())}</div>
         </div>`;
       const f = fk && [...ov.querySelectorAll('[data-look]')].find((b) => (b.dataset.look + '|' + (b.dataset.skin || b.dataset.m || '')) === fk && !b.disabled);
       const target = f || ov.querySelector('.inb-x'); if (target && !hadFocus || f) target.focus();
@@ -3096,7 +3293,8 @@
       const bar = this._el('editBar'); if (!bar) return;
       bar.hidden = !this._layEdit; if (!this._layEdit) { bar.innerHTML = ''; return; }
       const g = LAYOUT_TABS.find((x) => x.tab === this._activeTab && !x.fixed);
-      bar.innerHTML = `<div class="eb-t"><b>✎ Edycja układu.</b> Przeciągnij ⠿ albo użyj ↑ ↓. „Ukryj” chowa kafelek — zostaje szary pasek z „Pokaż”. ${g ? `Zakładka: <b>${bmsEsc(g.label)}</b>.` : 'Ta zakładka nie ma kafelków — wybierz inną na dolnym pasku.'}</div>
+      const mvHint = this._laySimple() ? '' : ' „⇄ Przenieś…” przenosi kafelek na koniec innej zakładki.';
+      bar.innerHTML = `<div class="eb-t"><b>✎ Edycja układu.</b> Przeciągnij ⠿ albo użyj ↑ ↓.${mvHint} „Ukryj” chowa kafelek — zostaje szary pasek z „Pokaż”. ${g ? `Zakładka: <b>${bmsEsc(g.label)}</b>.` : 'Ta zakładka nie ma kafelków — wybierz inną na dolnym pasku.'}<div class="eb-n" id="ebNote" aria-live="polite">${bmsEsc(this._layNote || '')}</div></div>
         <button type="button" data-lay="reset-tab" ${g ? '' : 'disabled'}>↺ Ta zakładka</button><button type="button" class="ok" data-lay="done">Gotowe</button>`;
     }
     _layEditOn() {
@@ -3108,38 +3306,36 @@
     }
     _layEditOff() {
       const app = this.shadowRoot && this.shadowRoot.querySelector('.app'); if (!app) return;
-      this._layEdit = false; app.removeAttribute('data-edit');
+      this._layEdit = false; app.removeAttribute('data-edit'); this._layNote = '';
       this.shadowRoot.querySelectorAll('.tile-ctl').forEach((n) => n.remove());
       this._layEditBar(); this._applyLayout();
+      if (this._tabNeeds('log')) { this._lastLogKey = null; this._safe(() => this._renderLogTab()); }   // w trakcie edycji dziennik nie był odświeżany
     }
     _layEditInject() {
       const root = this.shadowRoot; if (!root) return;
-      const L = this._layoutLoad(), hid = new Set(L.hidden);
+      const L = this._layoutEff(), hid = new Set(L.hidden), simple = this._laySimple();
       LAYOUT_TABS.forEach((g) => {
-        const label = Object.fromEntries(g.tiles), ord = this._layoutOrder(g, L);
-        g.tiles.forEach(([id]) => {
+        const ord = this._layoutOrder(g, L);
+        ord.forEach((id) => {
           const tile = root.querySelector(`[data-tile="${id}"]`); if (!tile) return;
           let ctl = tile.querySelector(':scope > .tile-ctl');
           if (!ctl) { ctl = document.createElement('div'); ctl.className = 'tile-ctl'; tile.insertBefore(ctl, tile.firstChild); }
           ctl.dataset.ctlFor = id;
-          const nm = bmsEsc(label[id]), i = ord.indexOf(id), off = hid.has(id);
+          const nm = bmsEsc(LAYOUT_LABEL[id] || id), i = ord.indexOf(id), off = hid.has(id), home = LAYOUT_HOME[id];
+          const homeLbl = (LAYOUT_TABS.find((x) => x.tab === home) || {}).label || home;
+          const from = !g.fixed && home !== g.tab ? ` <small>(z: ${bmsEsc(homeLbl)})</small>` : '';
           const mv = g.fixed ? '' : `<button type="button" data-lay="up" aria-label="Przesuń wyżej: ${nm}" title="Wyżej" ${i <= 0 ? 'disabled' : ''}>↑</button><button type="button" data-lay="down" aria-label="Przesuń niżej: ${nm}" title="Niżej" ${i >= ord.length - 1 ? 'disabled' : ''}>↓</button>`;
-          ctl.innerHTML = `${g.fixed ? '' : '<span class="tc-h" role="img" aria-label="Przeciągnij, aby przestawić" title="Przeciągnij">⠿</span>'}<span class="tc-n">${nm}</span>${mv}<button type="button" class="tc-eye" data-lay="eye" aria-label="${off ? 'Pokaż' : 'Ukryj'}: ${nm}">${off ? '👁 Pokaż' : '✕ Ukryj'}</button>`;
+          const mt = g.fixed || simple ? '' : `<select data-lay="move" aria-label="Przenieś na zakładkę: ${nm}" title="Przenieś na inną zakładkę (na jej koniec)"><option value="">⇄ Przenieś…</option>${LAYOUT_TABS.filter((x) => !x.fixed && x.tab !== g.tab).map((x) => `<option value="${x.tab}">${bmsEsc(x.label)}${x.tab === home ? ' (domyślna)' : ''}</option>`).join('')}</select>`;
+          const html = `${g.fixed ? '' : '<span class="tc-h" role="img" aria-label="Przeciągnij, aby przestawić" title="Przeciągnij">⠿</span>'}<span class="tc-n">${nm}${from}</span><span class="tc-b">${mv}${mt}<button type="button" class="tc-eye" data-lay="eye" aria-label="${off ? 'Pokaż' : 'Ukryj'}: ${nm}">${off ? '👁 Pokaż' : '✕ Ukryj'}</button></span>`;
+          if (ctl.dataset.h !== html) { ctl.innerHTML = html; ctl.dataset.h = html; }   // bez zbędnego przerysowania (otwarta lista wyboru, fokus)
         });
       });
-    }
-    _layTabOf(id) { return (LAYOUT_TABS.find((g) => g.tiles.some((t) => t[0] === id)) || {}).tab; }
-    _layoutSetOrder(tab, ids) {
-      const g = LAYOUT_TABS.find((x) => x.tab === tab); if (!g || g.fixed) return false;
-      const L = this._layoutLoad(), def = g.tiles.map((t) => t[0]);
-      const ord = []; ids.forEach((id) => { if (def.includes(id) && !ord.includes(id)) ord.push(id); }); def.forEach((id) => { if (!ord.includes(id)) ord.push(id); });
-      if (ord.join() === def.join()) delete L.order[tab]; else L.order[tab] = ord;
-      this._layoutSave(L); this._applyLayout(); return true;
     }
     _layWire(wrap) {
       wrap.addEventListener('click', (ev) => {
         const b = ev.target && ev.target.closest ? ev.target.closest('[data-lay]') : null; if (!b || !this._layEdit) return;
         const a = b.dataset.lay, ctl = b.closest('.tile-ctl'), id = ctl && ctl.dataset.ctlFor;
+        if (a === 'move') return;   // lista wyboru obsługiwana w „change”
         if (a === 'done') { this._layEditOff(); return; }
         if (a === 'reset-tab') { this._layoutReset(this._activeTab); return; }
         if (!id) return;
@@ -3152,6 +3348,15 @@
           if (nb && nb.focus) nb.focus({ preventScroll: true });
           if (a !== 'eye') this._layReveal(tile);
         }
+      });
+      wrap.addEventListener('change', (ev) => {
+        const sel = ev.target && ev.target.closest ? ev.target.closest('select[data-lay="move"]') : null; if (!sel || !this._layEdit) return;
+        const ctl = sel.closest('.tile-ctl'), id = ctl && ctl.dataset.ctlFor, to = sel.value; if (!id || !to) return;
+        const lbl = (t) => (LAYOUT_TABS.find((x) => x.tab === t) || {}).label || t;
+        if (this._layoutMoveTo(id, to)) {
+          this._layNote = `Przeniesiono „${LAYOUT_LABEL[id]}” na zakładkę ${lbl(to)} — jest na jej końcu.`;
+          const n = this.shadowRoot.getElementById('ebNote'); if (n) n.textContent = this._layNote;
+        } else sel.value = '';
       });
       wrap.addEventListener('pointerdown', (ev) => {
         const h = ev.target && ev.target.closest ? ev.target.closest('.tc-h') : null;
@@ -3223,12 +3428,12 @@
       this._safe(() => {
         if (this._chartJsInstance) { this._chartJsInstance.destroy(); this._chartJsInstance = null; }
         this._render();
-        if (this._activeTab === 'charts') {
+        if (this._tabNeeds('charts')) {
           this._renderLoadConsumptionChart(); this._renderForecast7dChart();
           this._renderHourlyForecastChart(); this._renderPvProductionChart(); this._renderPriceTable();
           if (this._historyData) this._renderHistoryChart();
         }
-        if (this._activeTab === 'log') this._renderLogTab();
+        if (this._tabNeeds('log')) this._renderLogTab();
       });
     }
 
@@ -3619,42 +3824,16 @@
         btn.addEventListener('click', () => {
           const tab = btn.dataset.tab;
           this._activeTab = tab;
-          if (this._layEdit) this._layEditBar();
-          if (tab === 'log') { this._lastLogKey = null; this._safe(() => this._renderLogTab()); }
           wrap.querySelectorAll('.tab').forEach(b => b.classList.toggle('active', b === btn));
           wrap.querySelectorAll('.tab-content').forEach(c => c.style.display = c.dataset.tabContent === tab ? '' : 'none');
-          
-          if (tab === 'main') this._startFlowLoop();
-          else this._stopFlowLoop();
-          if (tab === 'diag') this._safe(() => this._dgOpen());
-          else if (this._dg) this._dgDestroyChart();
-          if (tab === 'ems' || tab === 'diag' || tab === 'charts') this._safe(() => this._exEnsure());
-          if (tab === 'dev') this._safe(() => this._devEnsure());
-
-          if (tab === 'charts') {
-            this._lastLoadConsKey = null;
-            this._lastForecast7dKey = null;
-            this._lastHourlyFcKey = null;
-            this._lastPvProdKey = null;
-            this._lastPriceTableKey = null;
-            if (!this._history24h) this._fetchHistory24h();
-            if (!this._historyData) this._fetchHistoryData(this._historyRange);
-            setTimeout(() => {
-              this._renderLoadConsumptionChart();
-              this._renderForecast7dChart();
-              this._renderHourlyForecastChart();
-              this._renderPvProductionChart();
-              this._renderPriceTable();
-              this._renderHistoryChart();
-            }, 100);
-          }
+          this._tabEnter(tab);
         });
       });
 
       // Ustawienia: sekcje zwijane kliknięciem w tytuł (stan w localStorage, domyślnie rozwinięte)
       {
         let saved = {}; try { saved = JSON.parse(localStorage.getItem('bms_ems_collapsed') || '{}') || {}; } catch (e) { saved = {}; }
-        wrap.querySelectorAll('[data-tab-content="ems"] > .section').forEach((sec) => {
+        wrap.querySelectorAll('.section[data-tile^="ems-"]').forEach((sec) => {
           const t = sec.querySelector(':scope > .section-title'); if (!t) return;
           const key = (t.textContent || '').trim();
           t.classList.add('collapsible'); t.setAttribute('role', 'button'); t.setAttribute('tabindex', '0');
@@ -4168,7 +4347,7 @@
       this._safe(() => this._renderFloorAlert());
       this._safe(() => this._renderStatusBanner());
       // ekran główny korzysta z dodatków (rachunek dnia, wykres SOC, przyciski nadpisań) — ładujemy moduł, gdy integracja podaje „Widok planu”
-      if (this._activeTab === 'main' && !MODULES.extras.ready && Object.keys(this._pvAttrs()).length) this._safe(() => this._exEnsure());
+      if (this._tabNeeds('main') && !MODULES.extras.ready && Object.keys(this._pvAttrs()).length) this._safe(() => this._exEnsure());
       this._safe(() => this._exRender());
       this._safe(() => this._renderWeather());
       this._safe(() => this._renderLoadConsumptionChart());
@@ -4184,7 +4363,7 @@
       this._safe(() => this._setWarnSync());
       if (this._activeTab === 'diag') this._safe(() => this._dgTick());
       if (this._activeTab === 'dev') this._safe(() => this._devTick());
-      if (this._activeTab === 'log') this._safe(() => this._renderLogTab());
+      if (this._tabNeeds('log')) this._safe(() => this._renderLogTab());
 
       const d = new Date();
       if (this._el('date')) {
@@ -4298,7 +4477,7 @@
       });
 
       this._safe(() => { this._renderWhy(); this._applySimple(); });
-      if (this._activeTab === 'main') this._drawPowerflow();
+      this._drawPowerflow();
     }
 
     // sensor „Widok planu” (dlaczego, tabela planu, nadpisania, historia SOC) — liczy integracja
@@ -4335,6 +4514,7 @@
         const sw = this._el('simpleWrap'); if (sw) sw.style.display = on ? '' : 'none';
         if (on && ['charts', 'log', 'dev'].includes(this._activeTab)) { const m = root.querySelector('.tab[data-tab="main"]'); if (m) m.click(); }
         if (!on && sw) { sw.innerHTML = ''; sw.dataset.k = ''; }
+        this._applyLayout(); this._layRefreshTab();   // przeniesienia obowiązują tylko poza trybem prostym
       }
       if (on) this._renderSimple();
     }
@@ -4784,7 +4964,7 @@
     }
 
     _drawPowerflow() {
-      if (!this.isConnected || this._activeTab !== 'main') return;
+      if (!this.isConnected || !this._tileOn('main-flow')) return;
       const box = this._el('nodesBox');
       if (!box) return;
 
@@ -5725,8 +5905,11 @@
     }
     connectedCallback() { /* bez pętli animacji karty głównej */ }
     disconnectedCallback() { /* nic do sprzątania */ }
+    // mała karta korzysta tylko ze stylu i motywu konta — układu panelu nie ma
+    _prefsApplied() { this._applyTheme(); this._miniKey = null; if (this._hass && this.shadowRoot) this._miniDraw(); }
     set hass(hass) {
       this._hass = hass;
+      PREFS.attach(this, hass);
       try { const bs = Number(this._rsAttrs().battery_charge_sign); if (bs === 1 || bs === -1) INVERT_BATTERY_SIGN = (bs === -1); } catch (e) { /* zostaje poprzednia wartość */ }
       if (!this.shadowRoot) this.attachShadow({ mode: 'open' });
       if (!this._miniInit) {

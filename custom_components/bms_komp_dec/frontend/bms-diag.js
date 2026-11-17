@@ -558,11 +558,11 @@
         case 'alarm-dismiss': { const al = DG_LS.get('bms_diag_alarms', []); al.splice(Number(t.dataset.i), 1); DG_LS.set('bms_diag_alarms', al); this._dgRenderAlarmBox(); this._dgSyncTab(); break; }
         case 'log-undo': this._dgLogUndo(Number(t.dataset.i)); break;
         case 'skin': this._setSkin(t.dataset.skin); this._dgRenderSection(); break;
-        case 'lay-tab': this._dgLayTab = t.dataset.lt; this._dgRenderSection(); break;
+        case 'lay-tab': this._dgLayTab = t.dataset.lt; this._dgLayNote = ''; this._dgRenderSection(); break;
         case 'lay-up': case 'lay-down': this._layoutMove(t.dataset.lt, t.dataset.id, act === 'lay-up' ? -1 : 1); this._dgRenderSection(); this._dgLayRefocus(act, t.dataset.id); break;
         case 'lay-eye': this._layoutToggle(t.dataset.id); this._dgRenderSection(); this._dgLayRefocus('lay-eye', t.dataset.id); break;
-        case 'lay-reset-tab': this._layoutReset(t.dataset.lt); this._dgRenderSection(); break;
-        case 'lay-reset-all': this._layoutReset(); this._dgRenderSection(); break;
+        case 'lay-reset-tab': this._layoutReset(t.dataset.lt); this._dgLayNote = ''; this._dgRenderSection(); break;
+        case 'lay-reset-all': this._layoutReset(); this._dgLayNote = ''; this._dgRenderSection(); break;
         case 'setlog-undo': this._dgSetLogUndo(Number(t.dataset.i)); break;
         case 'log-clear': if (confirm('Wyczyścić dziennik zmian (jest zapisany w Home Assistant)?')) { DG_LS.set('bms_diag_log', []); this._dgRenderSection(); } break;
         case 'alarm-hist': this._dgAlarmHistory(); break;
@@ -575,6 +575,13 @@
     _dgSectionRefresh() { this._dgRenderSection(); },
     _dgOnInput(e, isChange) {
       const t = e.target; const s = this._dgS();
+      if (isChange && t.dataset && t.dataset.layMove !== undefined) {
+        const id = t.dataset.layMove, to = t.value; if (!to) return;
+        if (this._layoutMoveTo(id, to)) this._dgLayNote = `Przeniesiono „${this._layLabel(id)}” na zakładkę ${this._layTabLabel(to)} — jest na jej końcu.`;
+        this._dgRenderSection();
+        const f = this.shadowRoot.querySelector('#dgLayout [data-lay-move], #dgLayout [data-act="lay-reset-tab"]'); if (f && f.focus) f.focus();
+        return;
+      }
       if (t.dataset && t.dataset.nk !== undefined) { this._dgNtField(t); return; }
       if (t.dataset && t.dataset.modeNum !== undefined) { t.classList.toggle('dirty', String(t.value).trim() !== String(t.dataset.orig || '').trim()); return; }
       if (t.dataset && t.dataset.eid && t.dataset.orig !== undefined) {
@@ -1613,7 +1620,7 @@
     _dgSec_look() {
       const cur = this._resolveSkin();
       const opt = (k, sub) => `<button class="dg-skin ${cur === k ? 'on' : ''}" data-act="skin" data-skin="${k}" aria-pressed="${cur === k}"><b>${dgEsc(SKINS_LABEL[k])}</b><span>${sub}</span></button>`;
-      return `<div class="dg-card"><h4>Styl wyglądu panelu</h4><div class="sub">Zmienia kolory, zaokrąglenia i dolny pasek zakładek. Układ i dane zostają takie same. Jasny / ciemny motyw przełączasz w nagłówku panelu — styl działa z oboma. Wybór jest zapamiętany w tej przeglądarce (każde urządzenie ma własny).</div>
+      return `<div class="dg-card"><h4>Styl wyglądu panelu</h4><div class="sub">Zmienia kolory, zaokrąglenia i dolny pasek zakładek. Układ i dane zostają takie same. Jasny / ciemny motyw przełączasz w nagłówku panelu — styl działa z oboma. ${dgEsc(this._prefsNote())}</div>
         <div class="dg-skins">${Object.keys(SKINS_LABEL).map(k => opt(k, SKINS_SUB[k])).join('')}</div>
         <div class="sub" style="margin-top:10px;">Style „Szkło”, „Matryca”, „Przestrzeń” i „Komfort” to własne projekty inspirowane znanymi kierunkami wizualnymi — nie kopie cudzych interfejsów. Na ekranie głównym mają własny układ; w kartach Plan i Ustawienia zmieniają kolory, zaokrąglenia i pasek zakładek.</div></div>${this._dgLayoutCard()}`;
     },
@@ -1623,16 +1630,19 @@
       const G = this._layoutGroups(), st = this._layoutState();
       const cur = G.find((g) => g.tab === this._dgLayTab) || G[0];
       const pills = G.map((g) => `<button class="dg-pill ${g.tab === cur.tab ? 'on' : ''}" data-act="lay-tab" data-lt="${dgEsc(g.tab)}" aria-pressed="${g.tab === cur.tab}">${dgEsc(g.label)}</button>`).join('');
-      const ord = st.orders[cur.tab], label = Object.fromEntries(cur.tiles);
+      const ord = st.orders[cur.tab], simple = this._laySimple();
       const rows = ord.map((id, i) => {
-        const off = st.hidden.has(id), nm = dgEsc(label[id] || id);
+        const off = st.hidden.has(id), nm = dgEsc(this._layLabel(id)), home = this._layHomeOf(id);
+        const from = !cur.fixed && home !== cur.tab ? ` <small>(z: ${dgEsc(this._layTabLabel(home))})</small>` : '';
+        const mt = cur.fixed || simple ? '' : `<select data-lay-move="${dgEsc(id)}" aria-label="Przenieś na zakładkę: ${nm}" title="Przenieś na inną zakładkę (na jej koniec)"><option value="">⇄ Przenieś…</option>${G.filter((x) => !x.fixed && x.tab !== cur.tab).map((x) => `<option value="${dgEsc(x.tab)}">${dgEsc(x.label)}${x.tab === home ? ' (domyślna)' : ''}</option>`).join('')}</select>`;
         const mv = cur.fixed ? '' : `<button class="dg-btn sec" data-act="lay-up" data-lt="${dgEsc(cur.tab)}" data-id="${dgEsc(id)}" aria-label="Przesuń wyżej: ${nm}" title="Wyżej" ${i === 0 ? 'disabled' : ''}>↑</button><button class="dg-btn sec" data-act="lay-down" data-lt="${dgEsc(cur.tab)}" data-id="${dgEsc(id)}" aria-label="Przesuń niżej: ${nm}" title="Niżej" ${i === ord.length - 1 ? 'disabled' : ''}>↓</button>`;
-        return `<div class="dg-lay-row ${off ? 'off' : ''}" data-tile-row="${dgEsc(id)}"><span class="dg-lay-i">${cur.fixed ? '•' : i + 1}</span><span class="dg-lay-n"><b>${nm}</b></span><span class="dg-lay-b">${mv}<button class="dg-btn ${off ? 'green' : 'sec'}" data-act="lay-eye" data-id="${dgEsc(id)}" aria-pressed="${!off}" aria-label="${off ? 'Pokaż' : 'Ukryj'}: ${nm}">${off ? '👁 Pokaż' : '🚫 Ukryj'}</button></span></div>`;
+        return `<div class="dg-lay-row ${off ? 'off' : ''}" data-tile-row="${dgEsc(id)}"><span class="dg-lay-i">${cur.fixed ? '•' : i + 1}</span><span class="dg-lay-n"><b>${nm}</b>${from}</span><span class="dg-lay-b">${mv}${mt}<button class="dg-btn ${off ? 'green' : 'sec'}" data-act="lay-eye" data-id="${dgEsc(id)}" aria-pressed="${!off}" aria-label="${off ? 'Pokaż' : 'Ukryj'}: ${nm}">${off ? '👁 Pokaż' : '🚫 Ukryj'}</button></span></div>`;
       }).join('');
       const hidN = st.hidden.size;
-      return `<div class="dg-card" id="dgLayout"><h4>Układ panelu</h4><div class="sub">Ułóż kafelki w kolejności, która Ci odpowiada, i ukryj te, których nie potrzebujesz — osobno dla każdej zakładki. Zmiana działa od razu. Układ zapisuje się w tej przeglądarce (każdy użytkownik i urządzenie mają własny), więc nie wpływa na innych domowników. Ukrycie kafelka nie wyłącza żadnej funkcji EMS — tylko go nie pokazuje. Alerty (cena, próg falownika, status) zawsze zostają widoczne.</div>
+      return `<div class="dg-card" id="dgLayout"><h4>Układ panelu</h4><div class="sub">Ułóż kafelki w kolejności, która Ci odpowiada, ukryj te, których nie potrzebujesz, albo przenieś je na inną zakładkę (trafiają na jej koniec) — osobno dla każdej zakładki. Zmiana działa od razu. ${dgEsc(this._prefsNote())} Ukrycie kafelka nie wyłącza żadnej funkcji EMS — tylko go nie pokazuje. Alerty (cena, próg falownika, status) zawsze zostają widoczne.</div>
         <div class="dg-lay-nav" role="group" aria-label="Zakładka">${pills}</div>
-        <div id="dgLayRows">${rows}</div>
+        <div id="dgLayRows">${rows || '<div class="sub">Na tej zakładce nie ma teraz żadnych kafelków — przenieś tu kafelki z innych zakładek.</div>'}</div>
+        <div class="sub" id="dgLayNote" aria-live="polite" style="margin:6px 0 0;color:var(--accent);">${dgEsc(this._dgLayNote || '')}</div>
         <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px;align-items:center;"><button class="dg-btn sec" data-act="lay-reset-tab" data-lt="${dgEsc(cur.tab)}">↺ Przywróć tę zakładkę</button><button class="dg-btn sec" data-act="lay-reset-all" ${st.custom ? '' : 'disabled'}>↺ Przywróć cały domyślny układ</button><span class="sub" style="margin:0;">${st.custom ? (hidN ? `Ukryte kafelki: ${hidN}.` : 'Własna kolejność.') : 'Układ domyślny.'}</span></div></div>`;
     },
     // po przerysowaniu karty wracamy fokusem na ten sam przycisk (obsługa klawiaturą)

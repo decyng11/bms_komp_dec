@@ -64,11 +64,14 @@ async function openCard(browser, opts = {}) {
     sens('inverter_today_production',8.2,'kWh','Inverter Today Production');
     states['sensor.inverter_fault']=S('None',{friendly_name:'Inverter Fault'});states['sensor.inverter_alert']=S('F35',{friendly_name:'Inverter Alert'});
     window.__calls=[];window.__ws=[];window.__states=states;
-    const mk=()=>({states:JSON.parse(JSON.stringify(window.__states)),entities:{},user:{name:'Admin',is_admin:window.__admin!==false},language:'pl',
+    const mk=()=>({states:JSON.parse(JSON.stringify(window.__states)),entities:{},user:Object.assign({name:'Admin',is_admin:window.__admin!==false},window.__uid?{id:window.__uid}:{}),language:'pl',
       callService:async(d,s,data)=>{window.__calls.push([d,s,data]);const eid=data.entity_id;const st=window.__states[eid];
         setTimeout(()=>{ if(window.__noconfirm) return; if(d==='number')st.state=String(data.value);else if(d==='select')st.state=data.option;else if(d==='switch')st.state=s==='turn_on'?'on':'off';else if(d==='time')st.state=data.time;
           st.last_updated=new Date().toISOString(); window.__el.hass=mk();},300);},
       callWS:async(m)=>{window.__ws.push(m.type);
+        // dane użytkownika HA (frontend/get_user_data, set_user_data) — osobne dla każdego window.__uid, trwałe w obrębie strony (jak serwer HA)
+        if(m.type==='frontend/get_user_data'){if(window.__udFail)throw (window.__udFail===true?new Error('boom'):window.__udFail);window.__ud=window.__ud||{};const v=window.__ud[(window.__uid||'')+'|'+m.key];return{value:v===undefined?null:JSON.parse(JSON.stringify(v))};}
+        if(m.type==='frontend/set_user_data'){if(window.__udFail)throw (window.__udFail===true?new Error('boom'):window.__udFail);window.__ud=window.__ud||{};window.__udSets=window.__udSets||[];window.__ud[(window.__uid||'')+'|'+m.key]=JSON.parse(JSON.stringify(m.value));window.__udSets.push({uid:window.__uid,key:m.key,value:JSON.parse(JSON.stringify(m.value))});return null;}
         if(m.type==='history/history_during_period'){const out={};const t1=Date.now(),t0=new Date(m.start_time).getTime();(m.entity_ids||[]).forEach(e=>{out[e]=[];for(let i=0;i<200;i++){const t=t0+(t1-t0)*i/200;out[e].push({s:String(50+30*Math.sin(i/12)),lu:t/1000});}});
           if(String(m.entity_ids).includes('inverter_alert')){out['sensor.inverter_alert']=[{s:'None',lu:t0/1000},{s:'F35',lu:(t1-3600e3)/1000}];}return out;}
         if(m.type==='recorder/statistics_during_period'){const out={};m.statistic_ids.forEach(e=>{out[e]=[];for(let i=0;i<100;i++)out[e].push({start:new Date(m.start_time).getTime()+i*3600e3,mean:10+i%7});});return out;}

@@ -79,7 +79,7 @@
         this._safe(() => this._exPlus());
       },
       _exLog() {
-        if (this._activeTab !== 'log') return;
+        if (!this._tabNeeds('log')) return;
         this._exInsights();
         this._exReport();
         this._exHealth();
@@ -118,7 +118,7 @@
 
       _exPlan() {
         const box = this._el('exPlanBox');
-        if (!box || (this._activeTab !== 'ems' && this._activeTab !== 'charts')) return;
+        if (!box || (!this._tabNeeds('ems') && !this._tabNeeds('charts'))) return;
         const s = this._exS();
         if (!box.dataset.exBound) {
           box.dataset.exBound = '1';
@@ -786,18 +786,18 @@
       _exPlus() {
         const root = this.shadowRoot; if (!root) return;
         if (!root.getElementById('exPlusStyle')) { const st = document.createElement('style'); st.id = 'exPlusStyle'; st.textContent = PLUS_CSS; root.appendChild(st); }
-        if (this._activeTab === 'ems' || this._activeTab === 'charts') {
+        if (this._tabNeeds('ems') || this._tabNeeds('charts')) {
           this._safe(() => this._exOvr());
           this._safe(() => this._exTable());
           this._safe(() => this._exHist());
         }
-        if (this._activeTab === 'log') this._safe(() => this._exAnalysis());
+        if (this._tabNeeds('log')) this._safe(() => this._exAnalysis());
         this._safe(() => this._exMain());
       },
 
       // ------------------------------------------------------------ ekran główny: rachunek dnia i znaczniki aktywnych nadpisań
       _exMain() {
-        const box = this._el('exMainBox'); if (!box || this._activeTab !== 'main') return;
+        const box = this._el('exMainBox'); if (!box || !this._tileOn('main-plan')) return;
         const a = this._pvAttrs ? this._pvAttrs() : {};
         const ps = this._hass.states[this._eid('sensor', 'profit_today')];
         const pa = (ps && ps.attributes) || {};
