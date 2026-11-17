@@ -418,6 +418,8 @@
     & select, & input[type="time"], & input[type="number"] { border-radius: 14px; background: var(--input-bg); border: 1px solid var(--line); }
     & .sk-strip i { border-radius: 8px; }
     @media (max-width: 719px) { & .app { padding: 14px; border-radius: 30px; } }
+    @media (max-width: 380px) { & .header .title .logo { height: 30px; } & .hdr-r { gap: 6px; } & .bell { width: 36px; } & .theme-seg button { width: 31px; } }
+    @media (max-width: 335px) { & .header .title .logo { height: 26px; } & .hdr-r { gap: 5px; } & .bell { width: 34px; } & .theme-seg button { width: 29px; } }
     @media (min-width: 720px) {
       & .app { display: grid; grid-template-columns: 68px minmax(0, 1fr); column-gap: 18px; align-items: start; }
       & .app > * { grid-column: 2; min-width: 0; }
@@ -435,6 +437,9 @@
     &D { --bg:#000; --card:#1c1d21; --surface:#1c1d21; --line:rgba(255,255,255,0.09); --text:#f3f4f6; --text2:#d4d7de; --muted:#9a9fab; --muted2:#7d828d; --accent:#5b9bff; --green:#3ddc8c; --orange:#ffb04a; --red:#ff6f74; --input-bg:#2a2c32; --seg-bg:#2a2c32; --seg-active:#3a3d45; --pf-bg:#1c1d21; --tab-on:rgba(91,155,255,0.2); --tab-on-fg:#7eb0ff; --tab-off:#9a9fab; --tab-bg:#121316; --sk-pv:#ffb04a; --sk-grid:#4cc3ff; --sk-sell:#a58bff; --sk-batt:#3ddc8c; --sk-idle:#33353c; color-scheme: dark; }
     & .header { min-height: 92px; align-items: flex-end; padding: 22px 8px 6px; }
     & .header .title .logo { height: 44px; }
+    @media (max-width: 480px) { & .header { padding: 16px 4px 6px; min-height: 0; } & .header .title .logo { height: 34px; } }
+    @media (max-width: 400px) { & .header .title .logo { height: 30px; } }
+    @media (max-width: 335px) { & .header .title .logo { height: 26px; } }
     & .date { font-size: 13.5px; }
     & .chart-card, & .soc-card, & .pf-wrapper, & .sk-card, & .dg-card { background: var(--card); border: none; border-radius: 28px; box-shadow: none; }
     & .weather-tile, & .ds-item, & .sk-kpi, & .suggest-item, & .why-box { background: var(--card); border: none; border-radius: 22px; box-shadow: none; }
@@ -884,6 +889,9 @@
     .theme-seg { display: inline-flex; padding: 3px; background: var(--seg-bg); border-radius: 999px; flex: none; }
     .theme-seg button { border: none; background: transparent; color: var(--muted); width: 34px; height: 30px; border-radius: 999px; cursor: pointer; font-size: 15px; line-height: 1; padding: 0; }
     .theme-seg button.active { background: var(--seg-active); color: var(--text); box-shadow: 0 1px 4px rgba(0,0,0,0.18); }
+    /* wąski telefon: logo i przyciski o kilka pikseli mniejsze, żeby nagłówek mieścił się w jednym wierszu (370 px i mniej, a potem 335 px i mniej); po definicjach .bell i .theme-seg, żeby je nadpisać */
+    @media (max-width: 370px) { .header { gap: 8px; } .header .title .logo { height: 30px; } .hdr-r { gap: 6px; } .bell { width: 36px; } .theme-seg button { width: 31px; } }
+    @media (max-width: 335px) { .header .title .logo { height: 26px; } .hdr-r { gap: 5px; } .bell { width: 34px; } .theme-seg button { width: 29px; } }
     .tabs { background: var(--seg-bg); border-radius: 14px; padding: 3px; }
     .tab { border-radius: 11px; color: var(--text2); font-weight: 600; }
     /* pasek zakładek na dole: pływająca „wyspa” z pełnym tłem, ikony z podpisami, aktywna zakładka jako pastylka */
@@ -5780,7 +5788,7 @@
   // =====================================================================
   // Wersja tego pliku (ustawiana skryptem pakującym z manifest.json). Każdy moduł niesie tę samą w install.version:
   // gdy się różnią, przeglądarka podała starą kopię modułu z pamięci podręcznej.
-  const CARD_VERSION = '0.9.5.4';
+  const CARD_VERSION = '0.9.5.5';
   const MOD_TIMEOUT_MS = 20000;
   const MODULES = {
     diag:   { file: 'bms-diag.js',   global: '__bmsDiagInstall',   contract: 1, label: 'Diagnostyki', p: null, ready: false, err: '', got: '' },

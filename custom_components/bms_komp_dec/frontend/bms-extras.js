@@ -987,6 +987,6 @@
 
   };
   install.contract = 1;
-  install.version = '0.9.5.4';
+  install.version = '0.9.5.5';
   window.__bmsExtrasInstall = install;
 })();
