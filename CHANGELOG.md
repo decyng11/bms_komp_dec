@@ -1,3 +1,10 @@
+# EMS komp-dec — w przygotowaniu (po 0.9.5.5)
+
+- **Zysk → „Symulacja roczna i zwrot z inwestycji”: tabela mieści się na telefonie.** Miała sztywne minimum 380 px, więc na wąskiej karcie kolumna „Rocznie” była ucięta (trzeba było przewijać w bok). Teraz nazwa scenariusza zawija się do kilku wierszy, kwoty są w pełnych złotych (z odstępem tysięcy), a tabela zawsze mieści się w karcie (sprawdzone od 320 do 390 px we wszystkich sześciu stylach).
+- **Chipy z oszczędnościami** pisały „~−2513,89 zł” (tylda i minus obok siebie) i zawsze były zielone, nawet przy wartości ujemnej. Teraz jest „≈ −2 514 zł / rok”, a ujemna wartość jest żółta, nie zielona.
+- **Ostrzeżenie, gdy „Samo PV” wychodzi drożej niż „Bez PV”.** To nie może się zdarzyć przy dodatnich cenach, więc panel pisze wprost, że w danych są godziny z ujemną ceną (zakupu lub sprzedaży) albo błędne ceny, i że wynik roczny jest wtedy niewiarygodny — zamiast prezentować „PV oszczędza −2513 zł”.
+- Nowy test `sim_table_test.js` (dane z prawdziwego zrzutu, 6 styli × 320/360/390 px).
+
 # EMS komp-dec — zmiany w 0.9.5.5 (z 0.9.5.4)
 
 - **Wszystkie style pokazują na ekranie głównym te same dane.** Wcześniej Material 3, Szkło, Matryca, Przestrzeń i Komfort gubiły część informacji, które miał styl klasyczny, a klasyczny nie miał „Zysku dziś”. Teraz każdy styl pokazuje: „Do rezerwy”, „Przy tym tempie” (także gdy bateria stoi — wtedy liczone z bieżącego zużycia domu), „Straty falownika (szac.)”, dzienne kWh przy PV, domu, sieci i baterii oraz „Zysk dziś”; styl klasyczny dostał „Zysk dziś”. Gdy integracja nie podaje pojemności baterii, pole do jej wpisania jest teraz w każdym stylu. Kliknięcie węzła (PV, dom, sieć, bateria) otwiera mini wykres 24 h we wszystkich stylach, nie tylko w klasycznym. Style różnią się już tylko wyglądem.
