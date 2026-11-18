@@ -4,6 +4,9 @@
 - **Chipy z oszczędnościami** pisały „~−2513,89 zł” (tylda i minus obok siebie) i zawsze były zielone, nawet przy wartości ujemnej. Teraz jest „≈ −2 514 zł / rok”, a ujemna wartość jest żółta, nie zielona.
 - **Ostrzeżenie, gdy „Samo PV” wychodzi drożej niż „Bez PV”.** To nie może się zdarzyć przy dodatnich cenach, więc panel pisze wprost, że w danych są godziny z ujemną ceną (zakupu lub sprzedaży) albo błędne ceny, i że wynik roczny jest wtedy niewiarygodny — zamiast prezentować „PV oszczędza −2513 zł”.
 - Nowy test `sim_table_test.js` (dane z prawdziwego zrzutu, 6 styli × 320/360/390 px).
+- **Naprawa: auto-stosowanie nie stosowało okien ładowania nocnego, które przechodzą przez północ.** Zabezpieczenie „maks. przesunięcie godzin” liczyło różnicę godzin na prostej: zmiana startu z 23:00 na 01:00 wychodziła jako „22 h”, a z 01:00 na 19:00 jako „18 h”, choć naprawdę to 2 h i 6 h. Suwak limitu kończy się na 12 h, więc takie okno nie miało szans przejść i propozycja wisiała w „Do decyzji” (widać to w powiadomieniu o propozycji jako „przesunięcie 18.0 h > limit 4 h”). Teraz przesunięcie liczy się krótszą drogą przez północ.
+- **Okno ładowania WYMAGANE przez plan** (bateria nie wystarczy do rana; w „Do decyzji” z plakietką „WYMAGANE”) nie podlega już limitowi przesunięcia. To zabezpieczenie, nie decyzja zarobkowa, a jego start wynika z potrzebnej energii i potrafi się zmienić o kilka godzin z dnia na dzień — limit blokował je dokładnie wtedy, gdy było potrzebne. Pozostałe zabezpieczenia działają jak dotąd (trwa ładowanie lub sprzedaż, niska pewność, odrzucone propozycje, spójność pary START/STOP, tryb „tylko podgląd”). Okna „zarobkowe” (np. sprzedaż z baterii) nadal pilnuje limit.
+- Nowy test `test_autoapply_shift.py` (odległość przez północ, zrzut „01:00 → 19:00, STOP 03:00”, ścieżka na żywo).
 
 # EMS komp-dec — zmiany w 0.9.5.5 (z 0.9.5.4)
 

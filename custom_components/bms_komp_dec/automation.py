@@ -330,6 +330,14 @@ def _minutes(hm: str | None) -> int | None:
     return int(hm[:2]) * 60 + int(hm[3:5])
 
 
+def _shift_hours(cur_m: int, new_m: int) -> float:
+    """Odległość między dwiema porami doby w godzinach, krótszą drogą przez północ (23:00 → 01:00 to 2 h, nie 22 h).
+    Godziny okien to pory doby, więc liczenie „na prostej” zawyżało przesunięcie okien nocnych do ~22 h, a suwak limitu
+    kończy się na 12 h — takie okno nigdy nie przechodziło zabezpieczenia."""
+    d = abs(int(new_m) - int(cur_m)) % 1440
+    return min(d, 1440 - d) / 60.0
+
+
 async def apply_times(hass: HomeAssistant, times: dict[str, Any]) -> tuple[int, list[str]]:
     """Zapisuje godziny do encji time.bms_*. Zwraca (zastosowane, pominięte)."""
     applied = 0
@@ -407,8 +415,12 @@ async def async_auto_apply(runtime, hass: HomeAssistant, result: dict[str, Any],
             continue
         cur_m, new_m = _minutes(cur), _minutes(proposed)
         # Zabezpieczenie 2: limit przesunięcia względem aktualnego ustawienia (puste okno nie ma czego „przesuwać”).
-        if max_shift > 0 and cur_m not in (None, 0) and new_m is not None and not _window_empty(hass, key):
-            shift_h = abs(new_m - cur_m) / 60.0
+        # Dotyczy propozycji „zarobkowych”. Okno WYMAGANE przez plan (bateria nie wystarczy do rana) to zabezpieczenie,
+        # a nie decyzja o zysku — jego start zależy od potrzebnej energii i zmienia się z dnia na dzień nawet o kilka godzin,
+        # więc limit nie może go blokować (wtedy auto-stosowanie nigdy nie zadziałałoby dokładnie wtedy, gdy jest potrzebne).
+        if (max_shift > 0 and not p.get("required") and cur_m not in (None, 0) and new_m is not None
+                and not _window_empty(hass, key)):
+            shift_h = _shift_hours(cur_m, new_m)
             if shift_h > max_shift:
                 skipped.append(f"{key}: przesunięcie {shift_h:.1f} h > limit {max_shift:.0f} h")
                 continue

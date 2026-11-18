@@ -95,7 +95,7 @@ Integracja potrafi sama znaleźć w Home Assistancie liczniki kWh (pralka, pompa
 ## Zabezpieczenia
 
 - Po instalacji zapis do falownika i automatyczne stosowanie planu są wyłączone. Przełącznik „Auto-stosowanie: tylko podgląd” pokazuje, co plan by zrobił, bez zapisu.
-- Auto-stosowanie ma limit przesunięcia godzin, pilnuje spójności par START/STOP, nie rusza trwających operacji i można je cofnąć.
+- Auto-stosowanie ma limit przesunięcia godzin (liczony krótszą drogą przez północ; nie dotyczy okna ładowania wymaganego przez plan), pilnuje spójności par START/STOP, nie rusza trwających operacji i można je cofnąć.
 - Komendy są weryfikowane odczytem zwrotnym, a wartość, która zmieniła się po zapisie, wywołuje powiadomienie.
 - Ochrona przyłącza (Deye): w zakładce EMS ustawiasz własny limit poboru z sieci (kW) i opcjonalnie sufit mocy ładowania z sieci. Gdy dom i ładowanie baterii go przekraczają, EMS zmniejsza prąd ładowania, a gdy jest zapas, przywraca go. Domyślnie wyłączone.
 - Blokada sprzedaży z baterii, gdy chwilowy import z sieci albo import z całego dnia jest za duży.
