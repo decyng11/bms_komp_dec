@@ -562,6 +562,9 @@
         case 'nt-reload': this._dgNtLoad(true); break;
         case 'st-run': this._dgStRun(); break;
         case 'st-copy': this._dgStCopy(); break;
+        case 'st-report': this._dgStReport(); break;
+        case 'st-report-copy': this._dgStReportCopy(); break;
+        case 'st-report-dl': this._dgStReportDl(); break;
         case 'nt-all': this._dgNtAll(t.dataset.g, t.dataset.v === '1'); break;
         case 'mode-save': this._dgModesSave(t.dataset.k); break;
         case 'press': this._dgPress(t.dataset.eid); break;
@@ -1424,6 +1427,48 @@
     _dgSec_selftest() { return `<div id="dgSt">${this._dgStHtml()}</div>`; },
     _dgAfter_selftest() { const st = this._dgStState(); if (!st.data && !st.loading && !st.err) this._dgStRun(); },
     _dgStState() { const s = this._dgS(); if (!s.st) s.st = { data: null, loading: false, err: '', copied: '' }; return s.st; },
+    // Raport do zgłoszenia: jedna usługa po stronie integracji (zamazuje adresy, numery seryjne, e-maile, usługę powiadomień i nigdy nie
+    // dołącza hasła), tu tylko kopiowanie i pobieranie. Kopiowanie po dłuższym wywołaniu usługi bywa blokowane przez przeglądarkę
+    // (brak „gestu użytkownika”) — wtedy zostaje przycisk „Kopiuj” i pole tekstowe do ręcznego skopiowania.
+    _dgRepState() { const st = this._dgStState(); if (!st.rep) st.rep = { loading: false, text: '', filename: '', msg: '', show: false }; return st.rep; },
+    _dgRepMsg(msg) { const rep = this._dgRepState(); rep.msg = msg; const m = this._el('dgRepMsg'); if (m) m.textContent = msg; },
+    async _dgRepClip(txt) {
+      try { if (navigator.clipboard && window.isSecureContext) { await navigator.clipboard.writeText(txt); return true; } } catch (e) { /* spróbujemy zaznaczenia */ }
+      const ta = this._el('dgRepTxt'); let ok = false;
+      if (ta) { const prev = ta.style.display; ta.style.display = 'block'; ta.focus(); ta.select(); try { ok = document.execCommand('copy'); } catch (e) { ok = false; } if (ok) ta.style.display = prev; }
+      return ok;
+    },
+    async _dgStReport() {
+      const rep = this._dgRepState(); if (rep.loading) return;
+      rep.loading = true; rep.msg = ''; rep.show = false; this._dgStPaint();
+      let txt = '';
+      try {
+        const r = await dgCall(this, 'diagnostic_report', {}, true); const x = (r && (r.response || r)) || {};
+        if (!x.text) throw new Error('pusta odpowiedź integracji');
+        rep.text = String(x.text); rep.filename = String(x.filename || 'ems-raport.txt'); txt = rep.text;
+      } catch (e) { rep.text = ''; rep.msg = '❌ Nie udało się zebrać raportu: ' + ((e && e.message) ? e.message : String(e)) + ' (wymaga konta administratora i integracji z tą funkcją)'; }
+      rep.loading = false; this._dgStPaint();
+      if (txt) {
+        const ok = await this._dgRepClip(txt);
+        rep.show = !ok;
+        this._dgStPaint();
+        this._dgRepMsg(ok ? '✅ Raport skopiowany — wklej go w zgłoszeniu (adresy i numery seryjne są zamazane).' : 'Raport gotowy — kliknij „Kopiuj” albo „Pobierz .txt” (przeglądarka zablokowała automatyczne kopiowanie).');
+      }
+    },
+    async _dgStReportCopy() {
+      const rep = this._dgRepState(); if (!rep.text) return;
+      const ok = await this._dgRepClip(rep.text); rep.show = !ok; this._dgStPaint();
+      this._dgRepMsg(ok ? '✅ Skopiowano raport.' : 'Zaznacz tekst w polu poniżej i skopiuj go ręcznie.');
+    },
+    _dgStReportDl() {
+      const rep = this._dgRepState(); if (!rep.text) return;
+      try {
+        const url = URL.createObjectURL(new Blob([rep.text], { type: 'text/plain;charset=utf-8' }));
+        const a = document.createElement('a'); a.href = url; a.download = rep.filename || 'ems-raport.txt'; a.style.display = 'none';
+        document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(url), 4000);
+        this._dgRepMsg('⬇ Pobrano ' + (rep.filename || 'ems-raport.txt'));
+      } catch (e) { rep.show = true; this._dgStPaint(); this._dgRepMsg('Pobieranie nie powiodło się — skopiuj tekst z pola poniżej.'); }
+    },
     _dgStPaint() { const box = this._el('dgSt'); if (box && this._dgS().sec === 'selftest') box.innerHTML = this._dgStHtml(); },
     async _dgStRun() {
       const st = this._dgStState(); if (st.loading) return;
@@ -1431,6 +1476,29 @@
       try { const r = await dgCall(this, 'self_test', {}, true); st.data = (r && (r.response || r)) || null; }
       catch (e) { st.err = (e && e.message) ? e.message : String(e); }
       st.loading = false; this._dgStPaint();
+    },
+    // Historia ostatnich prób auto-stosowania (atrybut auto_hist czujnika stanu monitora): kiedy, skąd, co zastosowano / dlaczego nie.
+    _dgAutoHist() {
+      const ma = ((this._hass && this._hass.states[this._eid('sensor', 'monitor_status')]) || {}).attributes || {};
+      return Array.isArray(ma.auto_hist) ? ma.auto_hist : [];
+    },
+    _dgAutoHistRows() {
+      const src = { daily: 'codzienna propozycja', live: 'na żywo', manual: 'ręcznie' };
+      const times = (o) => Object.entries(o || {}).map(([k, v]) => `${k} → ${v}`).join(', ');
+      return this._dgAutoHist().map((h) => {
+        const parts = [];
+        if (h.applied && Object.keys(h.applied).length) parts.push(`✅ zastosowano: ${times(h.applied)}`);
+        if (h.would && Object.keys(h.would).length) parts.push(`👁 podgląd (bez zapisu): ${times(h.would)}`);
+        if (h.busy && h.busy.length) parts.push(`⏸ wstrzymane: ${h.busy.join(', ')}`);
+        if (h.why) Object.entries(h.why).forEach(([k, v]) => parts.push(`⚠️ ${k}: ${v}`));
+        return { at: String(h.at || '').slice(5, 16).replace('T', ' '), src: src[h.src] || h.src || '', parts };
+      });
+    },
+    _dgAutoHistHtml() {
+      const rows = this._dgAutoHistRows();
+      const body = rows.length ? rows.map((r) => `<div style="padding:7px 0;border-bottom:1px solid var(--line);font-size:12px;line-height:1.45;"><b>${dgEsc(r.at)}</b> <span class="dg-muted">· ${dgEsc(r.src)}</span>${r.parts.map((p) => `<div>${dgEsc(p)}</div>`).join('')}</div>`).join('')
+        : '<div class="dg-muted" style="font-size:12px;">Jeszcze nie było prób — wpis pojawia się, gdy plan zaproponuje zmianę godzin.</div>';
+      return `<details class="dg-card" id="dgAutoHist" ${rows.length ? 'open' : ''}><summary style="cursor:pointer;font-weight:600;">🤖 Historia auto-stosowania <span class="dg-muted" style="font-weight:400;">· ostatnie ${rows.length}</span></summary>${body}</details>`;
     },
     _dgStText() {
       const d = this._dgStState().data; if (!d) return '';
@@ -1443,6 +1511,8 @@
       });
       const bad = (d.commands || []).filter((c) => !c.ok);
       if (bad.length) { lines.push('', '== Komendy (podgląd)'); bad.forEach((c) => lines.push(`[BŁĄD] ${c.label}: ${c.error || ''}`)); }
+      const hist = this._dgAutoHistRows();
+      if (hist.length) { lines.push('', '== Historia auto-stosowania'); hist.forEach((r) => lines.push(`${r.at} (${r.src}): ${r.parts.join(' | ') || '—'}`)); }
       lines.push('', this._dgVerLine().replace(/<[^>]+>/g, '').replace(/&[a-z]+;/g, ' ').trim());
       return lines.join('\n');
     },
@@ -1459,10 +1529,16 @@
       if (!ok) { const ta = this._el('dgStTxt'); if (ta) ta.style.display = 'block'; }
     },
     _dgStHtml() {
-      const st = this._dgStState();
+      const st = this._dgStState(), rep = this._dgRepState();
       const head = `<div class="dg-card"><h4>🩺 Autotest</h4><div class="sub">Sprawdza na żywo falownik, prognozę PV, ceny, wykrywanie zaniku sieci, urządzenia i plan. Tylko odczyt — niczego nie zmienia w falowniku ani w ustawieniach.</div>
         <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;"><button class="dg-btn" data-act="st-run" ${st.loading ? 'disabled' : ''}>${st.loading ? 'Sprawdzam…' : '▶ Uruchom ponownie'}</button>
-        <button class="dg-btn sec" data-act="st-copy" ${st.data ? '' : 'disabled'}>📋 Kopiuj raport</button><span class="dg-muted" id="dgStMsg">${dgEsc(st.copied || '')}</span></div></div>`;
+        <button class="dg-btn sec" data-act="st-copy" ${st.data ? '' : 'disabled'}>📋 Kopiuj raport</button><span class="dg-muted" id="dgStMsg">${dgEsc(st.copied || '')}</span></div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:10px;padding-top:10px;border-top:1px solid var(--line);">
+          <button class="dg-btn" data-act="st-report" ${rep.loading ? 'disabled' : ''}>${rep.loading ? 'Zbieram raport…' : '📨 Raport do zgłoszenia'}</button>
+          ${rep.text ? '<button class="dg-btn sec" data-act="st-report-copy">📋 Kopiuj</button><button class="dg-btn sec" data-act="st-report-dl">⬇ Pobierz .txt</button>' : ''}
+          <span class="dg-muted" id="dgRepMsg">${dgEsc(rep.msg || '')}</span></div>
+        <div class="dg-muted" style="margin-top:6px;font-size:11px;">Jeden raport do wklejenia przy zgłaszaniu problemu: wersja, ustawienia, plan, auto-stosowanie (powody i historia), autotest i dziennik. Adresy, numery seryjne, e-maile i usługa powiadomień są zamazane, hasła nie trafiają do raportu.</div>
+        <textarea id="dgRepTxt" readonly style="display:${rep.show ? 'block' : 'none'};width:100%;height:220px;font-size:11px;margin-top:8px;">${dgEsc(rep.text || '')}</textarea></div>`;
       if (st.err) return head + `<div class="dg-card"><div class="dg-bad">Nie udało się uruchomić autotestu: ${dgEsc(st.err)}</div><div class="dg-muted" style="margin-top:6px;">Wymaga integracji 0.8.5 lub nowszej i konta administratora.</div></div>`;
       if (!st.data) return head + '<div class="dg-card"><div class="dg-muted">Sprawdzam…</div></div>';
       const d = st.data; const sm = d.summary || {};
@@ -1475,7 +1551,7 @@
           ${(g.checks || []).map((c) => `<div style="display:flex;gap:8px;padding:7px 0;border-bottom:1px solid var(--line);font-size:12px;line-height:1.45;">
             <span style="flex:none;">${ic[c.status] || '•'}</span><div><b>${dgEsc(c.title)}</b><div>${dgEsc(c.detail)}</div>${c.fix && c.status !== 'ok' ? `<div class="dg-muted">${dgEsc(c.fix)}</div>` : ''}</div></div>`).join('')}</details>`;
       }).join('');
-      return head + sum + groups + `<textarea id="dgStTxt" readonly style="display:none;width:100%;height:220px;font-size:11px;margin-top:8px;">${dgEsc(this._dgStText())}</textarea>`;
+      return head + sum + groups + this._dgAutoHistHtml() + `<textarea id="dgStTxt" readonly style="display:none;width:100%;height:220px;font-size:11px;margin-top:8px;">${dgEsc(this._dgStText())}</textarea>`;
     },
 
     // ======================= POWIADOMIENIA (konfigurator) =======================
@@ -1513,6 +1589,12 @@
           <button class="dg-btn sec sm" data-act="nt-defaults">↺ Domyślne</button>
           <button class="dg-btn sec sm" data-act="nt-reload">⟳ Wczytaj</button>
           <span class="dg-muted" id="dgNtMsg">${nt.dirty ? '⚠ niezapisane zmiany' : ''}</span></div></div>`;
+      const pl = ['all', 'important', 'critical'].includes(dr.phone_level) ? dr.phone_level : 'important', ar = dr.auto_read !== false;
+      const lvl = `<div class="dg-card" id="dgNtLevel"><h4>🎚 Co ma Ci przerywać dzień</h4>
+        <div class="sub">Dzwonek w panelu dostaje zawsze wszystko — nic nie ginie. Poniższy wybór dotyczy tylko telefonu i powiadomień Home Assistant.</div>
+        <div class="dg-row"><div class="nm">Poziom na telefon<small><b>krytyczne</b>: bateria, falownik, zabezpieczenia, plan zagrożony, straż poranka · <b>ważne</b>: braki danych, zmiany harmonogramu, podsumowania, ujemne ceny jutro · <b>info</b>: cykle urządzeń, podpowiedzi, ceny „do wiadomości”. Rodzaje poniżej mają przy nazwie swoją ważność.</small></div>
+          <div class="cur" style="grid-column:span 2;"><select data-nk="_global" data-nf="phone_level" id="dgNtPhoneLevel"><option value="all" ${pl === 'all' ? 'selected' : ''}>wszystkie</option><option value="important" ${pl === 'important' ? 'selected' : ''}>ważne i krytyczne (zalecane)</option><option value="critical" ${pl === 'critical' ? 'selected' : ''}>tylko krytyczne</option></select></div><div></div></div>
+        <div class="dg-row"><div class="nm"><label style="cursor:pointer;"><input type="checkbox" data-nk="_global" data-nf="auto_read" id="dgNtAutoRead" ${ar ? 'checked' : ''}/> Autoodczyt dzwonka</label><small>Informacje stają się „przeczytane” po zamknięciu okienka albo po 6 h, powtórki tego samego komunikatu zastępują starsze, a ostrzeżenie znika z nieprzeczytanych, gdy sytuacja minie. <b>Błędy i nieodhaczone ostrzeżenia zostają nieprzeczytane</b>, dopóki ich nie odhaczysz. Okienko wyskakuje samo tylko przy ostrzeżeniu lub błędzie.</small></div><div></div><div></div><div></div></div></div>`;
       const q = sc.quiet || {}, dd = sc.daily || {}, ww = sc.weekly || {}, mm = sc.monthly || {};
       const days = ['poniedziałek', 'wtorek', 'środa', 'czwartek', 'piątek', 'sobota', 'niedziela'];
       const sched = `<div class="dg-card"><h4>🌙 Cisza nocna i godziny podsumowań</h4>
@@ -1522,6 +1604,10 @@
         <div class="dg-row"><div class="nm">Podsumowanie dnia<small>włącz je niżej, w grupie „Podsumowania”</small></div><div class="cur">o godzinie</div><div class="ctl"><input type="time" data-nk="_sched" data-nf="daily.time" value="${dgEsc(dd.time || '21:00')}"/></div><div></div></div>
         <div class="dg-row"><div class="nm">Podsumowanie tygodnia</div><div class="cur">dzień i godzina</div><div class="ctl"><select data-nk="_sched" data-nf="weekly.weekday">${days.map((n, i) => `<option value="${i}" ${Number(ww.weekday) === i ? 'selected' : ''}>${n}</option>`).join('')}</select><input type="time" data-nk="_sched" data-nf="weekly.time" value="${dgEsc(ww.time || '20:00')}"/></div><div></div></div>
         <div class="dg-row"><div class="nm">Raport miesięczny<small>za poprzedni miesiąc</small></div><div class="cur">dzień i godzina</div><div class="ctl"><select data-nk="_sched" data-nf="monthly.day">${Array.from({ length: 28 }, (_, i) => `<option value="${i + 1}" ${Number(mm.day) === i + 1 ? 'selected' : ''}>${i + 1}.</option>`).join('')}</select><input type="time" data-nk="_sched" data-nf="monthly.time" value="${dgEsc(mm.time || '08:00')}"/></div><div></div></div></div>`;
+      // ważność rodzaju + informacja, że przy wybranym poziomie rodzaj trafia już tylko do dzwonka
+      const lim = { all: 3, important: 2, critical: 1 }[pl];
+      const prioTag = (c) => { const p = Number(c.prio) || 2, nm = { 1: 'krytyczne', 2: 'ważne', 3: 'info' }[p], cl = { 1: 'dg-bad', 2: 'dg-warn', 3: 'dg-muted' }[p];
+        return `<span class="${cl}" data-prio="${p}" style="font-size:10px;font-weight:600;border:1px solid currentColor;border-radius:999px;padding:0 6px;white-space:nowrap;">${nm}</span>${p > lim ? ' <span class="dg-muted" data-dzwonek="1" style="font-size:10px;white-space:nowrap;">tylko dzwonek</span>' : ''}`; };
       const cds = Array.isArray(d.cooldowns) ? d.cooldowns : [0, 5, 15, 30, 60, 180, 360, 720, 1200, 1440, 10080];
       const groups = (Array.isArray(d.groups) ? d.groups : []).map((g) => {
         const items = (d.catalog || []).filter((c) => c.group === g);
@@ -1529,7 +1615,7 @@
         const rows = items.map((c) => {
           const v = k[c.key] || c.default || {};
           const thr = c.thr ? `<label class="dg-muted" style="white-space:nowrap;">${dgEsc(c.thr.label)} <input type="number" style="width:84px;" step="${dgEsc(c.thr.step)}" min="${dgEsc(c.thr.min)}" max="${dgEsc(c.thr.max)}" data-nk="${dgEsc(c.key)}" data-nf="thr" value="${dgEsc(v.thr != null ? v.thr : c.thr.default)}"/> ${dgEsc(c.thr.unit)}</label>` : '';
-          return `<div class="dg-row" data-nt-row="${dgEsc(c.key)}" style="${v.on ? '' : 'opacity:.6;'}"><div class="nm"><label style="cursor:pointer;"><input type="checkbox" data-nk="${dgEsc(c.key)}" data-nf="on" ${v.on ? 'checked' : ''}/> ${dgEsc(c.name)}</label><small>${dgEsc(c.desc)}</small></div>
+          return `<div class="dg-row" data-nt-row="${dgEsc(c.key)}" style="${v.on ? '' : 'opacity:.6;'}"><div class="nm"><label style="cursor:pointer;"><input type="checkbox" data-nk="${dgEsc(c.key)}" data-nf="on" ${v.on ? 'checked' : ''}/> ${dgEsc(c.name)}</label> ${prioTag(c)}<small>${dgEsc(c.desc)}</small></div>
             <div class="cur"><select data-nk="${dgEsc(c.key)}" data-nf="phone"><option value="1" ${v.phone ? 'selected' : ''}>📱 telefon + HA</option><option value="0" ${v.phone ? '' : 'selected'}>🏠 tylko HA</option></select></div>
             <div class="ctl" style="flex-wrap:wrap;"><select data-nk="${dgEsc(c.key)}" data-nf="cooldown" title="najkrócej co">${cds.map((m) => `<option value="${m}" ${Number(v.cooldown) === m ? 'selected' : ''}>${dgEsc(this._dgNtCdLabel(m))}</option>`).join('')}</select>${thr}</div>
             <div><label class="dg-muted" title="wysyłaj na telefon także w ciszy nocnej" style="white-space:nowrap;"><input type="checkbox" data-nk="${dgEsc(c.key)}" data-nf="quiet_ok" ${v.quiet_ok ? 'checked' : ''}/> w ciszy</label></div></div>`;
@@ -1538,12 +1624,18 @@
         return `<div class="dg-card"><h4>${dgEsc(g)} <span class="dg-muted" style="font-weight:400;font-size:12px;">(${on}/${items.length} włączonych)</span>
           <span style="float:right;"><button class="dg-btn sec sm" data-act="nt-all" data-g="${dgEsc(g)}" data-v="1">wszystkie</button> <button class="dg-btn sec sm" data-act="nt-all" data-g="${dgEsc(g)}" data-v="0">żadne</button></span></h4>${rows}</div>`;
       }).join('');
-      return head + sched + groups;
+      return head + lvl + sched + groups;
     },
     _dgNtField(t) {
       const nt = this._dgNtState(); if (!nt.draft) return;
       const key = t.dataset.nk, f = t.dataset.nf;
       let val = t.type === 'checkbox' ? !!t.checked : t.value;
+      if (key === '_global') {
+        nt.draft[f] = val;
+        nt.dirty = true; this._dgNtPaint();     // przemalowanie: etykiety „tylko dzwonek” zależą od wybranego poziomu
+        const m0 = this._el('dgNtMsg'); if (m0) m0.textContent = '⚠ niezapisane zmiany';
+        return;
+      }
       if (key === '_sched') {
         const [a, b] = f.split('.');
         nt.draft.sched = nt.draft.sched || {}; nt.draft.sched[a] = nt.draft.sched[a] || {};
@@ -1570,7 +1662,7 @@
       const nt = this._dgNtState(); if (!nt.data) return;
       if (!confirm('Przywrócić domyślne ustawienia wszystkich powiadomień? (Zapisz, aby zatwierdzić)')) return;
       const kinds = {}; (nt.data.catalog || []).forEach((c) => { kinds[c.key] = Object.assign({}, c.default, c.thr ? { thr: c.thr.default } : {}); });
-      nt.draft = { kinds, sched: { quiet: { on: false, start: '22:00', end: '07:00' }, daily: { time: '21:00' }, weekly: { weekday: 6, time: '20:00' }, monthly: { day: 1, time: '08:00' } } };
+      nt.draft = { kinds, phone_level: 'important', auto_read: true, sched: { quiet: { on: false, start: '22:00', end: '07:00' }, daily: { time: '21:00' }, weekly: { weekday: 6, time: '20:00' }, monthly: { day: 1, time: '08:00' } } };
       nt.dirty = true; this._dgNtPaint();
     },
     async _dgNtSave() {
@@ -1787,6 +1879,6 @@
 
   };
   install.contract = 1;
-  install.version = '0.9.5.5';
+  install.version = '0.9.5.6';
   window.__bmsDiagInstall = install;
 })();

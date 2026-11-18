@@ -971,6 +971,22 @@
           } catch (e) { this._showToast('❌ ' + exErr(e), true); b.disabled = false; }
         });
       },
+      // Ujemne ceny (sprzedaży / zakupu) z godzinowych koszyków: ile godzin, ile kWh i ile to kosztowało / dało.
+      _exNegHtml(data) {
+        const neg = data && data.neg; if (!neg) return '';
+        const zl2 = (v) => { const n = exNum(v); return n === null ? '—' : exFmt(n, 2) + ' zł'; };
+        if (!(neg.sell_h > 0 || neg.buy_h > 0)) return `<div class="ex-sum"><span class="ex-chip ok">✓ ceny ujemne: brak w ostatnich ${exEsc(String(neg.days))} dobach</span></div>`;
+        let h = '';
+        if (neg.sell_h > 0) h += `<div class="ex-sum"><span class="ex-chip warn" style="white-space:normal;">📉 ujemna cena SPRZEDAŻY: ${exEsc(String(neg.sell_h))} h w ${exEsc(String(neg.sell_days))} z ${exEsc(String(neg.days))} dób · wyeksportowano ${exFmt(neg.sell_kwh, 1)} kWh · dopłata ${zl2(neg.sell_cost)}${neg.sell_cost_year > 0 ? ` (≈ ${pxZl0(neg.sell_cost_year)} / rok${neg.extrapolated ? ', ekstrapolacja' : ''})` : ''}</span></div>`;
+        if (neg.buy_h > 0) h += `<div class="ex-sum"><span class="ex-chip" style="white-space:normal;">📉 ujemna cena ZAKUPU: ${exEsc(String(neg.buy_h))} h w ${exEsc(String(neg.buy_days))} z ${exEsc(String(neg.days))} dób · pobrano ${exFmt(neg.buy_kwh, 1)} kWh · przychód ${zl2(neg.buy_gain)}</span></div>`;
+        if (neg.sell_h > 0) {
+          const thr = exNum(data.neg_threshold);
+          h += data.neg_reaction
+            ? `<div class="px-note">Reakcja na niskie/ujemne ceny jest włączona (próg ${thr === null ? '0' : exFmt(thr, 2)} zł/kWh). Dopłata dotyczy godzin sprzed jej włączenia albo nadwyżki PV, której samo wstrzymanie sprzedaży z baterii nie odcina.</div>`
+            : '<div class="px-note">💡 Włącz „Reakcja na niskie/ujemne ceny RCE” (Ustawienia): EMS przestanie wtedy sprzedawać z baterii przy cenie poniżej progu i nie dopłacisz do eksportu.</div>';
+        }
+        return h;
+      },
       _exSimHtml() {
         const an = this._exPx().an;
         if (!an.data) return an.err ? `<div class="chart-empty" style="color:var(--red);">Nie udało się wczytać: ${exEsc(an.err)}</div>` : '<div class="chart-empty">Ładowanie…</div>';
@@ -986,9 +1002,15 @@
         const sav = (ico, label, v, suffix) => { const n = exNum(v); return `<span class="ex-chip ${n !== null && n < 0 ? 'warn' : 'ok'}">${ico} ${label} ≈ ${pxZl0(v)}${suffix || ''}</span>`; };
         const sc = {}; (sim.scenarios || []).forEach(s => { sc[s.key] = exNum(s.period); });
         const pvWorse = sc.nopv != null && sc.nobat != null && sc.nobat > sc.nopv;
+        const neg = an.data.neg || null, hasNeg = !!(neg && (neg.sell_h > 0 || neg.buy_h > 0));
+        const negBox = this._exNegHtml(an.data);
+        const pvWorseTxt = !pvWorse ? '' : (hasNeg
+          ? `⚠ „Samo PV” wychodzi drożej niż „Bez PV”, bo w danych są godziny z ujemną ceną (${exEsc(String(neg.sell_h))} h sprzedaży, ${exEsc(String(neg.buy_h))} h zakupu) — to nie błąd obliczeń, ale wynik roczny jest przez to mało wiarygodny.`
+          : (neg ? `⚠ „Samo PV” wychodzi drożej niż „Bez PV”, a w ostatnich ${exEsc(String(neg.days))} dobach nie widzę godzin z ujemną ceną — więc to najpewniej błędne ceny w danych (np. zły sensor ceny zakupu/sprzedaży albo stare doby). Sprawdź ceny w zakładce „Ceny”. Wynik roczny jest niewiarygodny.`
+                 : '⚠ „Samo PV” wychodzi drożej niż „Bez PV” — to możliwe tylko przy ujemnych cenach albo błędnych cenach w danych. Wynik roczny jest niewiarygodny.'));
         return `<div class="px-tbl-wrap"><table class="px-tbl sim"><thead><tr><th style="text-align:left;">Scenariusz</th><th>${exEsc(String(sim.days))} dób</th><th>Rocznie</th></tr></thead><tbody>${rows}</tbody></table></div>`
           + `<div class="ex-sum" style="margin-top:10px;">${sav('☀️', 'PV', sv.pv, ' / rok')}${sav('🔋', 'bateria', sv.battery, ' / rok')}${sav('🤖', 'EMS', sv.ems, ' / rok')}<span class="ex-chip">razem ≈ ${pxZl0(sv.total)} / rok</span></div>`
-          + (pvWorse ? '<div class="ex-sum"><span class="ex-chip warn" style="white-space:normal;">⚠ „Samo PV” wychodzi drożej niż „Bez PV” — to możliwe tylko, gdy w danych są godziny z ujemną ceną (zakupu lub sprzedaży) albo błędne ceny. Wynik roczny jest niewiarygodny.</span></div>' : '')
+          + (pvWorseTxt ? `<div class="ex-sum"><span class="ex-chip warn" style="white-space:normal;">${pvWorseTxt}</span></div>` : '') + negBox
           + (Object.keys(pb).length ? `<div class="ex-sum"><span class="ex-chip">${pb.pv_years != null ? '⏱ zwrot PV: ' + yrs(pb.pv_years) : ''}</span><span class="ex-chip">${pb.battery_years != null ? '⏱ zwrot baterii (z EMS): ' + yrs(pb.battery_years) : ''}</span><span class="ex-chip">${pb.total_years != null ? '⏱ całość: ' + yrs(pb.total_years) : ''}</span></div>` : '')
           + (sim.extrapolated ? '<div class="ex-sum"><span class="ex-chip warn">⚠ mniej niż rok danych — wynik roczny to ekstrapolacja; zimą i latem wyjdzie inaczej</span></div>' : '')
           + form + `<div class="px-note">${exEsc(sim.note || '')} „Prosta strategia” to symulacja baterii bez planera (ładuje się z nadwyżki PV, rozładowuje na dom). Nie uwzględnia opłat stałych, zmian cen ani degradacji.</div>`;
@@ -997,6 +1019,6 @@
 
   };
   install.contract = 1;
-  install.version = '0.9.5.5';
+  install.version = '0.9.5.6';
   window.__bmsExtrasInstall = install;
 })();

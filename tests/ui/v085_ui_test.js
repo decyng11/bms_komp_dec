@@ -117,7 +117,7 @@ const ST = {
   ok(await e.q(() => window.__stN === 1), 'autotest uruchomiony automatycznie raz');
   ok(t && /1 błąd/.test(t) && /Falownik i połączenie/.test(t) && /Zainstaluj Solcast/.test(t), 'autotest: podsumowanie, grupy, podpowiedzi');
   ok(await e.q(() => !__el.shadowRoot.querySelector('#dgSt img') && !window.__pwn), 'autotest: treść zescape-owana');
-  ok(await e.q(() => { const d = __el.shadowRoot.querySelectorAll('#dgSt details'); return d.length === 2 && d[0].open && d[1].open; }), 'grupy z uwagami rozwinięte');
+  ok(await e.q(() => { const d = __el.shadowRoot.querySelectorAll('#dgSt details:not(#dgAutoHist)'); return d.length === 2 && d[0].open && d[1].open; }), 'grupy z uwagami rozwinięte (bez karty historii auto-stosowania)');
   await e.q(() => { window.__clip = null; try { Object.defineProperty(navigator, 'clipboard', { value: { writeText: async (x) => { window.__clip = x; } }, configurable: true }); } catch (err) { /* */ } });
   await e.q(() => __el.shadowRoot.querySelector('[data-act="st-copy"]').click()); await sleep(300);
   const clip = await e.q(() => window.__clip || (__el.shadowRoot.getElementById('dgStTxt') || {}).value);

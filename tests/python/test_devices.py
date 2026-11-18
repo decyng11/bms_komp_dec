@@ -228,6 +228,7 @@ async def main():
     # ---------- 10. runtime: zdarzenia, plan wieczorem, zanik sieci, usługi
     hass, c, opt, rt = build()
     c.config["notify_service"] = "notify.mobile_app_tel"; hass.states.set("switch.bms_notifications_enabled", "on")
+    rt.state["notify_cfg"] = N.effective({"phone_level": "all"})      # logika powiadomień urządzeń; poziom „na telefon” ma osobny test_notify_levels.py
     rt.devices.set_devices([{"id": "w", "name": "Pralka", "category": "washer", "power_eid": "sensor.w"}])
     d0 = rt.devices.devices[0]
     await rt._device_event({"type": "cycle", "device": d0, "cycle": {"start": "s", "min": 62, "kwh": 0.85, "cost": 0.68}})
@@ -250,7 +251,7 @@ async def main():
     rt.devices.data["w"]["cycles"] = [{"start": "x", "min": 60, "kwh": 2.0, "peak_w": 2000, "cost": 2.0}] * 5
     for i in range(1, 15):
         rt.devices.data["w"]["daily"][(date(2026, 11, 5) - timedelta(days=i)).isoformat()] = 2.0
-    setcfg = lambda kinds: rt.state.__setitem__("notify_cfg", N.effective({"kinds": kinds}))
+    setcfg = lambda kinds: rt.state.__setitem__("notify_cfg", N.effective({"kinds": kinds, "phone_level": "all"}))
     await rt._devices_tick(at(2026, 11, 5, 20, 5)); await rt._devices_tick(at(2026, 11, 5, 20, 6))
     pl = pn(hass, "bms_device_plan")
     check("plan wieczorem raz na dobę", len(pl) == 1 and "Pralka" in pl[0][2]["message"], pl)

@@ -72,17 +72,17 @@ Obsługiwane są taryfy strefowe (np. G12w, z weekendami i świętami) oraz ceny
 
 ## Dzwonek: propozycje i powiadomienia
 
-W nagłówku karty jest dzwonek z licznikiem. Okno „Do decyzji” wyskakuje samo na środku ekranu, gdy przyjdzie nowe powiadomienie lub propozycja (można je też otworzyć dzwonkiem). Pokazywane są tylko propozycje, które coś zmieniają: każda ma znacznik ZMIENIAM, zmianę „było → będzie”, rozwijane „Dlaczego” i osobne przyciski **Potwierdź** i **Odrzuć**. Odrzuconą propozycję integracja zapamiętuje do czasu, aż plan zaproponuje inną godzinę, a auto-stosowanie jej nie wykona. Pod propozycjami jest skrzynka powiadomień: podsumowania, alarmy i informacje z ostatnich 14 dni.
+W nagłówku karty jest dzwonek z licznikiem. Okno „Do decyzji” wyskakuje samo na środku ekranu, gdy przyjdzie nowa propozycja albo ostrzeżenie lub błąd (informacje czekają pod dzwonkiem; okno można też otworzyć dzwonkiem). Pokazywane są tylko propozycje, które coś zmieniają: każda ma znacznik ZMIENIAM, zmianę „było → będzie”, rozwijane „Dlaczego” i osobne przyciski **Potwierdź** i **Odrzuć**. Odrzuconą propozycję integracja zapamiętuje do czasu, aż plan zaproponuje inną godzinę, a auto-stosowanie jej nie wykona. Pod propozycjami jest skrzynka powiadomień: podsumowania, alarmy i informacje z ostatnich 14 dni. Skrzynka czyta się sama (autoodczyt, można wyłączyć): informacje stają się przeczytane po zamknięciu okna albo po 6 godzinach, powtórka tego samego komunikatu zastępuje starszy, a ostrzeżenie znika z nieprzeczytanych, gdy sytuacja minie. Błędy i nieodhaczone ostrzeżenia zostają nieprzeczytane, dopóki ich nie odhaczysz, więc nic ważnego nie ucieka.
 
 <p align="center"><img src="assets/screens/dzwonek.png" width="560" alt="Dzwonek: propozycje i powiadomienia"></p>
 
-Powiadomień jest ponad trzydzieści rodzajów (bateria, falownik, ceny i plan, działanie, urządzenia, podsumowania). Każdy włączasz osobno, wybierasz, czy trafia na telefon, jak często może przyjść, i czy może przyjść w ciszy nocnej. Są podsumowania dzienne, tygodniowe i miesięczne, w tym ile prądu kosztowałoby bez PV i baterii i skąd była energia dla domu. Jest też powiadomienie o oknie arbitrażu na jutro. Ustawienia są w Diagnostyce i działają także przy zamkniętej karcie.
+Powiadomień jest ponad trzydzieści rodzajów (bateria, falownik, ceny i plan, działanie, urządzenia, podsumowania). Każdy włączasz osobno, wybierasz, czy trafia na telefon, jak często może przyjść, i czy może przyjść w ciszy nocnej. Są podsumowania dzienne, tygodniowe i miesięczne, w tym ile prądu kosztowałoby bez PV i baterii i skąd była energia dla domu. Jest też powiadomienie o oknie arbitrażu na jutro. Przy ustawieniach jest wybór poziomu „na telefon”: wszystkie, ważne i krytyczne (domyślnie) albo tylko krytyczne. Krytyczne to bateria, falownik, zabezpieczenia, zagrożony plan i straż poranka; ważne to braki danych, zmiany harmonogramu, podsumowania i ujemne ceny jutro; reszta to informacje (cykle urządzeń, podpowiedzi). Rodzaje pominięte przez wybrany poziom nie idą na telefon ani do powiadomień Home Assistanta, ale zawsze trafiają do dzwonka w panelu. Ustawienia są w Diagnostyce i działają także przy zamkniętej karcie.
 
 <p align="center"><img src="assets/screens/powiadomienia_ustawienia.png" width="560" alt="Konfigurator powiadomień"></p>
 
 ## Rozliczenia, oszczędności i zdrowie baterii
 
-Zakładka „Zysk i log” zawiera bilans w złotych (dziś, miesiąc, razem), porównanie kosztów: tak jak jest, bez baterii i z baterią bez planera, raport miesięczny z wykresem dni na plus i na minus, sprawność cyklu baterii, szacunek pojemności i trend sprawności z 7, 30 i 90 dni. Jest też dziennik decyzji planu i funkcje automatyczne (reakcja na niskie i ujemne ceny, dynamiczna rezerwa SOC, auto-stosowanie propozycji z możliwością cofnięcia).
+Zakładka „Zysk i log” zawiera bilans w złotych (dziś, miesiąc, razem), porównanie kosztów: tak jak jest, bez baterii i z baterią bez planera, raport miesięczny z wykresem dni na plus i na minus, sprawność cyklu baterii, szacunek pojemności i trend sprawności z 7, 30 i 90 dni. Jest też dziennik decyzji planu i funkcje automatyczne (reakcja na niskie i ujemne ceny, dynamiczna rezerwa SOC, auto-stosowanie propozycji z możliwością cofnięcia). W symulacji rocznej widać licznik godzin z ujemną ceną sprzedaży i zakupu oraz ich koszt; jeśli „Samo PV” wychodzi drożej niż „Bez PV”, panel mówi, czy to wina ujemnych cen, czy błędnych cen w danych.
 
 <p align="center"><img src="assets/screens/zysk_raport.png" width="680" alt="Raport miesięczny i zdrowie baterii"></p>
 
@@ -104,7 +104,7 @@ Integracja potrafi sama znaleźć w Home Assistancie liczniki kWh (pralka, pompa
 
 ## Ustawienia (dawniej Diagnostyka) i autotest
 
-Parametry falownika, strefy czasowe, alarmy, kopie ustawień, tryby i kreator instalacji są w Diagnostyce (widocznej tylko dla administratorów Home Assistant, bez dodatkowego hasła). Autotest sprawdza na żywo dane z falownika, prognozę, ceny i urządzenia i daje raport do skopiowania. Problemy, które trwają dłużej (brak danych z falownika, brak ceny, brak prognozy), pojawiają się też w Ustawienia, Naprawy.
+Parametry falownika, strefy czasowe, alarmy, kopie ustawień, tryby i kreator instalacji są w Diagnostyce (widocznej tylko dla administratorów Home Assistant, bez dodatkowego hasła). Autotest sprawdza na żywo dane z falownika, prognozę, ceny i urządzenia i daje raport do skopiowania. Ma też grupę „Auto-stosowanie” (czy działa, co czeka na zastosowanie i dlaczego) oraz historię ostatnich 20 prób: kiedy, skąd (na żywo, codzienna propozycja, ręcznie) i co zastosowano albo dlaczego nie. Przycisk „📨 Raport do zgłoszenia” zbiera w jednym kliknięciu wersję, ustawienia, plan, auto-stosowanie, autotest i dziennik, kopiuje je do schowka i pozwala pobrać jako .txt; adresy, numery seryjne, e-maile i usługa powiadomień są zamazane, a hasła nie trafiają do raportu. Problemy, które trwają dłużej (brak danych z falownika, brak ceny, brak prognozy), pojawiają się też w Ustawienia, Naprawy.
 
 Szczegółowa instrukcja obsługi z opisem każdej zakładki jest w pliku [Instrukcja_EMS_komp-dec.pdf](docs/Instrukcja_EMS_komp-dec.pdf).
 
@@ -142,7 +142,7 @@ Co się zmieniło w kolejnych wersjach, jest w [CHANGELOG.md](CHANGELOG.md).
 
 ## Gdy coś nie działa
 
-Uruchom autotest w Ustawieniach i skopiuj raport. Możesz też pobrać plik diagnostyczny: Ustawienia, Urządzenia i usługi, EMS komp-dec, menu ⋮, „Pobierz diagnostykę”. Adres i numer seryjny falownika oraz usługa powiadomień są w nim ukryte.
+Najprościej: w Ustawieniach, Autotest kliknij „📨 Raport do zgłoszenia” i wklej raport w zgłoszeniu. Możesz też uruchomić autotest i skopiować jego raport. Możesz też pobrać plik diagnostyczny: Ustawienia, Urządzenia i usługi, EMS komp-dec, menu ⋮, „Pobierz diagnostykę”. Adres i numer seryjny falownika oraz usługa powiadomień są w nim ukryte.
 
 ## Uwaga
 

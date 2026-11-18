@@ -236,7 +236,7 @@ async def async_live_apply(runtime, hass: HomeAssistant, plan: dict[str, Any] | 
         return None
     runtime.log.add("auto", "Auto-stosowanie z planu na żywo (propozycja stabilna ≥ 30 min): "
                     + ", ".join(f"{k} → {v}" for k, v in sig.items()), "info")
-    res = await async_auto_apply(runtime, hass, {"proposals": wanted})
+    res = await async_auto_apply(runtime, hass, {"proposals": wanted}, source="live")
     if res.get("applied"):
         runtime.state["live_apply"] = {"last": ts}             # odstęp 1 h liczymy tylko od faktycznej zmiany
     else:
@@ -293,6 +293,75 @@ async def async_notify_sets_off(runtime, hass: HomeAssistant, plan: dict[str, An
             _LOGGER.debug("EMS: powiadomienie o wyłączonym zestawie nieudane: %s", err)
         out.append(sw_key)
     return out
+
+
+GUARD_LEAD_MIN = 120      # Straż poranka: tyle minut przed startem wymaganego okna sprawdzamy, czy godziny są ustawione
+
+
+def morning_guard_issues(runtime, hass: HomeAssistant, plan: dict[str, Any] | None, now=None) -> list[dict[str, Any]]:
+    """Wymagane przez plan okna ładowania z sieci, które zaczynają się w ciągu GUARD_LEAD_MIN (albo już trwają według planu),
+    a godziny w falowniku NIE są takie jak w planie. Bez odrzuconych w panelu propozycji (to decyzja użytkownika).
+
+    To siatka bezpieczeństwa dla przypadku, gdy auto-stosowanie z jakiegoś powodu nie przeszło (limit, trwająca operacja,
+    wyłączone) i nikt nie zatwierdził propozycji ręcznie — bez okna bateria może nie wystarczyć do rana."""
+    props = (plan or {}).get("proposals") or {}
+    loc = dt_util.as_local(now or dt_util.now())
+    cur_min = loc.hour * 60 + loc.minute
+    out: list[dict[str, Any]] = []
+    for k1, k2 in LIVE_PAIRS:
+        p1, p2 = props.get(k1), props.get(k2)
+        if not isinstance(p1, dict) or not isinstance(p2, dict):
+            continue
+        if any(p.get("skip") or not p.get("proposed") or not p.get("required") or p.get("confidence") == "low" for p in (p1, p2)):
+            continue
+        s_m, e_m = _minutes(str(p1["proposed"])), _minutes(str(p2["proposed"]))
+        if s_m is None or e_m is None or s_m == e_m:
+            continue
+        until = (s_m - cur_min) % 1440
+        inside = (cur_min - s_m) % 1440 < (e_m - s_m) % 1440
+        if not (0 < until <= GUARD_LEAD_MIN or inside):
+            continue
+        if p1["proposed"] == _current(hass, k1) and p2["proposed"] == _current(hass, k2):
+            continue
+        if any(inbox.is_rejected(runtime.state, k, p["proposed"]) for k, p in ((k1, p1), (k2, p2))):
+            continue
+        rec = (runtime.state.get("auto_skip") or {}).get(k1) or (runtime.state.get("auto_skip") or {}).get(k2) or {}
+        out.append({"start_key": k1, "stop_key": k2, "start": p1["proposed"], "stop": p2["proposed"],
+                    "current": (_current(hass, k1), _current(hass, k2)), "in_window": bool(inside and not 0 < until <= GUARD_LEAD_MIN),
+                    "minutes_to_start": until if 0 < until <= GUARD_LEAD_MIN else 0, "why": rec.get("why")})
+    return out
+
+
+async def async_morning_guard(runtime, hass: HomeAssistant, plan: dict[str, Any] | None, now=None) -> list[str]:
+    """Straż poranka: powiadomienie (raz na okno), gdy wymagane okno ładowania nocnego nie jest ustawione. Zwraca klucze startów."""
+    loc = dt_util.as_local(now or dt_util.now())
+    sent: list[str] = []
+    for it in morning_guard_issues(runtime, hass, plan, now):
+        nkey = f"morning_guard:{loc.date().isoformat()}:{it['start_key']}:{it['start']}"
+        seen = getattr(runtime, "_guard_seen", None)
+        if seen is None:
+            seen = runtime._guard_seen = set()  # noqa: SLF001
+        if nkey in seen:
+            continue
+        if len(seen) > 40:
+            seen.clear()
+        seen.add(nkey)
+        cs, ce = it["current"]
+        when = "okno już trwa według planu" if it["in_window"] else f"start za {it['minutes_to_start']} min"
+        auto = switch_on(hass, "auto_apply", False)
+        hint = ("Auto-stosowanie jest włączone, ale nie zmieniło godzin" + (f" ({it['why']})" if it.get("why") else "")
+                + ". Otwórz panel → dzwonek 🔔 → „Do decyzji” i naciśnij Potwierdź.") if auto else \
+            "Otwórz panel → dzwonek 🔔 → „Do decyzji” i naciśnij Potwierdź (albo włącz automatyczne stosowanie propozycji)."
+        msg = (f"Plan wymaga ładowania z sieci {it['start']}–{it['stop']} ({when}), a w falowniku jest {cs or '—'}–{ce or '—'}. "
+               f"Bez tego okna bateria może nie wystarczyć do rana. {hint}")
+        runtime.log.add("auto", f"Straż poranka: wymagane okno {it['start']}–{it['stop']} nie jest ustawione (w falowniku {cs}–{ce})", "warn")
+        try:
+            await runtime.monitor.notifier.send("morning_guard", "⚠️ EMS: wymagane ładowanie nocne nie jest ustawione", msg,
+                                                key=nkey, level="warn")
+        except Exception as err:  # noqa: BLE001
+            _LOGGER.debug("EMS: powiadomienie straży poranka nieudane: %s", err)
+        sent.append(it["start_key"])
+    return sent
 
 
 def _plan_window_keys(runtime, hass: HomeAssistant, proposals: dict[str, Any], pairs=None) -> set[str]:
@@ -366,6 +435,31 @@ def _remember_auto_skip(runtime, why: dict[str, tuple[str, Any]], clear: set[str
         runtime._save_state()  # noqa: SLF001
 
 
+AUTO_HIST_MAX = 20
+
+
+def _auto_hist_add(runtime, src: str, *, applied: dict[str, str] | None = None, would: dict[str, str] | None = None,
+                   why: dict[str, tuple[str, Any]] | None = None, busy: list[str] | None = None) -> None:
+    """Dopisuje próbę auto-stosowania do historii (ostatnie 20) — pokazywana w Ustawienia → Autotest oraz w raporcie
+    diagnostycznym. Zapisujemy tylko próby, w których coś było do zrobienia (zastosowano, pominięto albo wstrzymano)."""
+    if not (applied or would or why or busy):
+        return
+    hist = runtime.state.get("auto_hist")
+    if not isinstance(hist, list):
+        hist = runtime.state["auto_hist"] = []
+    rec: dict[str, Any] = {"at": dt_util.now().isoformat(timespec="seconds"), "src": src}
+    if applied:
+        rec["applied"] = dict(applied)
+    if would:
+        rec["would"] = dict(would)
+    if why:
+        rec["why"] = {k: str(v[0])[:160] for k, v in why.items()}
+    if busy:
+        rec["busy"] = list(busy)
+    hist.append(rec)
+    del hist[:-AUTO_HIST_MAX]
+
+
 def _shift_hours(cur_m: int, new_m: int) -> float:
     """Odległość między dwiema porami doby w godzinach, krótszą drogą przez północ (23:00 → 01:00 to 2 h, nie 22 h).
     Godziny okien to pory doby, więc liczenie „na prostej” zawyżało przesunięcie okien nocnych do ~22 h, a suwak limitu
@@ -407,7 +501,7 @@ def _current(hass: HomeAssistant, key: str) -> str | None:
 
 
 async def async_auto_apply(runtime, hass: HomeAssistant, result: dict[str, Any],
-                           dry_run: bool | None = None) -> dict[str, Any]:
+                           dry_run: bool | None = None, source: str = "manual") -> dict[str, Any]:
     """Stosuje propozycje z zabezpieczeniami. Zwraca {'applied': {...}, 'skipped': [...]}.
 
     dry_run=True (albo włączony przełącznik „Auto-stosowanie: tylko podgląd”): przechodzi przez wszystkie
@@ -434,6 +528,7 @@ async def async_auto_apply(runtime, hass: HomeAssistant, result: dict[str, Any],
                 if k in VALID_TIME_KEYS and isinstance(p, dict) and not p.get("skip") and p.get("proposed")
                 and p.get("proposed") != _current(hass, k) and not inbox.is_rejected(runtime.state, k, p.get("proposed"))}
         _remember_auto_skip(runtime, pend)
+        _auto_hist_add(runtime, source, busy=busy if pend else None)
         return {"applied": {}, "skipped": [msg]}
 
     disabled_sets = [] if dry_run else await async_sync_sale_sets(runtime, hass, proposals)
@@ -498,6 +593,7 @@ async def async_auto_apply(runtime, hass: HomeAssistant, result: dict[str, Any],
         log.add("auto", "Auto-stosowanie: brak zmian do wprowadzenia"
                 + (f" ({len(skipped)} pominiętych)" if skipped else ""))
         _remember_auto_skip(runtime, why, same)
+        _auto_hist_add(runtime, source, why=why)
         return {"applied": {}, "skipped": skipped, "disabled_sets": disabled_sets}
 
     previous = {k: (_current(hass, k) or "00:00") for k in final}
@@ -507,6 +603,7 @@ async def async_auto_apply(runtime, hass: HomeAssistant, result: dict[str, Any],
                 skipped=len(skipped))
         why.update({k: ("tryb „tylko podgląd” — nic nie zapisuję (wyłącz „Auto-stosowanie: tylko podgląd”)", v) for k, v in final.items()})
         _remember_auto_skip(runtime, why, same)
+        _auto_hist_add(runtime, source, would=final)
         return {"applied": {}, "would_apply": final, "previous": previous, "skipped": skipped, "dry_run": True}
     applied_n, apply_skipped = await apply_times(hass, final)
     skipped.extend(apply_skipped)
@@ -515,6 +612,7 @@ async def async_auto_apply(runtime, hass: HomeAssistant, result: dict[str, Any],
         if k_ in final:
             why[k_] = (f"zapis godziny nie powiódł się: {r_}", final[k_])
     _remember_auto_skip(runtime, why, same | {k for k in final if k not in why})
+    _auto_hist_add(runtime, source, applied={k: v for k, v in final.items() if k not in why}, why=why)
     enabled = await async_enable_sets(runtime, hass, (set(final) if applied_n else set()) | _plan_confirmed_keys(runtime, proposals)
                                       | _plan_window_keys(runtime, hass, proposals))
     runtime.state["last_applied"] = previous
@@ -606,7 +704,7 @@ async def async_daily_suggest(runtime, hass: HomeAssistant, optimizer) -> None:
     ]
     if not worthwhile:
         if switch_on(hass, "auto_apply", False):      # nawet bez zmian godzin: wyłącz zestaw sprzedaży, gdy plan jej nie przewiduje
-            outcome = await async_auto_apply(runtime, hass, result)
+            outcome = await async_auto_apply(runtime, hass, result, source="daily")
             off = outcome.get("disabled_sets") or []
             if off:
                 await runtime.monitor.notifier.send(
@@ -622,7 +720,7 @@ async def async_daily_suggest(runtime, hass: HomeAssistant, optimizer) -> None:
         lines.append(f"• {p['label']}: {p['current']} → {p['proposed']}")
 
     if switch_on(hass, "auto_apply", False):
-        outcome = await async_auto_apply(runtime, hass, result)
+        outcome = await async_auto_apply(runtime, hass, result, source="daily")
         if outcome.get("dry_run"):
             lines += ["", f"PODGLĄD (przełącznik „Auto-stosowanie: tylko podgląd”): zmieniłbym {len(outcome.get('would_apply') or {})}, "
                           "ale nic nie zapisano."]

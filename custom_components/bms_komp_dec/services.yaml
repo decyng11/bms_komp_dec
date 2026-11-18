@@ -236,6 +236,10 @@ self_test:
   name: Autotest
   description: Sprawdza na żywo falownik, prognozę PV, ceny, wykrywanie zaniku sieci, urządzenia i plan (administrator, tylko odczyt).
 
+diagnostic_report:
+  name: Raport diagnostyczny
+  description: Jeden raport do wklejenia przy zgłaszaniu problemu — wersja, ustawienia, plan, auto-stosowanie (powody i historia), autotest, dziennik. Adresy, numery seryjne, e-maile i usługa powiadomień są zamazane (administrator, tylko odczyt).
+
 override_set:
   name: Nadpisz plan na wybrane godziny
   description: Ręczne, wygasające nadpisanie planu — „ładuj z sieci”, „nie sprzedawaj z baterii” albo „nie ładuj z sieci” (administrator).

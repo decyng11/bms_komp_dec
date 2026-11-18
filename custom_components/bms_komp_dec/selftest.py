@@ -245,6 +245,94 @@ def _summary_checks(rt) -> list[dict[str, str]]:
         return [_c("summary_daily", "Podsumowanie dnia", "warn", f"nie udało się sprawdzić: {err}")]
 
 
+def _auto_group(rt) -> list[dict[str, str]]:
+    """Auto-stosowanie propozycji: czy jest włączone, czy ma gdzie zapisywać i co je teraz wstrzymuje."""
+    from . import inbox
+    from .automation import PAIRS, _current
+    from .helpers import find_eid, number_value, switch_on
+    out: list[dict[str, str]] = []
+    hass = rt.hass
+    auto = switch_on(hass, "auto_apply", False)
+    dry = switch_on(hass, "auto_apply_dry_run", False)
+    out.append(_c("auto_on", "Automatyczne stosowanie propozycji", "ok",
+                  "włączone" if auto else "wyłączone — propozycje czekają na Twoje potwierdzenie w dzwonku 🔔",
+                  "" if auto else "Włącz przełącznik „Automatyczne stosowanie propozycji” w zakładce EMS, jeśli plan ma sam ustawiać godziny."))
+    if auto and dry:
+        out.append(_c("auto_dry", "Tryb „tylko podgląd”", "warn", "włączony — auto-stosowanie niczego nie zapisuje, tylko pokazuje, co by zmieniło",
+                      "Wyłącz przełącznik „Auto-stosowanie: tylko podgląd”, gdy chcesz, żeby godziny były naprawdę zmieniane."))
+    lim = number_value(hass, "auto_apply_max_shift_h", 4.0)
+    out.append(_c("auto_limit", "Limit przesunięcia godzin", "ok",
+                  (f"{lim:.0f} h (liczone krótszą drogą przez północ)" if lim > 0 else "bez limitu") + "; okna wymagane przez plan limitu nie dotyczą"))
+    missing = []
+    for k1, k2 in PAIRS:
+        for k in (k1, k2):
+            st = hass.states.get(find_eid(hass, "time", k))
+            if st is None or str(st.state).lower() in _BAD:
+                missing.append(k)
+    out.append(_c("auto_entities", "Encje godzin do zapisu", "error" if missing else "ok",
+                  ("brak lub niedostępne: " + ", ".join(missing)) if missing else "wszystkie encje godzin okien są dostępne",
+                  "Bez nich auto-stosowanie nie ma gdzie zapisać godzin — sprawdź, czy integracja jest załadowana bez błędów." if missing else ""))
+    try:
+        if rt.brand_test_mode():
+            out.append(_c("auto_brand", "Tryb próbny falownika", "warn", "komendy trafiają tylko do dziennika (falownik inny niż Deye)",
+                          "Wyłącz „Tryb próbny” dopiero po sprawdzeniu, że sterowanie działa na Twoim falowniku."))
+    except Exception:  # noqa: BLE001
+        pass
+    try:
+        busy = []
+        if rt.is_selling():
+            busy.append("trwa sprzedaż")
+        if rt.pv_charge_blocked():
+            busy.append("ładowanie PV zablokowane")
+        if rt.grid_charging_on():
+            busy.append("falownik raportuje ładowanie z sieci")
+        if busy:
+            in_win = rt.in_grid_charge_window(dt_util.now())
+            odd = rt.grid_charging_on() and not in_win
+            out.append(_c("auto_busy", "Co teraz wstrzymuje auto-stosowanie", "warn" if odd else "ok", ", ".join(busy)
+                          + (" — poza oknem ładowania, a falownik nadal zgłasza ładowanie z sieci" if odd else ""),
+                          "Poza oknem ładowania „Time of use” powinien być włączony. Jeśli jest na „Disabled”, EMS uzna, że ładowanie z sieci trwa i nie zmieni godzin."
+                          if odd else ""))
+        else:
+            out.append(_c("auto_busy", "Co teraz wstrzymuje auto-stosowanie", "ok", "nic — można zmieniać godziny"))
+    except Exception:  # noqa: BLE001
+        pass
+    plan = rt.plan() or {}
+    pend = []
+    for k, p in (plan.get("proposals") or {}).items():
+        if isinstance(p, dict) and not p.get("skip") and p.get("proposed") and p.get("proposed") != _current(hass, k) \
+                and not inbox.is_rejected(rt.state, k, p.get("proposed")):
+            rec = (rt.state.get("auto_skip") or {}).get(k) or {}
+            why = rec.get("why") if str(rec.get("prop")) == str(p.get("proposed")) else None
+            pend.append(f"{k} {_current(hass, k) or '—'}→{p.get('proposed')}" + (f" ({why})" if why else ""))
+    if pend:
+        out.append(_c("auto_pending", "Propozycje czekające na zastosowanie", "warn" if auto and not dry else "ok", "; ".join(pend[:6]),
+                      "Powód jest też widoczny w karcie propozycji (🔔 → „Do decyzji”)." if auto else ""))
+    else:
+        out.append(_c("auto_pending", "Propozycje czekające na zastosowanie", "ok", "brak — godziny zgodne z planem"))
+    try:
+        from .automation import morning_guard_issues
+        gi = morning_guard_issues(rt, hass, plan, dt_util.now())
+    except Exception:  # noqa: BLE001
+        gi = []
+    if gi:
+        out.append(_c("morning_guard", "Straż poranka", "warn", "; ".join(
+            f"wymagane okno {g['start']}–{g['stop']} nie jest ustawione (w falowniku {g['current'][0] or '—'}–{g['current'][1] or '—'})" for g in gi),
+            "Zatwierdź propozycję w dzwonku 🔔 → „Do decyzji”, inaczej bateria może nie wystarczyć do rana."))
+    else:
+        out.append(_c("morning_guard", "Straż poranka", "ok", "wymagane okno ładowania (jeśli plan je przewiduje) jest ustawione zgodnie z planem"))
+    hist = rt.state.get("auto_hist") or []
+    if hist:
+        h = hist[-1]
+        what = ("zastosowano " + ", ".join(f"{k}→{v}" for k, v in (h.get("applied") or {}).items())) if h.get("applied") else \
+            ("podgląd: zmieniłoby " + ", ".join(f"{k}→{v}" for k, v in (h.get("would") or {}).items())) if h.get("would") else \
+            ("wstrzymane: " + ", ".join(h.get("busy") or [])) if h.get("busy") else "nic nie zastosowano"
+        out.append(_c("auto_last", "Ostatnia próba", "ok", f"{str(h.get('at') or '')[5:16].replace('T', ' ')} ({h.get('src')}): {what}"))
+    else:
+        out.append(_c("auto_last", "Ostatnia próba", "ok", "jeszcze nie było (próba pojawia się, gdy plan zaproponuje zmianę godzin)"))
+    return out
+
+
 def _work_group(rt) -> list[dict[str, str]]:
     out = []
     plan = rt.plan()
@@ -283,6 +371,7 @@ async def run(rt) -> dict[str, Any]:
         {"name": "Ceny", "checks": _price_group(rt)},
         {"name": "Zanik sieci", "checks": _grid_group(rt)},
         {"name": "Urządzenia", "checks": await _devices_group(rt)},
+        {"name": "Auto-stosowanie", "checks": _auto_group(rt)},
         {"name": "Działanie", "checks": _work_group(rt)},
         {"name": "Konfiguracja (jak w kreatorze)", "checks": hc["checks"]},
     ]

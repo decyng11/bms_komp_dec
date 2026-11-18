@@ -129,6 +129,48 @@ async def main():
     await automation.async_live_apply(rt, hass, pl, t1 + timedelta(minutes=31))
     check("na żywo: po zastosowaniu powód znika", "start_grid_charge" not in (rt.state.get("auto_skip") or {}) and cur(S)[0] == "13:00", (rt.state.get("auto_skip"), cur(S)))
 
+    # ---- historia prób i autotest „Auto-stosowanie”
+    from custom_components.bms_komp_dec import selftest as ST
+    hass, c, opt, rt, S = setup("12:00", "14:00")
+    await automation.async_auto_apply(rt, hass, {"proposals": {"start_grid_charge": pp("12:00", "17:00"), "stop_grid_charge": pp("14:00", "19:00")}}, source="daily")
+    await automation.async_auto_apply(rt, hass, {"proposals": {"start_grid_charge": pp("12:00", "13:00"), "stop_grid_charge": pp("14:00", "14:00", required=True)}}, source="live")
+    h = rt.state.get("auto_hist") or []
+    check("historia: dwie próby zapisane z źródłem", [x["src"] for x in h] == ["daily", "live"], h)
+    check("historia: odmowa ma powód, zastosowanie ma godziny", "limit 4 h" in (h[0].get("why") or {}).get("start_grid_charge", "") and h[1].get("applied") == {"start_grid_charge": "13:00"}, h)
+    await automation.async_auto_apply(rt, hass, {"proposals": {"start_grid_charge": pp("13:00", "13:00"), "stop_grid_charge": pp("14:00", "14:00")}}, source="daily")
+    check("historia: próba bez niczego do zrobienia nie dopisuje wpisu", len(rt.state["auto_hist"]) == 2, rt.state["auto_hist"])
+    for i in range(30):
+        automation._auto_hist_add(rt, "live", busy=["trwa sprzedaż"])
+    check("historia: najwyżej 20 wpisów", len(rt.state["auto_hist"]) == 20, len(rt.state["auto_hist"]))
+    res = await ST.run(rt)
+    grp = next(g for g in res["groups"] if g["name"] == "Auto-stosowanie")
+    ids = {ch["id"]: ch for ch in grp["checks"]}
+    check("autotest: grupa ma kontrole włączenia, limitu, encji, wstrzymania, oczekujących i ostatniej próby",
+          all(k in ids for k in ("auto_on", "auto_limit", "auto_entities", "auto_busy", "auto_pending", "auto_last")), list(ids))
+    check("autotest: auto-stosowanie włączone, limit 4 h", ids["auto_on"]["detail"] == "włączone" and "4 h" in ids["auto_limit"]["detail"], (ids["auto_on"], ids["auto_limit"]))
+    S.set("switch.bms_auto_apply_dry_run", "on")
+    ids = {ch["id"]: ch for ch in next(g for g in (await ST.run(rt))["groups"] if g["name"] == "Auto-stosowanie")["checks"]}
+    check("autotest: auto włączone + podgląd → ostrzeżenie", ids["auto_dry"]["status"] == "warn", ids.get("auto_dry"))
+    S.set("switch.bms_auto_apply_dry_run", "off")
+    S.set("time.bms_start_grid_charge", "unavailable")
+    ids = {ch["id"]: ch for ch in next(g for g in (await ST.run(rt))["groups"] if g["name"] == "Auto-stosowanie")["checks"]}
+    check("autotest: niedostępna encja godziny → błąd z nazwą klucza", ids["auto_entities"]["status"] == "error" and "start_grid_charge" in ids["auto_entities"]["detail"], ids["auto_entities"])
+    S.set("time.bms_start_grid_charge", "12:00:00")
+    rt.is_selling = lambda: True
+    ids = {ch["id"]: ch for ch in next(g for g in (await ST.run(rt))["groups"] if g["name"] == "Auto-stosowanie")["checks"]}
+    check("autotest: trwa sprzedaż → wstrzymanie wymienione", "trwa sprzedaż" in ids["auto_busy"]["detail"], ids["auto_busy"])
+    del rt.is_selling
+    rt._plan = {"proposals": {"start_grid_charge": {"proposed": "17:00", "current": "12:00", "skip": False}}}
+    rt.state["auto_skip"] = {"start_grid_charge": {"kind": "skip", "why": "przesunięcie za duże", "prop": "17:00"}}
+    ids = {ch["id"]: ch for ch in next(g for g in (await ST.run(rt))["groups"] if g["name"] == "Auto-stosowanie")["checks"]}
+    check("autotest: oczekująca propozycja z powodem → ostrzeżenie", ids["auto_pending"]["status"] == "warn" and "przesunięcie za duże" in ids["auto_pending"]["detail"], ids["auto_pending"])
+
+    # straż poranka w autoteście
+    rt._plan = {"proposals": {"start_grid_charge": pp("12:00", "19:00", required=True), "stop_grid_charge": pp("14:00", "03:00", required=True)}}
+    S.set("time.bms_start_grid_charge", "12:00:00"); S.set("time.bms_stop_grid_charge", "14:00:00")
+    t_g = dt_util.now().replace(hour=18, minute=0, second=0, microsecond=0)
+    gi = automation.morning_guard_issues(rt, hass, rt._plan, t_g)
+    check("straż poranka: problem wykryty 1 h przed oknem", len(gi) == 1 and gi[0]["start"] == "19:00" and gi[0]["minutes_to_start"] == 60, gi)
     print(f"AUTOAPPLY-SHIFT PASS={common.PASS} FAIL={common.FAIL}")
 
 asyncio.run(main())

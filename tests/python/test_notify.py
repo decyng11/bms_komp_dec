@@ -13,9 +13,10 @@ def env():
     hass, c, opt, rt = build()
     c.config["notify_service"] = "notify.mobile_app_tel"
     hass.states.set("switch.bms_notifications_enabled", "on")
+    rt.state["notify_cfg"] = N.effective({"phone_level": "all"})      # testy logiki powiadomień: wszystkie poziomy (poziom „na telefon” ma osobny test_notify_levels.py)
     return hass, c, opt, rt
-def setcfg(rt, kinds=None, sched=None):
-    rt.state["notify_cfg"] = N.effective({"kinds": kinds or {}, "sched": sched or {}})
+def setcfg(rt, kinds=None, sched=None, **kw):
+    rt.state["notify_cfg"] = N.effective({"kinds": kinds or {}, "sched": sched or {}, "phone_level": "all", **kw})
 
 async def main():
     # ---------- 1. ustawienia: domyślne, śmieci, cisza nocna

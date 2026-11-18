@@ -99,6 +99,55 @@ def tariff_compare(buckets_by_day: dict[str, list], cfg: dict, today: date, days
             "note": "Szacunek: ten sam pobór z sieci co do godziny; bez opłat stałych i bez zmiany zachowania EMS przy innej taryfie."}
 
 
+MIN_HOURS_NEG = 20            # doba z co najmniej tyloma godzinami danych (jak „pełna doba” w Insights)
+
+
+def neg_price_day(buckets: list) -> dict[str, float] | None:
+    """Godziny z UJEMNĄ ceną sprzedaży / zakupu w jednej dobie (z godzinowych koszyków; tylko prawdziwe ceny godziny).
+
+    sell_cost  — ile realnie dopłacono za eksport w tych godzinach (kWh × |cena|);
+    buy_gain   — ile „zarobiono” na poborze z sieci przy ujemnej cenie zakupu;
+    nobat_sell_cost / nopv_buy_gain — to samo w scenariuszach symulacji „Samo PV” i „Bez PV” (tłumaczą, czemu
+    „Samo PV” może wyjść drożej niż „Bez PV”). None, gdy doba ma za mało danych."""
+    out = {"hours": 0, "sell_h": 0, "sell_kwh": 0.0, "sell_cost": 0.0, "buy_h": 0, "buy_kwh": 0.0, "buy_gain": 0.0,
+           "nobat_sell_cost": 0.0, "nopv_buy_gain": 0.0}
+    for b in buckets:
+        if b is None or len(b) < 10:
+            continue
+        out["hours"] += 1
+        buy = b[_BUY_S] / b[_BUY_T] if b[_BUY_T] > 0 else None
+        sell = b[_SELL_S] / b[_SELL_T] if b[_SELL_T] > 0 else None
+        load, pv = max(0.0, b[_LOAD]), max(0.0, b[_PV])
+        if sell is not None and sell < 0:
+            out["sell_h"] += 1
+            out["sell_kwh"] += max(0.0, b[_EXP])
+            out["sell_cost"] += max(0.0, b[_EXP]) * -sell
+            out["nobat_sell_cost"] += max(0.0, pv - load) * -sell
+        if buy is not None and buy < 0:
+            out["buy_h"] += 1
+            out["buy_kwh"] += max(0.0, b[_IMP])
+            out["buy_gain"] += max(0.0, b[_IMP]) * -buy
+            out["nopv_buy_gain"] += load * -buy
+    return out if out["hours"] >= MIN_HOURS_NEG else None
+
+
+def neg_summary(days_buckets: dict[str, list]) -> dict[str, Any] | None:
+    """Suma ujemnych cen z wielu dób (klucz = data) + przeliczenie na rok. None, gdy brak pełnych dób."""
+    rows = [r for r in (neg_price_day(b) for _k, b in sorted(days_buckets.items())) if r is not None]
+    if not rows:
+        return None
+    m = len(rows)
+    tot = {k: sum(r[k] for r in rows) for k in rows[0]}
+    k = 365.0 / m
+    return {
+        "days": m, "sell_days": sum(1 for r in rows if r["sell_h"] > 0), "buy_days": sum(1 for r in rows if r["buy_h"] > 0),
+        "sell_h": int(tot["sell_h"]), "sell_kwh": round(tot["sell_kwh"], 2), "sell_cost": round(tot["sell_cost"], 2),
+        "buy_h": int(tot["buy_h"]), "buy_kwh": round(tot["buy_kwh"], 2), "buy_gain": round(tot["buy_gain"], 2),
+        "nobat_sell_cost": round(tot["nobat_sell_cost"], 2), "nopv_buy_gain": round(tot["nopv_buy_gain"], 2),
+        "sell_cost_year": round(tot["sell_cost"] * k, 2), "extrapolated": m < FULL_YEAR_DAYS,
+    }
+
+
 def year_sim(insight_days: dict[str, dict], cfg: dict, avg_buy: float | None) -> dict[str, Any] | None:
     """Cztery scenariusze kosztu energii na pełnych dobach: bez PV i baterii / samo PV / PV + bateria bez planera / z EMS.
 

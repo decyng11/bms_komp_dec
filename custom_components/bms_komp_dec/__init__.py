@@ -40,7 +40,7 @@ _SERVICES = (
     "test_schedule", "suggest_schedule", "apply_schedule_times", "undo_auto_apply", "auto_apply_now",
     "watch_write", "watch_status", "watch_clear", "health_check", "monthly_report", "get_plan",
     "diag_store_get_all", "diag_store_set", "diag_store_delete",
-    "notify_settings_get", "notify_settings_set", "notify_test", "inbox_action", "devices_get", "devices_set", "devices_discover", "insights_get", "self_test",
+    "notify_settings_get", "notify_settings_set", "notify_test", "inbox_action", "devices_get", "devices_set", "devices_discover", "insights_get", "self_test", "diagnostic_report",
     "override_set", "override_clear", "analysis_get", "analysis_set", "control_test", "settings_log_get",
 )
 _SUGGEST_HOUR = 16   # RCE na jutro jest publikowane po południu — wcześniej propozycja bazowała na starych danych
@@ -419,6 +419,12 @@ def _register_services(hass: HomeAssistant) -> None:
         from .selftest import run as selftest_run
         return await selftest_run(rt)
 
+    async def handle_diagnostic_report(call):
+        await _require_admin(hass, call)
+        rt = _need_runtime(hass)
+        from .diagnostics import async_build_report
+        return await async_build_report(rt)
+
     async def handle_override_set(call):
         await _require_admin(hass, call)
         rt = _need_runtime(hass)
@@ -484,6 +490,7 @@ def _register_services(hass: HomeAssistant) -> None:
         ("devices_discover", handle_devices_discover, SupportsResponse.ONLY),
         ("insights_get", handle_insights_get, SupportsResponse.ONLY),
         ("self_test", handle_self_test, SupportsResponse.ONLY),
+        ("diagnostic_report", handle_diagnostic_report, SupportsResponse.ONLY),
         ("override_set", handle_override_set, SupportsResponse.OPTIONAL),
         ("override_clear", handle_override_clear, SupportsResponse.OPTIONAL),
         ("analysis_get", handle_analysis_get, SupportsResponse.ONLY),

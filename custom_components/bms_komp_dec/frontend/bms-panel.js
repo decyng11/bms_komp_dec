@@ -886,7 +886,8 @@
     .inb-btns { display: flex; gap: 8px; margin-top: 8px; }
     .inb-btns button { flex: 1; padding: 9px; border-radius: 10px; border: 1px solid var(--line); background: var(--surface); color: var(--text); font-size: 14px; cursor: pointer; }
     .inb-btns button.ok { background: rgba(16,185,129,0.2); border-color: #10b981; font-weight: 700; }
-    .inb-act { display: flex; gap: 12px; margin-top: 4px; } .inb-act button { border: none; background: none; color: var(--accent); font-size: 12px; cursor: pointer; padding: 2px 0; }
+    .inb-autotag { font-size: 11px; color: var(--muted); flex: 1 1 auto; min-width: 0; overflow-wrap: anywhere; }
+    .inb-act { display: flex; gap: 12px; margin-top: 4px; align-items: center; } .inb-act button { border: none; background: none; color: var(--accent); font-size: 12px; cursor: pointer; padding: 2px 0; }
     .inb-empty { color: var(--muted); font-size: 13px; padding: 10px 2px; }
     .theme-seg { display: inline-flex; padding: 3px; background: var(--seg-bg); border-radius: 999px; flex: none; }
     .theme-seg button { border: none; background: transparent; color: var(--muted); width: 34px; height: 30px; border-radius: 999px; cursor: pointer; font-size: 15px; line-height: 1; padding: 0; }
@@ -4038,13 +4039,24 @@
       const notes = (Array.isArray(ma.inbox) ? ma.inbox : []).filter(e => !gone.has(e.id)).map(e => ({ ...e, read: e.read || read.has(e.id) }));
       const auto = (st[this._eid('switch', 'auto_apply')] || {}).state === 'on';
       const askip = ma.auto_skip && typeof ma.auto_skip === 'object' ? ma.auto_skip : {};   // powody, dla których auto-stosowanie nie zmieniło godzin
-      return { groups, notes, auto, askip, pending: groups.length, unread: notes.filter(e => !e.read).length };
+      const autoRead = ma.inbox_auto_read === true;     // autoodczyt włączony w integracji (starsza integracja nie ma tego atrybutu → zachowanie bez zmian)
+      return { groups, notes, auto, askip, autoRead, pending: groups.length, unread: notes.filter(e => !e.read).length };
+    }
+
+    // Zamknięcie okienka = „obejrzane”: informacje (info/ok) stają się przeczytane; ostrzeżenia i błędy zostają, dopóki ich nie odhaczysz.
+    _inbAutoSeen() {
+      try {
+        const d = this._inbData(); if (!d.autoRead) return;
+        const quiet = d.notes.filter(e => !e.read && (e.level === 'info' || e.level === 'ok')); if (!quiet.length) return;
+        this._inbRead = this._inbRead || new Set(); quiet.forEach(e => this._inbRead.add(e.id));
+        const p = this._hass.callService('bms_komp_dec', 'inbox_action', { action: 'read_info' }); if (p && p.catch) p.catch(() => {});
+      } catch (e) { /* nie wpływa na działanie panelu */ }
     }
 
     _renderInbox() {
       const d = this._inbData();
       const bell = this._el('bell'), badge = this._el('bellN');
-      if (bell && !bell._wired) { bell._wired = true; bell.addEventListener('click', () => { this._inbOpen = !this._inbOpen; this._renderInbox(); }); }
+      if (bell && !bell._wired) { bell._wired = true; bell.addEventListener('click', () => { const was = this._inbOpen; this._inbOpen = !this._inbOpen; if (was) this._inbAutoSeen(); this._renderInbox(); }); }
       const n = d.pending + d.unread;
       if (badge) { badge.hidden = !n; badge.textContent = n > 99 ? '99+' : String(n); badge.classList.toggle('calm', !d.pending); }
       let ov = this.shadowRoot.getElementById('inbOv');
@@ -4052,7 +4064,7 @@
         ov = document.createElement('div'); ov.id = 'inbOv'; ov.className = 'inb-ov'; ov.hidden = true;
         ov.innerHTML = '<div class="inb" role="dialog" aria-label="Do decyzji i powiadomienia"></div>';
         ov.addEventListener('click', ev => {
-          if (ev.target === ov) { this._inbOpen = false; this._renderInbox(); return; }
+          if (ev.target === ov) { this._inbOpen = false; this._inbAutoSeen(); this._renderInbox(); return; }
           const b = ev.target.closest('[data-inb]'); if (b) this._inbClick(b);
         });
         ov.addEventListener('toggle', ev => {
@@ -4072,7 +4084,8 @@
         this._inbSeenId = st && typeof st.id === 'number' ? st.id : maxId;
         this._inbSeenP = st && typeof st.p === 'string' ? st.p : psig;
       }
-      const freshNote = d.notes.some(e => !e.read && Number(e.id) > this._inbSeenId);
+      // okno wyskakuje samo przy nowym powiadomieniu; przy włączonym autoodczycie tylko przy ostrzeżeniu lub błędzie (informacje czekają pod dzwonkiem)
+      const freshNote = d.notes.some(e => !e.read && Number(e.id) > this._inbSeenId && (!d.autoRead || e.level === 'warn' || e.level === 'error'));
       if (!this._inbOpen && (freshNote || (psig && psig !== this._inbSeenP))) this._inbOpen = true;
       if (this._inbOpen) { this._inbSeenId = Math.max(this._inbSeenId, maxId); this._inbSeenP = psig; } else if (!psig) this._inbSeenP = '';
       if (this._inbPersisted !== this._inbSeenId + '|' + this._inbSeenP) {
@@ -4113,7 +4126,7 @@
       }).join('');
       const ic = { error: '🚨', warn: '⚠️', ok: '✅', info: 'ℹ️' };
       const notes = d.notes.map(e => `<div class="inb-card n-${esc(e.level)} ${e.read ? '' : 'unread'}"><div class="inb-r"><span class="inb-t">${ic[e.level] || 'ℹ️'} ${esc(e.title)}</span><span class="inb-time">${esc(ago(e.ts))}</span></div>
-        <div class="inb-msg">${esc(e.message)}</div><div class="inb-act">${e.read ? '' : `<button type="button" data-inb="read" data-id="${e.id}">Przeczytane</button>`}<button type="button" data-inb="del" data-id="${e.id}">Usuń</button></div></div>`).join('');
+        <div class="inb-msg">${esc(e.message)}</div><div class="inb-act">${e.read ? (e.auto ? `<span class="inb-autotag">odczytane automatycznie: ${esc(e.auto)}</span>` : '') : `<button type="button" data-inb="read" data-id="${e.id}">Przeczytane</button>`}<button type="button" data-inb="del" data-id="${e.id}">Usuń</button></div></div>`).join('');
       const nP = d.pending;
       ov.firstChild.innerHTML = `<div class="inb-grip"></div><div class="inb-h"><b>${nP ? `Do decyzji (${nP})` : 'Powiadomienia'}</b><button type="button" class="inb-x" data-inb="close" aria-label="Zamknij">✕</button></div>
         ${d.auto ? '' : '<span class="inb-pill">auto-stosowanie wył.</span>'}
@@ -4129,7 +4142,7 @@
       const pairs = String(b.dataset.p || '').split(',').filter(Boolean).map(x => x.split('='));
       this._inbGone = this._inbGone || new Set(); this._inbRead = this._inbRead || new Set(); this._inbRej = this._inbRej || {};
       try {
-        if (act === 'close') { this._inbOpen = false; }
+        if (act === 'close') { this._inbOpen = false; this._inbAutoSeen(); }
         else if (act === 'apply') {
           const times = {}; pairs.forEach(([k, v]) => { if (k && /^\d{2}:\d{2}$/.test(v)) times[k] = v; });
           if (!Object.keys(times).length) return;
@@ -5794,7 +5807,7 @@
   // =====================================================================
   // Wersja tego pliku (ustawiana skryptem pakującym z manifest.json). Każdy moduł niesie tę samą w install.version:
   // gdy się różnią, przeglądarka podała starą kopię modułu z pamięci podręcznej.
-  const CARD_VERSION = '0.9.5.5';
+  const CARD_VERSION = '0.9.5.6';
   const MOD_TIMEOUT_MS = 20000;
   const MODULES = {
     diag:   { file: 'bms-diag.js',   global: '__bmsDiagInstall',   contract: 1, label: 'Diagnostyki', p: null, ready: false, err: '', got: '' },

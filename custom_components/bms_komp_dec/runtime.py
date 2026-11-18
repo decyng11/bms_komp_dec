@@ -1788,8 +1788,15 @@ class BmsRuntime:
                 avg = tot["cost"] / tot["import_kwh"]
         except Exception:  # noqa: BLE001
             pass
+        neg = None
+        try:
+            neg = analysis_mod.neg_summary({k: b for k, b in buckets.items() if b})
+        except Exception:  # noqa: BLE001
+            pass
         return {"tariff": analysis_mod.tariff_compare(buckets, cfg, today),
-                "sim": analysis_mod.year_sim(dict(self.insights.days), cfg, avg), "cfg": cfg}
+                "sim": analysis_mod.year_sim(dict(self.insights.days), cfg, avg), "cfg": cfg, "neg": neg,
+                "neg_reaction": switch_on(self.hass, "negative_price_reaction", False),
+                "neg_threshold": number_value(self.hass, "low_price_threshold", 0.0)}
 
     def analysis_set(self, data: dict) -> dict[str, Any]:
         cur = dict(self.state.get("analysis_cfg") or {})
@@ -2139,9 +2146,10 @@ class BmsRuntime:
     async def _plan_tick(self, now: datetime) -> None:
         await self.refresh_plan()
         try:
-            from .automation import async_live_apply, async_notify_sets_off
+            from .automation import async_live_apply, async_morning_guard, async_notify_sets_off
             await async_live_apply(self, self.hass, self._plan, now)
             await async_notify_sets_off(self, self.hass, self._plan, now)
+            await async_morning_guard(self, self.hass, self._plan, now)
         except Exception as err:  # noqa: BLE001
             _LOGGER.error("EMS auto-stosowanie z planu: %s", err, exc_info=True)
 

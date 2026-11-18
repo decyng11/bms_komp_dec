@@ -17,7 +17,7 @@ async def main():
     # ---------- autotest: struktura i wybrane kontrole
     res = await ST.run(rt)
     names = [g["name"] for g in res["groups"]]
-    check("autotest: 7 grup", names == ["Falownik i połączenie", "Prognoza PV", "Ceny", "Zanik sieci", "Urządzenia", "Działanie", "Konfiguracja (jak w kreatorze)"], names)
+    check("autotest: 8 grup (z „Auto-stosowanie”)", names == ["Falownik i połączenie", "Prognoza PV", "Ceny", "Zanik sieci", "Urządzenia", "Auto-stosowanie", "Działanie", "Konfiguracja (jak w kreatorze)"], names)
     allc = {ch["id"]: ch for g in res["groups"] for ch in g["checks"]}
     check("autotest: SOC i moc sieci odczytane", allc["live_soc"]["status"] == "ok" and allc["live_grid_power"]["status"] == "ok", (allc.get("live_soc"), allc.get("live_grid_power")))
     check("autotest: napięcie L1 231 V → OK", allc["grid_v"]["status"] == "ok" and "231" in allc["grid_v"]["detail"], allc["grid_v"])

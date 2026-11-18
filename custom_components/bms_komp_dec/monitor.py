@@ -132,9 +132,11 @@ class Notifier:
                 sent.pop(k, None)
         rt._save_state()  # noqa: SLF001
         rt.log.add("notify", f"{title}: {message}", level)
-        inbox.add(rt.state, kind, title, message, level)
+        inbox.add(rt.state, kind, title, message, level, supersede=bool(cfg.get("auto_read", True)))
         if not switch_on(rt.hass, "notifications_enabled", True):
             return False
+        if not force and not ncfg.phone_allows(cfg, kind):
+            return True        # poziom „na telefon” pomija ten rodzaj — zostaje w skrzynce panelu (dzwonek), bez telefonu i bez powiadomienia HA
         try:
             await rt.hass.services.async_call(
                 "persistent_notification", "create",
@@ -152,6 +154,12 @@ class Notifier:
         return True
 
     async def dismiss(self, kind: str) -> None:
+        """Sytuacja minęła: zdejmuje powiadomienie z HA, a przy włączonym autoodczycie oznacza wpisy w skrzynce jako przeczytane."""
+        await self._dismiss_persistent(kind)
+        if self.cfg().get("auto_read", True) and inbox.resolve(self.rt.state, kind):
+            self.rt._save_state()  # noqa: SLF001
+
+    async def _dismiss_persistent(self, kind: str) -> None:
         try:
             await self.rt.hass.services.async_call(
                 "persistent_notification", "dismiss", {"notification_id": f"{NOTIFY_ID_PREFIX}{kind}"})
@@ -177,11 +185,22 @@ class Monitor:
                           ("pobór z sieci", self._high_import), ("ceny jutro", self._prices_tomorrow),
                           ("źródła danych", self._sources), ("zużycie", self._load_above),
                           ("PV jutro", self._weak_pv), ("plan a próg", self._plan_floor), ("trafność prognoz", self._accuracy), ("zdrowie baterii", self._health),
-                          ("podsumowania", self._summaries)):
+                          ("podsumowania", self._summaries), ("autoodczyt", self._inbox_auto_read)):
             try:
                 await chk(now)
             except Exception as err:  # noqa: BLE001
                 _LOGGER.error("EMS monitor [%s]: %s", name, err, exc_info=True)
+
+    # ----------------------------------------------------------- autoodczyt skrzynki
+    async def _inbox_auto_read(self, now: datetime) -> None:
+        """Informacje starsze niż AUTO_READ_INFO_H stają się „przeczytane” (i znikają z powiadomień HA); ostrzeżenia i błędy nie."""
+        if not self.notifier.cfg().get("auto_read", True):
+            return
+        kinds = inbox.auto_read(self.rt.state, now.timestamp())
+        if kinds:
+            self.rt._save_state()  # noqa: SLF001
+            for k in kinds:
+                await self.notifier._dismiss_persistent(k)  # noqa: SLF001
 
     # ------------------------------------------------------------- niski SOC
     async def _low_soc(self, now: datetime) -> None:

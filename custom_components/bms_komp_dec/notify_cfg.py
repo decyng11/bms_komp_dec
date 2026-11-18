@@ -49,6 +49,7 @@ CATALOG: dict[str, tuple] = {
     "load_above": ("Ceny i plan", "Zużycie dziś ponad prognozę", "Prognoza bieżąca zużycia (tempo dnia) wyższa niż prognoza dnia o więcej niż próg.", True, True, 1440, False,
                    ("próg", "%", 30.0, 10.0, 200.0, 5.0)),
     "proposal": ("Ceny i plan", "Codzienna propozycja harmonogramu", "Propozycja z 16:00 (co by się zmieniło w godzinach).", True, False, 0, False, None),
+    "morning_guard": ("Ceny i plan", "Straż poranka: wymagane ładowanie nocne nie jest ustawione", "Plan wymaga okna ładowania z sieci (bateria nie wystarczy do rana), a godziny w falowniku nie są takie jak w planie — na ok. 2 godziny przed startem okna.", True, True, 720, False, None),
     "auto_apply": ("Ceny i plan", "Auto-stosowanie zmieniło harmonogram", "Które godziny zmieniono (z możliwością cofnięcia).", True, True, 0, False, None),
     "plan_floor": ("Ceny i plan", "Plan: bateria dojdzie do progu", "Plan 24 h przewiduje zejście SOC do progu odcięcia falownika w ciągu 16 h (dom pobierałby z sieci), mimo zaplanowanego ładowania i sprzedaży.", True, True, 720, False, None),
     "plan_error": ("Ceny i plan", "Plan niedostępny", "Planer nie mógł policzyć planu (np. brak SOC).", True, True, 360, False, None),
@@ -73,6 +74,24 @@ CATALOG: dict[str, tuple] = {
     "summary_monthly": ("Podsumowania", "Raport miesięczny", "Raport za poprzedni miesiąc z porównaniem do wcześniejszego.", True, True, 0, False, None),
 }
 GROUPS = ("Bateria", "Falownik", "Ceny i plan", "Działanie", "Urządzenia", "Podsumowania")
+
+# Ważność rodzaju: 1 = krytyczne (zawsze przerywa: bateria, falownik, zabezpieczenia, plan zagrożony), 2 = ważne (braki danych, zmiany
+# harmonogramu, podsumowania), 3 = informacyjne (cykle urządzeń, podpowiedzi, ceny „do wiadomości”). Poziom „na telefon” wybiera, od jakiej
+# ważności wysyłamy na telefon i do powiadomień HA; skrzynka panelu (dzwonek) dostaje ZAWSZE wszystko, więc nic nie ginie.
+PRIORITY: dict[str, int] = {
+    "low_soc": 1, "alarm": 1, "comm_loss": 1, "grid_outage": 1, "island_overload": 1, "battery_temp_high": 1, "battery_temp_low": 1,
+    "command_unconfirmed": 1, "drift": 1, "guard_action": 1, "grid_limit": 1, "grid_charge_stalled": 1, "plan_floor": 1, "set_off": 1,
+    "morning_guard": 1, "grid_charge_target": 1,
+    "rce_missing": 2, "buy_prices_missing": 2, "pv_forecast_missing": 2, "plan_error": 2, "auto_apply": 2, "storm": 2, "battery_health": 2,
+    "device_anomaly": 2, "device_shed": 2, "weak_pv": 2, "rce_negative": 2, "summary_daily": 2, "summary_weekly": 2, "summary_monthly": 2,
+    "rce_high": 3, "load_above": 3, "high_import": 3, "battery_full": 3, "proposal": 3, "schedule_skipped": 3, "sale": 3, "grid_charge": 3,
+    "price_reaction": 3, "device_cycle": 3, "device_hint": 3, "device_plan": 3, "devices_unknown": 3,
+}
+PRIO_LABELS = {1: "krytyczne", 2: "ważne", 3: "info"}
+PHONE_LEVELS = ("all", "important", "critical")           # wszystkie / ważne i krytyczne / tylko krytyczne
+PHONE_LEVEL_MAX = {"all": 3, "important": 2, "critical": 1}
+DEFAULT_PHONE_LEVEL = "important"
+DEFAULT_AUTO_READ = True
 DEFAULT_SCHED = {
     "quiet": {"on": False, "start": "22:00", "end": "07:00"},
     "daily": {"time": "21:00"},
@@ -140,7 +159,21 @@ def effective(raw: dict | None) -> dict[str, Any]:
         "monthly": {"day": int(md) if md is not None and 1 <= md <= 28 else DEFAULT_SCHED["monthly"]["day"],
                     "time": _hm(m.get("time"), DEFAULT_SCHED["monthly"]["time"])},
     }
-    return {"kinds": kinds, "sched": sched}
+    pl = raw.get("phone_level")
+    ar = raw.get("auto_read")
+    return {"kinds": kinds, "sched": sched,
+            "phone_level": pl if pl in PHONE_LEVELS else DEFAULT_PHONE_LEVEL,
+            "auto_read": ar if isinstance(ar, bool) else DEFAULT_AUTO_READ}
+
+
+def priority(key: str) -> int:
+    """Ważność rodzaju (1 krytyczne … 3 info); nieznany rodzaj traktujemy jako „ważny”, żeby go nie gubić."""
+    return PRIORITY.get(key, 2)
+
+
+def phone_allows(cfg: dict, key: str) -> bool:
+    """Czy rodzaj przechodzi przez wybrany poziom „na telefon” (poziom nie dotyczy skrzynki panelu — ta dostaje wszystko)."""
+    return priority(key) <= PHONE_LEVEL_MAX.get(cfg.get("phone_level"), PHONE_LEVEL_MAX[DEFAULT_PHONE_LEVEL])
 
 
 def kind(cfg: dict, key: str) -> dict[str, Any]:
@@ -174,7 +207,7 @@ def catalog_payload() -> list[dict[str, Any]]:
     """Opis rodzajów dla karty (kolejność = kolejność wyświetlania)."""
     out = []
     for key, (g, n, d, on, phone, cd, quiet_ok, thr) in CATALOG.items():
-        item = {"key": key, "group": g, "name": n, "desc": d,
+        item = {"key": key, "group": g, "name": n, "desc": d, "prio": priority(key),
                 "default": {"on": on, "phone": phone, "cooldown": cd, "quiet_ok": quiet_ok}}
         if thr:
             item["thr"] = {"label": thr[0], "unit": thr[1], "default": thr[2], "min": thr[3], "max": thr[4], "step": thr[5]}
