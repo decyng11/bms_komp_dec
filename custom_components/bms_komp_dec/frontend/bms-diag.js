@@ -17,6 +17,9 @@
   const DG_PW_SHA = '16e2f18f0de673c43007f0d722f1e82b8b29f574d590f2f479f61d56c958c71f';
   const DG_SALT = 'bms-komp-dec:';
   const DG_UNLOCK_MS = 15 * 60 * 1000;
+  // Hasło do Ustawień (Diagnostyki) wyłączone na prośbę właściciela — zakładka nadal jest tylko dla administratorów HA.
+  // Żeby przywrócić bramkę z hasłem, wystarczy ustawić true (testy włączają ją przez window.__BMS_DG_PW).
+  const DG_REQUIRE_PW = false;
   const DG_MEM = {};
   // Dziennik zmian, kopie, profile, prefiks, kontrole po zapisie i alarmy są przechowywane w Home Assistant
   // (usługi bms_komp_dec.diag_store_*), a nie tylko w localStorage jednej przeglądarki. localStorage zostaje
@@ -257,8 +260,14 @@
     .dg-btn.sec { background:var(--seg-bg); color:var(--text); } .dg-btn.red { background:var(--red); } .dg-btn.green { background:var(--green); color:#04210c; } .dg-btn.sm { padding:5px 10px; font-size:12px; }
     .dg-bar { display:flex; align-items:center; gap:8px; flex-wrap:wrap; padding:9px 12px; border-radius:12px; background:rgba(255,159,10,.12); color:var(--orange); font-size:12.5px; margin-bottom:10px; }
     .dg-bar .sp { flex:1; }
-    .dg-nav { display:flex; gap:6px; overflow-x:auto; margin-bottom:12px; padding-bottom:2px; scrollbar-width:none; }
-    .dg-nav::-webkit-scrollbar { display:none; }
+    /* Sekcje Ustawień: na komputerze zawijają się do kilku wierszy (wcześniej jeden przewijany rząd bez paska — myszą nie dało się
+       dojść do ostatnich 5 z 13); na wąskim ekranie jeden rząd przewijany palcem, z zanikiem przy prawej krawędzi jako podpowiedzią. */
+    .dg-nav { display:flex; flex-wrap:wrap; gap:6px; margin-bottom:12px; }
+    @media (max-width:699px) {
+      .dg-nav { flex-wrap:nowrap; overflow-x:auto; padding-bottom:2px; scrollbar-width:none; }
+      .dg-nav::-webkit-scrollbar { display:none; }
+      .dg-nav.more-r { -webkit-mask-image:linear-gradient(to right,#000 calc(100% - 34px),transparent); mask-image:linear-gradient(to right,#000 calc(100% - 34px),transparent); }
+    }
     .dg-pill { flex:none; border:none; background:var(--surface); color:var(--text2); padding:8px 13px; border-radius:20px; font-weight:600; font-size:13px; cursor:pointer; font-family:inherit; }
     .dg-pill.on { background:var(--accent); color:#fff; }
     .dg-skins { display:grid; grid-template-columns:repeat(auto-fit,minmax(200px,1fr)); gap:10px; }
@@ -329,7 +338,8 @@
     },
     _dgLS() { return DG_LS; },
     _dgIsAdmin() { const u = this._hass && this._hass.user; return !!(u && u.is_admin); },
-    _dgUnlocked() { return Date.now() < this._dgS().until; },
+    _dgNeedsPw() { return DG_REQUIRE_PW || window.__BMS_DG_PW === true; },
+    _dgUnlocked() { return !this._dgNeedsPw() || Date.now() < this._dgS().until; },
     _dgSyncTab() {
       if (DG_ST.card && !DG_ST.ready && Date.now() - DG_ST.retryAt > 30000) { DG_ST.retryAt = Date.now(); dgStoreLoad(this); }
       if (DG_ST.ready && DG_ST.card && Object.keys(DG_ST.dirty).length && !DG_ST.timer) dgStoreSchedule(2000);
@@ -488,11 +498,26 @@
         return;
       }
       const secs = [['overview', '📡 Przegląd'], ['selftest', '🩺 Autotest'], ['wizard', '🧭 Kreator instalacji'], ['config', '⚙️ Konfiguracja'], ['tou', '🕒 Strefy czasowe'], ['charts', '📈 Wykresy'], ['alarms', '🚨 Alarmy'], ['modes', '🛡️ Tryby'], ['notify', '🔔 Powiadomienia'], ['backup', '💾 Kopie i profile'], ['log', '📜 Dziennik zmian'], ['look', '🎨 Wygląd'], ['adv', '🧪 Zaawansowane']];
-      host.innerHTML = `<div class="dg-bar"><span>🔓 Tryb instalatora aktywny · wygasa za <b id="dgLeft">–</b></span><span class="sp"></span><button class="dg-btn sec sm" data-act="extend">Przedłuż</button><button class="dg-btn sec sm" data-act="lock">Zablokuj</button></div>
+      const bar = this._dgNeedsPw() ? '<div class="dg-bar"><span>🔓 Tryb instalatora aktywny · wygasa za <b id="dgLeft">–</b></span><span class="sp"></span><button class="dg-btn sec sm" data-act="extend">Przedłuż</button><button class="dg-btn sec sm" data-act="lock">Zablokuj</button></div>' : '';
+      host.innerHTML = `${bar}
         <div class="dg-nav">${secs.map(([k, l]) => `<button class="dg-pill ${s.sec === k ? 'on' : ''}" data-act="sec" data-sec="${k}">${l}</button>`).join('')}</div>
         <div id="dgStoreNote">${dgStoreNote()}</div><div id="dgAlarmBox">${this._dgAlarmHtml()}</div><div id="dgBody"></div><div class="dg-muted" id="dgVer" style="margin:14px 0 4px;font-size:11px;">${this._dgVerLine()}</div><div id="dgToast" class="dg-toast"></div>`;
+      this._dgNavFix(host);
       this._dgRenderSection();
       this._dgTickBar();
+    },
+    // Wąski ekran: pasek sekcji przewija się palcem. Każde przerysowanie zerowało przewinięcie, więc wybrana sekcja z końca listy
+    // znikała z widoku — ustawiamy ją z powrotem w widoku i pokazujemy zanik przy krawędzi, gdy jest co przewijać.
+    _dgNavFix(host) {
+      const nav = host.querySelector('.dg-nav'); if (!nav) return;
+      const upd = () => nav.classList.toggle('more-r', nav.scrollWidth > nav.clientWidth + 1 && nav.scrollLeft + nav.clientWidth < nav.scrollWidth - 2);
+      const on = nav.querySelector('.dg-pill.on');
+      if (on && nav.scrollWidth > nav.clientWidth + 1) {
+        const left = on.getBoundingClientRect().left - nav.getBoundingClientRect().left + nav.scrollLeft;
+        nav.scrollLeft = Math.max(0, left - 16);
+      }
+      nav.addEventListener('scroll', upd, { passive: true });
+      upd();
     },
     _dgRenderSection() {
       const s = this._dgS(); const body = this._el('dgBody'); if (!body) return;

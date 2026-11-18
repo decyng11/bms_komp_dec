@@ -104,7 +104,7 @@ Integracja potrafi sama znaleźć w Home Assistancie liczniki kWh (pralka, pompa
 
 ## Ustawienia (dawniej Diagnostyka) i autotest
 
-Parametry falownika, strefy czasowe, alarmy, kopie ustawień, tryby i kreator instalacji są w Diagnostyce, za hasłem. Autotest sprawdza na żywo dane z falownika, prognozę, ceny i urządzenia i daje raport do skopiowania. Problemy, które trwają dłużej (brak danych z falownika, brak ceny, brak prognozy), pojawiają się też w Ustawienia, Naprawy.
+Parametry falownika, strefy czasowe, alarmy, kopie ustawień, tryby i kreator instalacji są w Diagnostyce (widocznej tylko dla administratorów Home Assistant, bez dodatkowego hasła). Autotest sprawdza na żywo dane z falownika, prognozę, ceny i urządzenia i daje raport do skopiowania. Problemy, które trwają dłużej (brak danych z falownika, brak ceny, brak prognozy), pojawiają się też w Ustawienia, Naprawy.
 
 Szczegółowa instrukcja obsługi z opisem każdej zakładki jest w pliku [Instrukcja_EMS_komp-dec.pdf](docs/Instrukcja_EMS_komp-dec.pdf).
 

@@ -1949,6 +1949,7 @@ class BmsRuntime:
                 self._spawn(self.monitor.notifier.send("plan_error", "📉 EMS: plan niedostępny", str(res["error"]), key="plan_error"))
             else:
                 inbox.prune_rejected(self.state, self._plan["proposals"])
+                inbox.prune_auto_skip(self.state, self._plan["proposals"])
                 self._remember_grid_target(self._plan)
                 self._remember_sale_power(self._plan)
                 self._log_plan_decisions(self._plan)

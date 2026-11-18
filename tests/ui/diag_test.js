@@ -53,6 +53,7 @@ let fails=0; const ok=(c,m)=>{if(!c){fails++;console.log('FAIL',m)}else console.
   },ents);
   const tag=mobile?'m':'d';
   const q=(f,a)=>p.evaluate(f,a);
+  await q(()=>{window.__BMS_DG_PW=true;});   // ten test sprawdza bramkę z hasłem (domyślnie wyłączoną)
   // --- tab widoczny dla admina
   ok(await q(()=>getComputedStyle(__el.shadowRoot.getElementById('tabDiag')).display!=='none'),tag+' zakładka widoczna dla admina');
   // --- brak admina

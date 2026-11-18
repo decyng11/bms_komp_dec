@@ -87,6 +87,48 @@ async def main():
     await automation.async_live_apply(rt, hass, plan, t0 + timedelta(minutes=31))
     check("na żywo: po 31 min wymagane okno 19:00–03:00 zastosowane", cur(S) == ("19:00", "03:00"), cur(S))
 
+    # ---- powód niezastosowania zapamiętany dla panelu („Do decyzji”)
+    from custom_components.bms_komp_dec import inbox
+    hass, c, opt, rt, S = setup("12:00", "14:00")
+    pr = {"start_grid_charge": pp("12:00", "17:00"), "stop_grid_charge": pp("14:00", "19:00")}
+    res = await automation.async_auto_apply(rt, hass, {"proposals": pr})
+    rec = (rt.state.get("auto_skip") or {}).get("start_grid_charge") or {}
+    check("odmowa przez limit: powód zapisany przy kluczu", rec.get("kind") == "skip" and "limit 4 h" in rec.get("why", "") and rec.get("prop") == "17:00", rec)
+    check("odmowa przez limit: powód podpowiada, co zrobić", "potwierdź ręcznie" in rec.get("why", "") and "maks. przesunięcie" in rec.get("why", ""), rec)
+    # w czasie przerwy między próbami ogólne „czekam” nie przykrywa konkretnego powodu
+    automation._remember_auto_skip(rt, {"start_grid_charge": ("czekam", "17:00")}, kind="wait")
+    check("„czekam” nie nadpisuje konkretnej odmowy tej samej propozycji", rt.state["auto_skip"]["start_grid_charge"]["kind"] == "skip", rt.state["auto_skip"])
+    automation._remember_auto_skip(rt, {"start_grid_charge": ("czekam", "18:00")}, kind="wait")
+    check("dla innej propozycji „czekam” zastępuje stary powód", rt.state["auto_skip"]["start_grid_charge"]["kind"] == "wait" and rt.state["auto_skip"]["start_grid_charge"]["prop"] == "18:00")
+    # plan zmienił propozycję → stary powód znika
+    inbox.prune_auto_skip(rt.state, {"start_grid_charge": pp("12:00", "17:30"), "stop_grid_charge": pp("14:00", "19:00")})
+    check("inna proponowana godzina: stary powód usunięty", "start_grid_charge" not in rt.state["auto_skip"], rt.state["auto_skip"])
+    # zastosowanie czyści powód
+    hass, c, opt, rt, S = setup("12:00", "14:00")
+    rt.state["auto_skip"] = {"start_grid_charge": {"kind": "skip", "why": "stary", "prop": "13:00"}}
+    await automation.async_auto_apply(rt, hass, {"proposals": {"start_grid_charge": pp("12:00", "13:00"), "stop_grid_charge": pp("14:00", "14:00")}})
+    check("zastosowanie propozycji czyści jej powód", "start_grid_charge" not in rt.state["auto_skip"] and cur(S)[0] == "13:00", (rt.state["auto_skip"], cur(S)))
+    # trwa sprzedaż → powód „wstrzymane” przy oczekujących kluczach
+    hass, c, opt, rt, S = setup("12:00", "14:00")
+    rt.is_selling = lambda: True
+    await automation.async_auto_apply(rt, hass, {"proposals": {"start_grid_charge": pp("12:00", "13:00"), "stop_grid_charge": pp("14:00", "14:00")}})
+    rec = (rt.state.get("auto_skip") or {}).get("start_grid_charge") or {}
+    check("trwa sprzedaż: powód „wstrzymane: trwa sprzedaż”", "wstrzymane: trwa sprzedaż" in rec.get("why", "") and "stop_grid_charge" not in rt.state["auto_skip"], rt.state.get("auto_skip"))
+    # niska pewność i tryb podglądu
+    t, r = await apply("12:00", "14:00", "13:00", "14:00", confidence="low")
+    hass, c, opt, rt, S = setup("12:00", "14:00"); S.set("switch.bms_auto_apply_dry_run", "on")
+    await automation.async_auto_apply(rt, hass, {"proposals": {"start_grid_charge": pp("12:00", "13:00"), "stop_grid_charge": pp("14:00", "14:00")}}, dry_run=True)
+    check("tryb podglądu: powód wskazuje przełącznik", "tylko podgląd" in ((rt.state.get("auto_skip") or {}).get("start_grid_charge") or {}).get("why", ""), rt.state.get("auto_skip"))
+    # ścieżka na żywo: oczekiwanie na stabilność jest widoczne jako powód
+    hass, c, opt, rt, S = setup("12:00", "14:00")
+    t1 = dt_util.now().replace(hour=9, minute=0, second=0, microsecond=0)
+    pl = {"proposals": {"start_grid_charge": pp("12:00", "13:00"), "stop_grid_charge": pp("14:00", "14:00")}}
+    await automation.async_live_apply(rt, hass, pl, t1)
+    rec = (rt.state.get("auto_skip") or {}).get("start_grid_charge") or {}
+    check("na żywo: przed upływem 30 min widać powód „czekam…”", rec.get("kind") == "wait" and "30 min" in rec.get("why", ""), rec)
+    await automation.async_live_apply(rt, hass, pl, t1 + timedelta(minutes=31))
+    check("na żywo: po zastosowaniu powód znika", "start_grid_charge" not in (rt.state.get("auto_skip") or {}) and cur(S)[0] == "13:00", (rt.state.get("auto_skip"), cur(S)))
+
     print(f"AUTOAPPLY-SHIFT PASS={common.PASS} FAIL={common.FAIL}")
 
 asyncio.run(main())

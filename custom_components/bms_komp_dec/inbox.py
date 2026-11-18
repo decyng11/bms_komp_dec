@@ -100,5 +100,22 @@ def prune_rejected(state: dict[str, Any], proposals: dict[str, Any]) -> int:
     return len(drop)
 
 
+def prune_auto_skip(state: dict[str, Any], proposals: dict[str, Any]) -> int:
+    """Zapomina powody niezastosowania propozycji, której plan już nie proponuje (inna godzina, „pomiń”, brak) albo która
+    jest już ustawiona. Powód dotyczy konkretnej propozycji (`prop`), więc nowa godzina zaczyna bez cudzego komunikatu."""
+    store = state.get("auto_skip")
+    if not isinstance(store, dict) or not store:
+        return 0
+    drop = []
+    for k, rec in store.items():
+        p = proposals.get(k)
+        if (not isinstance(rec, dict) or not isinstance(p, dict) or p.get("skip") or not p.get("proposed")
+                or str(p.get("proposed")) != str(rec.get("prop")) or p.get("proposed") == p.get("current")):
+            drop.append(k)
+    for k in drop:
+        store.pop(k, None)
+    return len(drop)
+
+
 def unread(state: dict[str, Any]) -> int:
     return sum(1 for e in _items(state) if not e.get("read"))

@@ -70,6 +70,7 @@ const { seed, curve, REPORT, HEALTH, tab, sr, openModes, openSec } = T;
     summary: { errors: 1, warnings: 1, ok: 1, commands_failing: 1, ready: false } };
   e = await openCard(b, {});
   await seed(e, { curve: curve(), report: REPORT(), health: HEALTH });
+  await e.q(() => { window.__BMS_DG_PW = true; });   // test sprawdza bramkę z hasłem (domyślnie wyłączoną)
   await tab(e, 'diag'); await sleep(400);
   ok(await e.q(() => !__el.shadowRoot.querySelector('#exWizBox') && !!__el.shadowRoot.getElementById('dgPw')), 'kreator niewidoczny przed podaniem hasła');
   await openSec(e, 'wizard');

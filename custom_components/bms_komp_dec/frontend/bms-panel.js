@@ -879,6 +879,8 @@
     .inb-t { font-size: 14px; } .inb-time { font-size: 11px; color: var(--muted); flex: none; }
     .inb-tag { font-size: 10.5px; font-weight: 700; padding: 2px 7px; border-radius: 999px; flex: none; }
     .inb-v { margin: 6px 0 2px; font-size: 14px; display: flex; flex-wrap: wrap; gap: 4px 14px; } .inb-v i { color: var(--muted); font-style: normal; }
+    .inb-auto { margin: 8px 0 2px; padding: 7px 10px; border-radius: 10px; font-size: 12.5px; line-height: 1.4; background: rgba(255,159,10,.14); color: var(--orange); }
+    .inb-auto.wait { background: var(--surface); color: var(--muted); }
     .inb-card details { margin-top: 4px; } .inb-card summary { cursor: pointer; font-size: 12px; color: var(--muted); }
     .inb-why, .inb-msg { font-size: 12.5px; color: var(--text2); margin-top: 4px; white-space: pre-line; }
     .inb-btns { display: flex; gap: 8px; margin-top: 8px; }
@@ -4035,7 +4037,8 @@
       const gone = this._inbGone || new Set(), read = this._inbRead || new Set();
       const notes = (Array.isArray(ma.inbox) ? ma.inbox : []).filter(e => !gone.has(e.id)).map(e => ({ ...e, read: e.read || read.has(e.id) }));
       const auto = (st[this._eid('switch', 'auto_apply')] || {}).state === 'on';
-      return { groups, notes, auto, pending: groups.length, unread: notes.filter(e => !e.read).length };
+      const askip = ma.auto_skip && typeof ma.auto_skip === 'object' ? ma.auto_skip : {};   // powody, dla których auto-stosowanie nie zmieniło godzin
+      return { groups, notes, auto, askip, pending: groups.length, unread: notes.filter(e => !e.read).length };
     }
 
     _renderInbox() {
@@ -4078,7 +4081,7 @@
       }
       ov.hidden = !this._inbOpen;
       if (!this._inbOpen) return;
-      const sig = JSON.stringify([d.groups.map(g => [g.title, g.kind, g.chg.map(([k, p]) => k + p.proposed + p.current + (p.gain_pln == null ? '' : p.gain_pln) + (p.required ? 'r' : ''))]), d.notes.map(e => [e.id, e.read]), d.auto]);
+      const sig = JSON.stringify([d.groups.map(g => [g.title, g.kind, g.chg.map(([k, p]) => k + p.proposed + p.current + (p.gain_pln == null ? '' : p.gain_pln) + (p.required ? 'r' : ''))]), d.notes.map(e => [e.id, e.read]), d.auto, Object.keys(d.askip).sort().map(k => [k, d.askip[k] && d.askip[k].why, d.askip[k] && d.askip[k].prop])]);
       if (sig === this._inbSig) return;
       this._inbSig = sig;
       const esc = t => String(t == null ? '' : t).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -4101,8 +4104,11 @@
         const fz = v => (v >= 0 ? '+' : '−') + Math.abs(v).toFixed(2).replace('.', ',') + ' zł';
         const gtag = lp && lp.required ? '<span class="inb-tag" style="background:#ffffff14;color:var(--muted)">WYMAGANE</span>'
           : (lp && typeof lp.gain_pln === 'number' && isFinite(lp.gain_pln) ? `<span class="inb-tag" style="background:#10b98133;color:#10b981">${fz(lp.gain_pln)}</span>` : '');
+        // auto-stosowanie włączone, a propozycja wisi → pokazujemy konkretny powód (limit, trwająca sprzedaż, czekanie na stabilność…)
+        const nt = d.auto ? g.chg.map(([k, p]) => { const r = d.askip[k]; return r && String(r.prop) === String(p.proposed) ? r : null; }).find(Boolean) : null;
+        const autoNote = nt ? `<div class="inb-auto ${nt.kind === 'wait' ? 'wait' : 'warn'}">🤖 Auto-stosowanie: ${esc(nt.why)}</div>` : '';
         return `<div class="inb-card p-change"><div class="inb-r"><span class="inb-t">${g.icon} ${esc(g.title)}</span><span>${gtag} <span class="inb-tag" style="background:#10b98122;color:#10b981">ZMIENIAM</span></span></div>
-          <div class="inb-v">${vals}</div>${det('p' + i, 'Dlaczego', why)}
+          <div class="inb-v">${vals}</div>${autoNote}${det('p' + i, 'Dlaczego', why)}
           <div class="inb-btns"><button type="button" data-inb="reject" data-p="${dat}">Odrzuć</button><button type="button" class="ok" data-inb="apply" data-p="${dat}">Potwierdź</button></div></div>`;
       }).join('');
       const ic = { error: '🚨', warn: '⚠️', ok: '✅', info: 'ℹ️' };

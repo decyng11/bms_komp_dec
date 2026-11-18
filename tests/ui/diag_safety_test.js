@@ -54,7 +54,7 @@ let fails=0; const ok=(c,m)=>{if(!c){fails++;console.log('FAIL',m)}else console.
 
   const tag='d'; const q=(f,a)=>p.evaluate(f,a);
   await q(()=>__el.shadowRoot.getElementById('tabDiag').click());
-  await q(()=>{const e=__el.shadowRoot;e.getElementById('dgPw').value='slonce';e.querySelector('[data-act=unlock]').click();});
+  await q(()=>{const e=__el.shadowRoot;if(e.getElementById('dgPw')){e.getElementById('dgPw').value='slonce';e.querySelector('[data-act=unlock]').click();}});
   await q(()=>__el.shadowRoot.querySelector('[data-sec=config]').click());
   const ZE='number.inverter_zero_export_power';
   const setv=(eid,v)=>q(([eid,v])=>{const i=__el.shadowRoot.querySelector(`[data-eid="${eid}"]`);i.value=v;i.dispatchEvent(new Event('input',{bubbles:true}));},[eid,v]);

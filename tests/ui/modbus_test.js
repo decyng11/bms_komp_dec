@@ -19,8 +19,8 @@ async function setup(b, services, { noResp } = {}) {
     });
   }, { services, noResp });
   await e.q(() => __el.shadowRoot.querySelector('[data-tab="diag"]').click());
-  await e.page.waitForFunction(() => !!__el.shadowRoot.getElementById('dgPw'), null, { timeout: 8000 });
-  await e.q(() => { const s = __el.shadowRoot; s.getElementById('dgPw').value = 'slonce'; s.querySelector('[data-act=unlock]').click(); });
+  await e.page.waitForFunction(() => !!__el.shadowRoot.getElementById('dgPw') || !!__el.shadowRoot.getElementById('dgBody'), null, { timeout: 8000 });
+  await e.q(() => { const s = __el.shadowRoot; if (s.getElementById('dgPw')) { s.getElementById('dgPw').value = 'slonce'; s.querySelector('[data-act=unlock]').click(); } });
   await e.page.waitForFunction(() => !!__el.shadowRoot.getElementById('dgBody'), null, { timeout: 5000 });
   await e.q(() => __el.shadowRoot.querySelector('[data-sec=adv]').click());
   await e.page.waitForFunction(() => !!__el.shadowRoot.getElementById('dgMbReg'), null, { timeout: 5000 });

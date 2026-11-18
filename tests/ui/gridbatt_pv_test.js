@@ -35,8 +35,8 @@ const sleep = (ms) => new Promise(r => setTimeout(r, ms));
     pv_daily: [{ kwh: 4.3, raw: 3.6, factor: 1.2, n: 9 }],
     pv_sources: [{ name: 'Solcast', today: 3.6, tomorrow: 5.1 }, { name: 'Forecast.Solar', today: 4.4, tomorrow: null }] });
   await e.q(() => __el.shadowRoot.querySelector('[data-tab="diag"]').click());
-  await e.page.waitForFunction(() => !!__el.shadowRoot.getElementById('dgPw'), null, { timeout: 8000 });
-  await e.q(() => { const s = __el.shadowRoot; s.getElementById('dgPw').value = 'slonce'; s.querySelector('[data-act=unlock]').click(); });
+  await e.page.waitForFunction(() => !!__el.shadowRoot.getElementById('dgPw') || !!__el.shadowRoot.getElementById('dgBody'), null, { timeout: 8000 });
+  await e.q(() => { const s = __el.shadowRoot; if (s.getElementById('dgPw')) { s.getElementById('dgPw').value = 'slonce'; s.querySelector('[data-act=unlock]').click(); } });
   await e.page.waitForFunction(() => !!__el.shadowRoot.getElementById('dgBody'), null, { timeout: 5000 });
   await e.q(() => __el.shadowRoot.querySelector('[data-sec=adv]').click());
   await e.page.waitForFunction(() => !!__el.shadowRoot.getElementById('dgPvCard'), null, { timeout: 5000 });

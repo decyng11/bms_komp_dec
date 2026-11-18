@@ -196,6 +196,7 @@ async def async_live_apply(runtime, hass: HomeAssistant, plan: dict[str, Any] | 
     loc = dt_util.as_local(now)
     cur_min = loc.hour * 60 + loc.minute
     wanted: dict[str, Any] = {}
+    near: dict[str, Any] = {}
     for start_k, stop_k in LIVE_PAIRS:
         pair = [props.get(start_k), props.get(stop_k)]
         if not all(isinstance(p, dict) for p in pair):
@@ -208,18 +209,30 @@ async def async_live_apply(runtime, hass: HomeAssistant, plan: dict[str, Any] | 
             continue
         cs = _minutes(_current(hass, start_k))
         if cs is not None and 0 < (cs - cur_min) % 1440 <= LIVE_NEAR_START_MIN:
+            near.update({start_k: pair[0], stop_k: pair[1]})
             continue
         wanted[start_k], wanted[stop_k] = pair
     sig = {k: str(p.get("proposed")) for k, p in wanted.items()}
     mem = runtime.state.get("live_apply") or {}
+    if near:
+        _remember_auto_skip(runtime, {k: ("okno zaczyna się za mniej niż 10 min — nie zmieniam go w ostatniej chwili", p.get("proposed"))
+                                      for k, p in near.items()}, kind="wait")
     if not sig:
         if mem.get("sig"):
             runtime.state["live_apply"] = {"last": mem.get("last", 0)}
         return None
+    def _wait(txt: str) -> None:
+        _remember_auto_skip(runtime, {k: (txt, p.get("proposed")) for k, p in wanted.items()}, kind="wait")
+
     if mem.get("sig") != sig:
         runtime.state["live_apply"] = {"sig": sig, "since": ts, "last": mem.get("last", 0)}
+        _wait("czekam, aż propozycja utrzyma się 30 min bez zmian — wtedy zastosuję ją sama")
         return None
-    if ts - float(mem.get("since", ts)) < LIVE_STABLE_S or ts - float(mem.get("last", 0)) < LIVE_COOLDOWN_S:
+    if ts - float(mem.get("since", ts)) < LIVE_STABLE_S:
+        _wait("czekam, aż propozycja utrzyma się 30 min bez zmian — wtedy zastosuję ją sama")
+        return None
+    if ts - float(mem.get("last", 0)) < LIVE_COOLDOWN_S:
+        _wait("poprzednia zmiana była mniej niż godzinę temu — zastosuję po przerwie")
         return None
     runtime.log.add("auto", "Auto-stosowanie z planu na żywo (propozycja stabilna ≥ 30 min): "
                     + ", ".join(f"{k} → {v}" for k, v in sig.items()), "info")
@@ -330,6 +343,29 @@ def _minutes(hm: str | None) -> int | None:
     return int(hm[:2]) * 60 + int(hm[3:5])
 
 
+def _remember_auto_skip(runtime, why: dict[str, tuple[str, Any]], clear: set[str] | frozenset = frozenset(), kind: str = "skip") -> None:
+    """Zapamiętuje, DLACZEGO auto-stosowanie nie zmieniło danej godziny (klucz → {kind, why, prop, at}); panel pokazuje to w karcie
+    propozycji w „Do decyzji”. Wcześniej powód był tylko w dzienniku i w powiadomieniu o propozycji, więc propozycja, która wisiała
+    mimo włączonego auto-stosowania, wyglądała jak „nie działa” bez żadnej wskazówki. `clear` — klucze zastosowane albo już zgodne."""
+    store = runtime.state.get("auto_skip")
+    if not isinstance(store, dict):
+        store = runtime.state["auto_skip"] = {}
+    changed = False
+    for k in clear:
+        if store.pop(k, None) is not None:
+            changed = True
+    for k, (txt, prop) in why.items():
+        old = store.get(k) or {}
+        if kind == "wait" and old.get("kind") == "skip" and old.get("prop") == str(prop):
+            continue                       # konkretny powód odmowy nie ustępuje ogólnemu „czekam” w czasie przerwy między próbami
+        rec = {"kind": kind, "why": str(txt), "prop": str(prop), "at": dt_util.now().isoformat(timespec="seconds")}
+        if (old.get("kind"), old.get("why"), old.get("prop")) != (rec["kind"], rec["why"], rec["prop"]):
+            changed = True
+        store[k] = rec
+    if changed and kind == "skip":
+        runtime._save_state()  # noqa: SLF001
+
+
 def _shift_hours(cur_m: int, new_m: int) -> float:
     """Odległość między dwiema porami doby w godzinach, krótszą drogą przez północ (23:00 → 01:00 to 2 h, nie 22 h).
     Godziny okien to pory doby, więc liczenie „na prostej” zawyżało przesunięcie okien nocnych do ~22 h, a suwak limitu
@@ -393,11 +429,18 @@ async def async_auto_apply(runtime, hass: HomeAssistant, result: dict[str, Any],
     if busy:
         msg = "Auto-stosowanie wstrzymane: " + ", ".join(busy)
         log.add("auto", msg, "warn")
+        pend = {k: (f"wstrzymane: {', '.join(busy)} — ponowię próbę, gdy się skończy", p.get("proposed"))
+                for k, p in proposals.items()
+                if k in VALID_TIME_KEYS and isinstance(p, dict) and not p.get("skip") and p.get("proposed")
+                and p.get("proposed") != _current(hass, k) and not inbox.is_rejected(runtime.state, k, p.get("proposed"))}
+        _remember_auto_skip(runtime, pend)
         return {"applied": {}, "skipped": [msg]}
 
     disabled_sets = [] if dry_run else await async_sync_sale_sets(runtime, hass, proposals)
     max_shift = number_value(hass, "auto_apply_max_shift_h", 4.0)
     wanted: dict[str, str] = {}
+    why: dict[str, tuple[str, Any]] = {}          # klucz → (powód, proponowana godzina) — do wyświetlenia w panelu
+    same: set[str] = set()                        # klucze już zgodne z planem
     for key, p in proposals.items():
         if key not in VALID_TIME_KEYS or not isinstance(p, dict):
             continue
@@ -406,12 +449,14 @@ async def async_auto_apply(runtime, hass: HomeAssistant, result: dict[str, Any],
             continue
         cur = _current(hass, key)
         if cur == proposed:
+            same.add(key)
             continue
         if inbox.is_rejected(runtime.state, key, proposed):
             skipped.append(f"{key}: propozycja odrzucona w panelu")
             continue
         if p.get("confidence") == "low":
             skipped.append(f"{key}: niska pewność propozycji")
+            why[key] = ("niska pewność propozycji (za mało danych) — potwierdź ręcznie", proposed)
             continue
         cur_m, new_m = _minutes(cur), _minutes(proposed)
         # Zabezpieczenie 2: limit przesunięcia względem aktualnego ustawienia (puste okno nie ma czego „przesuwać”).
@@ -423,6 +468,8 @@ async def async_auto_apply(runtime, hass: HomeAssistant, result: dict[str, Any],
             shift_h = _shift_hours(cur_m, new_m)
             if shift_h > max_shift:
                 skipped.append(f"{key}: przesunięcie {shift_h:.1f} h > limit {max_shift:.0f} h")
+                why[key] = (f"przesunięcie o {shift_h:.1f} h przekracza limit {max_shift:.0f} h — potwierdź ręcznie albo zwiększ "
+                            "„Auto-stosowanie — maks. przesunięcie godzin” w Ustawieniach", proposed)
                 continue
         wanted[key] = str(proposed)
 
@@ -437,6 +484,9 @@ async def async_auto_apply(runtime, hass: HomeAssistant, result: dict[str, Any],
         crosses = start_k in CROSS_MIDNIGHT_OK
         if s_m is None or e_m is None or s_m == 0 or e_m == 0 or s_m == e_m or (s_m > e_m and not crosses):
             skipped.append(f"{start_k}/{stop_k}: niespójna para ({start_v}→{stop_v})")
+            for k in (start_k, stop_k):
+                if k in wanted:
+                    why[k] = (f"niespójna para START/STOP ({start_v}→{stop_v}) — potwierdź ręcznie", wanted[k])
             continue
         for k in (start_k, stop_k):
             if k in wanted:
@@ -447,6 +497,7 @@ async def async_auto_apply(runtime, hass: HomeAssistant, result: dict[str, Any],
             await async_enable_sets(runtime, hass, _plan_confirmed_keys(runtime, proposals) | _plan_window_keys(runtime, hass, proposals))
         log.add("auto", "Auto-stosowanie: brak zmian do wprowadzenia"
                 + (f" ({len(skipped)} pominiętych)" if skipped else ""))
+        _remember_auto_skip(runtime, why, same)
         return {"applied": {}, "skipped": skipped, "disabled_sets": disabled_sets}
 
     previous = {k: (_current(hass, k) or "00:00") for k in final}
@@ -454,9 +505,16 @@ async def async_auto_apply(runtime, hass: HomeAssistant, result: dict[str, Any],
         changes = ", ".join(f"{k}: {previous[k]}→{v}" for k, v in final.items())
         log.add("auto", f"Auto-stosowanie (PODGLĄD, bez zapisu) zmieniłoby {len(final)}: {changes}", "info",
                 skipped=len(skipped))
+        why.update({k: ("tryb „tylko podgląd” — nic nie zapisuję (wyłącz „Auto-stosowanie: tylko podgląd”)", v) for k, v in final.items()})
+        _remember_auto_skip(runtime, why, same)
         return {"applied": {}, "would_apply": final, "previous": previous, "skipped": skipped, "dry_run": True}
     applied_n, apply_skipped = await apply_times(hass, final)
     skipped.extend(apply_skipped)
+    for sk in apply_skipped:
+        k_, _sep, r_ = sk.partition(": ")
+        if k_ in final:
+            why[k_] = (f"zapis godziny nie powiódł się: {r_}", final[k_])
+    _remember_auto_skip(runtime, why, same | {k for k in final if k not in why})
     enabled = await async_enable_sets(runtime, hass, (set(final) if applied_n else set()) | _plan_confirmed_keys(runtime, proposals)
                                       | _plan_window_keys(runtime, hass, proposals))
     runtime.state["last_applied"] = previous
