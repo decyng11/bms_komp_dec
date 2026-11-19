@@ -22,18 +22,22 @@ def _f(v: Any) -> float | None:
     return x if x == x else None
 
 
+# górne granice ustawień analiz: cena zł/kWh, nakład zł
+_CFG_MAX = {"g11": 20.0, "dyn_markup": 20.0, "invest_pv": 5_000_000.0, "invest_batt": 5_000_000.0}
+
+
 def clean_cfg(raw: dict | None) -> dict[str, Any]:
     """Ustawienia użytkownika (ceny alternatyw, nakłady) — tylko poprawne liczby."""
     raw = raw if isinstance(raw, dict) else {}
     out: dict[str, Any] = {}
     for k in ("g11", "invest_pv", "invest_batt", "dyn_markup"):
         v = _f(raw.get(k))
-        if v is not None and v >= 0:
+        if v is not None and 0 <= v <= _CFG_MAX[k]:      # absurdalne wartości (1e308, inf) odrzucamy zamiast liczyć z nimi
             out[k] = round(v, 4)
     z = raw.get("zone")
     if isinstance(z, dict):
         peak, off = _f(z.get("peak")), _f(z.get("off"))
-        if peak is not None and off is not None and peak > 0 and off > 0:
+        if peak is not None and off is not None and 0 < peak <= _CFG_MAX["g11"] and 0 < off <= _CFG_MAX["g11"]:
             txt = str(z.get("windows") or "6-13,15-22")
             peaks, err = parse_peaks(txt)
             if err is None:

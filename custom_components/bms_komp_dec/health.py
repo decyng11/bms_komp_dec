@@ -53,6 +53,60 @@ SENSOR_LABEL = [
 ]
 
 
+_CHARGE_SETS = (("start_grid_charge", "stop_grid_charge", "ladowanie_z_sieci_1"), ("start_grid_charge_2", "stop_grid_charge_2", "ladowanie_z_sieci_2"))
+_SELL_SETS = (("bateria_sprzedaz_start", "bateria_sprzedaz_stop", "bateria_sprzedaz_1"), ("bateria_sprzedaz_start_2", "bateria_sprzedaz_stop_2", "bateria_sprzedaz_2"))
+
+
+def _hm_to_min(raw: Any) -> int | None:
+    t = str(raw or "")[:5]
+    try:
+        h, m = int(t[:2]), int(t[3:5])
+    except ValueError:
+        return None
+    return h * 60 + m if 0 <= h <= 24 and 0 <= m < 60 and t[2:3] == ":" else None
+
+
+def _spans(a: int, b: int) -> list[tuple[int, int]]:
+    """Przedział [a, b) w minutach doby; przez północ dzieli się na dwa."""
+    return [(a, b)] if a < b else [(a, 1440), (0, b)]
+
+
+def window_conflict_check(rt) -> dict[str, Any]:
+    """Zestawy ładowania z sieci i sprzedaży z baterii, które nakładają się w czasie (oba włączone, start ≠ stop, ≠ 00:00).
+    Ochrona w czasie pracy (próg importu, limit dzienny, arbitraż) jest drugą linią — tu wskazujemy błąd w ustawieniach."""
+    hass = rt.hass
+
+    def windows(sets):
+        out = []
+        for st_k, en_k, sw_k in sets:
+            sw = hass.states.get(find_eid(hass, "switch", sw_k))
+            if sw is None or sw.state != "on":
+                continue
+            a_st, b_st = hass.states.get(find_eid(hass, "time", st_k)), hass.states.get(find_eid(hass, "time", en_k))
+            a, b = _hm_to_min(a_st.state if a_st else None), _hm_to_min(b_st.state if b_st else None)
+            if a is None or b is None or a == b or a == 0 or b == 0:
+                continue
+            out.append((st_k, a, b))
+        return out
+
+    hits = []
+    for ck, ca, cb in windows(_CHARGE_SETS):
+        for sk, sa, sb in windows(_SELL_SETS):
+            if any(x0 < y1 and y0 < x1 for x0, x1 in _spans(ca, cb) for y0, y1 in _spans(sa, sb)):
+                f = lambda m: f"{m // 60:02d}:{m % 60:02d}"  # noqa: E731
+                hits.append(f"ładowanie {f(ca)}–{f(cb)} nakłada się ze sprzedażą {f(sa)}–{f(sb)}")
+    from .helpers import number_value
+    guards = [number_value(hass, k, d) for k, d in (("grid_import_sell_block_w", 2000.0), ("grid_import_sell_block_kwh", 3.0), ("grid_arbitrage_block_kwh", 0.5))]
+    off = all(g <= 0 for g in guards)
+    if hits:
+        return _chk("window_conflict", "Okna ładowania i sprzedaży", "error", "; ".join(hits) + ". Bateria mogłaby być ładowana z sieci i jednocześnie sprzedawana do sieci.",
+                    "Rozdziel okna (sprzedaż po zakończeniu ładowania)." + (" Dodatkowo wszystkie blokady sprzedaży z sieci są wyłączone (0)." if off else ""))
+    if off:
+        return _chk("window_conflict", "Okna ładowania i sprzedaży", "warn", "Okna się nie nakładają, ale wszystkie blokady sprzedaży po imporcie z sieci są wyłączone (0).",
+                    "Ustaw „Blokada sprzedaży — próg importu” lub „Blokada arbitrażu” powyżej 0 — to druga linia obrony przed sprzedażą energii z sieci.")
+    return _chk("window_conflict", "Okna ładowania i sprzedaży", "ok", "okna nie nakładają się")
+
+
 def _chk(cid: str, title: str, status: str, detail: str, fix: str = "") -> dict[str, str]:
     return {"id": cid, "title": title, "status": status, "detail": detail, "fix": fix}
 
@@ -318,6 +372,12 @@ def health_check(rt) -> dict[str, Any]:
     checks.append(_chk("times", "Godziny harmonogramu", "ok" if not miss else "error",
                        "wszystkie encje czasu istnieją" if not miss else "brak: " + ", ".join(miss),
                        "" if not miss else "Przeładuj integrację (Ustawienia → Urządzenia i usługi → EMS komp-dec → ⋮ → Przeładuj)."))
+
+    # --- kolizja okien: ładowanie z sieci i sprzedaż z baterii nie mogą trwać jednocześnie
+    try:
+        checks.append(window_conflict_check(rt))
+    except Exception as err:  # noqa: BLE001
+        checks.append(_chk("window_conflict", "Okna ładowania i sprzedaży", "warn", f"nie udało się sprawdzić: {err}"))
 
     # --- powiadomienia
     svc = str(cfg.get("notify_service") or "").strip()

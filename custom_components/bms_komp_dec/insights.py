@@ -212,6 +212,8 @@ class Insights:
                 self.days[str(k)] = v
         for k, v in (raw.get("fc") or {}).items():
             if isinstance(v, dict):
+                # pola-słowniki (kształt prognozy wg godzin) muszą nimi być — inaczej `"6" in by_h` rzuca wyjątek w każdym ticku
+                v = {a: b for a, b in v.items() if isinstance(b, dict) or a not in ("pv_fc_by_h", "pv_adj_by_h")}
                 self.fc[str(k)] = v
         for k, v in (raw.get("counters") or {}).items():
             if isinstance(v, dict):

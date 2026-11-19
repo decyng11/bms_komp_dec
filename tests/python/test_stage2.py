@@ -543,7 +543,8 @@ async def main():
         try: await H[name](call(data, "usr")); return False
         except Unauthorized: return True
     for name, data in (("diag_store_set", {"key": "log", "value": []}), ("diag_store_get_all", {}), ("diag_store_delete", {"key": "log"}),
-                       ("watch_write", {"entity_id": "number.x", "expected": 1}), ("watch_status", {}), ("watch_clear", {}), ("health_check", {})):
+                       ("watch_write", {"entity_id": "number.x", "expected": 1}), ("watch_status", {}), ("watch_clear", {}), ("health_check", {}),
+                       ("apply_schedule_times", {"times": {"start_grid_charge": "02:00"}}), ("auto_apply_now", {}), ("undo_auto_apply", {}), ("test_schedule", {})):
         check(f"usługi: {name} odrzuca użytkownika bez uprawnień admina", await expect_unauth(name, data))
     try: await H["diag_store_get_all"](call({}, "duch")); g = False
     except Unauthorized: g = True
@@ -579,7 +580,7 @@ async def main():
     r = await H["monthly_report"](call({"year": "2026", "month": "9"}, "usr")); check("usługi: monthly_report przyjmuje liczby jako napisy", r["title"] == "Wrzesień 2026")
     check("usługi: _as_bool", [pkg._as_bool(x) for x in (None, "", "false", "False", "0", "off", "nie", "true", "on", 1, 0, True, False)] == [None, None, False, False, False, False, False, True, True, True, False, True, False])
     for junk in ({"times": "nie-słownik"}, {"times": {"zly_klucz": "10:00"}}, {"times": {"start_grid_charge": "25:99"}}, {"times": {"start_grid_charge": "10:00; rm -rf"}}, {"times": {"start_grid_charge": 1234}}, {"times": None}, {}):
-        out = await H["apply_schedule_times"](call(junk, "usr"))
+        out = await H["apply_schedule_times"](call(junk, "adm"))
         check(f"usługi: apply_schedule_times odrzuca {junk}", out["applied"] == 0, out)
     big = "Z" * 100000
     r = await H["watch_write"](call({"entity_id": "number.inverter_zero_export_power", "expected": big, "label": big, "previous": big, "source": big}, "adm"))

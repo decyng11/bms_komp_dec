@@ -27,7 +27,13 @@ MAX_VOTES = 40
 class SignLearner:
     def __init__(self, votes: dict[str, int] | None = None) -> None:
         v = votes if isinstance(votes, dict) else {}
-        self.votes = {"pos": int(v.get("pos", 0) or 0), "neg": int(v.get("neg", 0) or 0)}
+
+        def _n(x) -> int:
+            try:
+                return max(0, min(MAX_VOTES * 2, int(x or 0)))
+            except (TypeError, ValueError, OverflowError):
+                return 0
+        self.votes = {"pos": _n(v.get("pos")), "neg": _n(v.get("neg"))}
         self._buf: deque[tuple[float, float, float]] = deque()    # (ts, soc, power)
         self._last_sample = 0.0
         self._last_vote = 0.0

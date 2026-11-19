@@ -216,7 +216,19 @@ class BmsRuntime:
                     self.state[k] = {}
             if not isinstance(self.state.get("watches"), list):
                 self.state["watches"] = []
-            self._sign = SignLearner(self.state.get("battery_sign_votes"))
+            try:
+                from .state_guard import sanitize
+                fixed = sanitize(self.state)
+            except Exception as err:  # noqa: BLE001
+                fixed = []
+                _LOGGER.warning("EMS: kontrola zapisanego stanu nie powiodła się: %s", err)
+            if fixed:
+                _LOGGER.warning("EMS: uszkodzone wartości w zapisanym stanie przywrócono do domyślnych: %s", ", ".join(fixed))
+                self.log.add("system", f"Naprawiono uszkodzony zapis stanu (pola: {', '.join(fixed)}) — wartości wróciły do domyślnych", "warn")
+            try:
+                self._sign = SignLearner(self.state.get("battery_sign_votes"))
+            except Exception:  # noqa: BLE001
+                self._sign = SignLearner()
 
     def _save_state(self) -> None:
         self._state_store.request_save(lambda: dict(self.state))

@@ -222,11 +222,24 @@ def _year_month(year: Any, month: Any) -> tuple[int | None, int | None]:
         return None, None
     try:
         y, m = int(year), int(month)
-    except (TypeError, ValueError) as err:
+    except (TypeError, ValueError, OverflowError) as err:
         raise HomeAssistantError("rok i miesiąc muszą być liczbami całkowitymi (podaj oba albo żadnego)") from err
     if not (2000 <= y <= 2100 and 1 <= m <= 12):
         raise HomeAssistantError("rok musi być z zakresu 2000–2100, a miesiąc 1–12")
     return y, m
+
+
+def _bounded_int(value: Any, default: int, lo: int, hi: int) -> int:
+    """Liczba całkowita z wywołania usługi w zakresie lo–hi; śmieci (tekst, NaN, inf, lista) → wartość domyślna."""
+    try:
+        if isinstance(value, bool) or value is None or value == "":
+            return default
+        v = float(value)
+        if v != v or v in (float("inf"), float("-inf")):
+            return default
+        return max(lo, min(hi, int(v)))
+    except (TypeError, ValueError, OverflowError):
+        return default
 
 
 def _as_bool(value: Any) -> bool | None:
@@ -247,6 +260,7 @@ def _need_runtime(hass: HomeAssistant) -> BmsRuntime:
 
 def _register_services(hass: HomeAssistant) -> None:
     async def handle_test(call):
+        await _require_admin(hass, call)
         runtime = _get_runtime(hass)
         if runtime is None:
             return {"error": "runtime not ready"}
@@ -259,6 +273,7 @@ def _register_services(hass: HomeAssistant) -> None:
         return await opt.suggest()
 
     async def handle_apply(call):
+        await _require_admin(hass, call)           # zapis godzin sterujących falownikiem — tylko administrator
         times = call.data.get("times") or {}
         applied, skipped = await apply_times(hass, times)
         runtime = _get_runtime(hass)
@@ -269,12 +284,14 @@ def _register_services(hass: HomeAssistant) -> None:
         return {"applied": applied, "skipped": skipped, "enabled_sets": enabled}
 
     async def handle_undo(call):
+        await _require_admin(hass, call)
         runtime = _get_runtime(hass)
         if runtime is None:
             return {"error": "runtime not ready"}
         return await async_undo_auto_apply(runtime, hass)
 
     async def handle_auto_now(call):
+        await _require_admin(hass, call)
         runtime, opt = _get_runtime(hass), _get_optimizer(hass)
         if runtime is None or opt is None:
             return {"error": "not ready"}
@@ -314,7 +331,7 @@ def _register_services(hass: HomeAssistant) -> None:
 
     async def handle_plan(call):
         rt = _need_runtime(hass)
-        plan = await rt.refresh_plan(force=bool(call.data.get("force")))
+        plan = await rt.refresh_plan(force=_as_bool(call.data.get("force")) is True)   # zakładka Zysk woła to dla każdego widza
         return {"plan": plan}
 
     # --- magazyn Diagnostyki w HA (dziennik zmian, kopie, profile) — tylko administrator
@@ -356,6 +373,8 @@ def _register_services(hass: HomeAssistant) -> None:
 
     async def handle_inbox(call):
         rt = _need_runtime(hass)
+        if str(call.data.get("action") or "") == "reject":
+            await _require_admin(hass, call)       # odrzucenie propozycji planera; czytanie i usuwanie powiadomień — każdy
         try:
             res = inbox.act(rt.state, str(call.data.get("action") or ""), ident=call.data.get("id"),
                             key=call.data.get("key"), proposed=call.data.get("proposed"))
@@ -477,7 +496,7 @@ def _register_services(hass: HomeAssistant) -> None:
         await _require_admin(hass, call)
         rt = _need_runtime(hass)
         from . import settings_log as sl
-        return {"items": sl.items(rt.state, int(call.data.get("limit") or 100))}
+        return {"items": sl.items(rt.state, _bounded_int(call.data.get("limit"), 100, 1, 500))}
 
     async def handle_devices_discover(call):
         await _require_admin(hass, call)
