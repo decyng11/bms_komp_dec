@@ -111,6 +111,19 @@ def _proposals(plan: dict[str, Any]) -> dict[str, Any]:
     return out
 
 
+def _price_sources(rt) -> dict[str, Any]:
+    """Co czytniki cen widzą w encjach: lista encji, ich atrybuty z listami cen i które źródło poszło do planu (dziś / jutro)."""
+    opt = rt.optimizer
+    out: dict[str, Any] = {}
+    for key, fn in (("zakup", "buy_report"), ("sprzedaż", "rce_report")):
+        rep = _safe(lambda fn=fn: getattr(opt, fn)() or {}, {})
+        out[key] = {"sprawdzone_encje": rep.get("checked"), "widziane": rep.get("seen"),
+                    "dziś": rep.get("today"), "jutro": rep.get("tomorrow")}
+    if hasattr(opt, "buy_tomorrow_status"):
+        out["zakup_jutro"] = _safe(lambda: opt.buy_tomorrow_status(), {})
+    return out
+
+
 async def async_build_report(rt, log_lines: int = REPORT_LOG_LINES) -> dict[str, Any]:
     """Jeden raport do wklejenia przy zgłaszaniu problemu: wersja, ustawienia, plan, auto-stosowanie (powody i historia),
     autotest i ostatnie wpisy dziennika. Zwraca {"text", "filename", "summary"}; tekst jest dodatkowo czyszczony z adresów,
@@ -138,6 +151,7 @@ async def async_build_report(rt, log_lines: int = REPORT_LOG_LINES) -> dict[str,
                  "proposals": _proposals(plan)},
         "auto_apply": _redact({k: rt.state.get(k) for k in _AUTO_STATE_KEYS}),
         "state": _redact({k: rt.state.get(k) for k in _STATE_KEYS}),
+        "prices": _safe(lambda: _price_sources(rt), {}),
         "selftest": selftest,
         "log": _safe(lambda: rt.log.last(max(1, int(log_lines))), []),
     }
@@ -155,7 +169,8 @@ async def async_build_report(rt, log_lines: int = REPORT_LOG_LINES) -> dict[str,
                              + (f" → {c.get('fix')}" if c.get("fix") else ""))
         lines.append("")
     for title, key in (("Plan i propozycje", "plan"), ("Auto-stosowanie (powody, historia, ostatnie zmiany)", "auto_apply"),
-                       ("Stan", "state"), ("Ustawienia (przełączniki i liczby EMS)", "settings"), ("Konfiguracja", "config")):
+                       ("Stan", "state"), ("Ustawienia (przełączniki i liczby EMS)", "settings"), ("Konfiguracja", "config"),
+                       ("Źródła cen (co widzi czytnik: encje, atrybuty z listami, użyte źródło)", "prices")):
         lines += [f"== {title}", json.dumps(report[key], ensure_ascii=False, indent=1, default=str), ""]
     lines.append(f"== Dziennik decyzji (ostatnie {len(report['log'])}, najnowsze pierwsze)")
     for e in report["log"]:

@@ -131,6 +131,7 @@ class BmsRuntimeSensor(BmsBaseEntity, SensorEntity):
         "curve", "proposals", "days", "watches", "alarms", "recent_notifications", "inbox", "inbox_rejected", "inbox_auto_read", "auto_skip", "auto_hist",
         "prices_sell_today", "prices_sell_tomorrow", "prices_buy_today", "prices_buy_tomorrow",
         "price_sell_entity", "price_buy_entity", "price_sell_source", "price_buy_source", "tariff_mode", "tariff_dynamic",
+        "price_buy_tomorrow_state", "price_buy_tomorrow_note",
         "pv_forecast_source", "pv_hourly_today", "pv_hourly_tomorrow", "pv_daily", "pv_sources", "assumptions",
         "devices", "power_total", "accuracy", "table", "overrides", "soc_history", "why", "control_test",
     })
@@ -287,6 +288,10 @@ class BmsRuntimeSensor(BmsBaseEntity, SensorEntity):
                 out["prices_buy_today"] = r4(opt.buy_hourly_for(today))
                 out["prices_buy_tomorrow"] = r4(opt.buy_hourly_for(tom))
                 out["price_buy_source"] = ((opt.buy_report() or {}).get("today") or {}).get("source")
+                if hasattr(opt, "buy_tomorrow_status") and out["prices_buy_today"]:
+                    st = opt.buy_tomorrow_status()
+                    out["price_buy_tomorrow_state"] = st.get("state")
+                    out["price_buy_tomorrow_note"] = st.get("text")
         except Exception:  # noqa: BLE001
             pass
         return out

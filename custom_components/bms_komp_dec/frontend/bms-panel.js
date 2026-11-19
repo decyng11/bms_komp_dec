@@ -622,6 +622,8 @@
     .chart-footer .dot { width: 8px; height: 8px; border-radius: 2px; display: inline-block; }
 
     .price-header { font-size: 15px; font-weight: 700; margin-bottom: 12px; }
+    .price-note { margin: 8px 0 2px; padding: 8px 10px; border: 1px solid var(--line); border-left: 3px solid var(--warn, #fbbf24); border-radius: 8px; font-size: 12px; line-height: 1.45; color: var(--text2); text-align: left; overflow-wrap: anywhere; }
+    .price-note.wait { border-left-color: var(--accent, #60a5fa); }
     .price-table { width: 100%; border-collapse: collapse; font-size: 13px; text-align: center; }
     .price-table th { border-bottom: 1px solid var(--line); padding: 8px 4px; color: var(--text2); font-weight: 700; }
     .price-table td { border-bottom: 1px solid var(--surface); padding: 8px 4px; }
@@ -2413,11 +2415,14 @@
         const bT = arr24(a.prices_buy_today), bJ = arr24(a.prices_buy_tomorrow);
         const cur = num(Number(a.price_sell));
         header.textContent = `Ceny sprzedaży > Teraz: ${cur === null ? '--' : cur.toFixed(2)} PLN/kWh`;
-        const key = JSON.stringify([sT, sJ, bT, bJ, a.price_sell_source, a.price_buy_source, new Date().getHours()]);
+        const bNote = (bT || bJ) && !bJ && typeof a.price_buy_tomorrow_note === 'string' ? a.price_buy_tomorrow_note : '';
+        const bNoteWait = a.price_buy_tomorrow_state === 'waiting';
+        const key = JSON.stringify([sT, sJ, bT, bJ, a.price_sell_source, a.price_buy_source, bNote, bNoteWait, new Date().getHours()]);
         if (this._lastPriceTableKey === key) return;
         this._lastPriceTableKey = key;
         let html = this._priceTableHtml(sT, sJ, '', '');
         if (bT || bJ) html += this._priceTableHtml(bT, bJ, 'Ceny zakupu (taryfa dynamiczna)', a.price_buy_source || a.price_buy_entity || '', true);
+        if (bNote) html += `<div class="price-note${bNoteWait ? ' wait' : ''}" id="priceBuyNote">${bNoteWait ? '⏳' : 'ℹ️'} <b>Jutro:</b> ${this._esc(bNote)}</div>`;
         container.innerHTML = html;
         return;
       }

@@ -288,7 +288,14 @@ def health_check(rt) -> dict[str, Any]:
             src = (rep_b.get("today") or {}).get("source")
             seen = "; ".join((rep_b.get("seen") or [])[:3]) or "nie znaleziono encji zakupu"
             if prof.dynamic_for(today):
-                checks.append(_chk("tariff", "Taryfa", "ok", f"{prof.label()} — ceny zakupu: {hrs} godz. z {src}"))
+                tom_txt = ""
+                try:
+                    tom = rt.optimizer.buy_tomorrow_status() if hasattr(rt.optimizer, "buy_tomorrow_status") else {}
+                    if tom.get("state") in ("not_exposed", "missing"):
+                        tom_txt = f" Na jutro: {tom.get('text')}"
+                except Exception:  # noqa: BLE001
+                    tom_txt = ""
+                checks.append(_chk("tariff", "Taryfa", "ok", f"{prof.label()} — ceny zakupu: {hrs} godz. z {src}.{tom_txt}"))
             elif mode == "dynamic":
                 checks.append(_chk("tariff", "Taryfa", "error",
                                    f"Tryb dynamiczny, ale encja zakupu nie podaje dziś pełnej listy cen godzinowych ({hrs} godz.). "

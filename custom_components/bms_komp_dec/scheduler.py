@@ -63,6 +63,10 @@ _RE_TOMORROW_ENTITY = re.compile(r"rce.*cena.*jutro|prices?_tomorrow|cena.*jutro
 _RE_TODAY_ENTITY = re.compile(r"rce.*cena|prices?_today|cena.*pradu")
 # encje z cenami ZAKUPU: nigdy nie zgadujemy ich jako źródła cen sprzedaży
 _RE_BUY_ENTITY = re.compile(r"buy|zakup|kupn|kupow|purchase|import|pob[oó]r|g1[12]|taryf|tariff")
+# nazwy atrybutu „jutro już pobrane” (po normalizacji: małe litery, spacje → _)
+_TOMORROW_FLAG_KEYS = {"tomorrow_available", "tomorrow_prices_available", "tomorrow_price_available"}
+# encje SPRZEDAŻY tej samej integracji: nie są źródłem cen zakupu
+_RE_SELL_ENTITY = re.compile(r"sell|sprzeda|export|eksport|feed")
 # encje tej samej integracji co skonfigurowana encja zakupu, które mogą mieć pełne listy cen godzinowych
 _BUY_SIBLINGS = {"pstryk": ("sensor.pstryk_json_buy", "sensor.pstryk_buy_price", "sensor.pstryk_current_buy_price")}
 
@@ -229,7 +233,71 @@ class ScheduleOptimizer:
         for key, sib in _BUY_SIBLINGS.items():
             if key in low:
                 out.extend(sib)
+                # inne encje tej integracji (nazwy zależą od wersji i od włączonych sensorów): lista „jutro” bywa w którejś z nich
+                out.extend(e for e in self._integration_entities(key) if not _RE_SELL_ENTITY.search(e))
         return list(dict.fromkeys(out))
+
+    def _integration_entities(self, key: str) -> list[str]:
+        """Wszystkie `sensor.<key>*` (posortowane) — tanio: z indeksu domeny, bez budowania stanów."""
+        try:
+            try:
+                ids = list(self.hass.states.async_entity_ids("sensor"))
+            except AttributeError:
+                ids = [getattr(st, "entity_id", "") for st in self.hass.states.async_all("sensor")]
+        except Exception:  # noqa: BLE001
+            return []
+        return sorted(e for e in ids if isinstance(e, str) and e.lower().startswith(f"sensor.{key}"))
+
+    def _tomorrow_published(self) -> bool | None:
+        """Czy integracja cen sama mówi, że ma już ceny na jutro. None = nie wiadomo.
+
+        Pstryk podaje to w atrybucie encji zakupu „Tomorrow prices available” (kriskomp/ha_Pstryk) albo `tomorrow_available`
+        na sensor.pstryk_prices_fetched — szukamy obu, w każdej encji tej integracji, niezależnie od wielkości liter i spacji."""
+        buy = str(self.config.get(CONF_PRICE_BUY_ENTITY, DEFAULT_PRICE_BUY_ENTITY) or "")
+        low = buy.lower()
+        for key in _BUY_SIBLINGS:
+            if key not in low:
+                continue
+            for eid in dict.fromkeys([buy, *self._integration_entities(key)]):
+                st = self.hass.states.get(eid)
+                for k, v in ((getattr(st, "attributes", None) or {}).items() if st else ()):
+                    if re.sub(r"[^a-z0-9]+", "_", str(k).lower()).strip("_") not in _TOMORROW_FLAG_KEYS:
+                        continue
+                    if isinstance(v, bool):
+                        return v
+                    if isinstance(v, str) and v.strip().lower() in ("true", "false", "on", "off", "yes", "no", "tak", "nie"):
+                        return v.strip().lower() in ("true", "on", "yes", "tak")
+        return None
+
+    def buy_tomorrow_status(self, now: datetime | None = None) -> dict[str, Any]:
+        """Czy są ceny zakupu na jutro, a jeśli nie — dlaczego i co z tym zrobić (tekst dla karty).
+
+        state: ok (są) | waiting (jeszcze niepublikowane) | not_exposed (integracja je ma, encja ich nie wystawia) |
+               missing (po godzinach publikacji nadal brak, przyczyny nie widać)."""
+        local = dt_util.as_local(now) if now else dt_util.now()
+        tom = (local.date() + timedelta(days=1))
+        arr = self.buy_hourly_for(tom) or []
+        if any(_num(v) for v in arr):
+            return {"state": "ok", "text": None}
+        rep = self.buy_report()
+        buy = str(self.config.get(CONF_PRICE_BUY_ENTITY, DEFAULT_PRICE_BUY_ENTITY) or "")
+        mine = next((x for x in (rep.get("seen") or []) if x.startswith(buy + " ")), None)
+        seen = f" Widzę: {mine}." if mine else ""
+        published = self._tomorrow_published()
+        if published is False or (published is None and local.hour < 13):
+            return {"state": "waiting", "text": "Ceny zakupu na jutro nie zostały jeszcze opublikowane (zwykle po godz. 12–14). "
+                    "Gdy się pojawią, tabela uzupełni się sama, a plan przeliczy się bez Twojej pomocy."}
+        if published is True:
+            has_json = any("json_buy" in e.lower() for e in self._integration_entities("pstryk"))
+            if has_json:
+                return {"state": "not_exposed", "text": f"Integracja cen ma już ceny na jutro, ale ani encja {buy}, ani sensor.pstryk_json_buy nie podają ich w atrybutach.{seen} "
+                        "Sprawdź w Narzędziach deweloperskich, czy sensor.pstryk_json_buy ma niepustą listę prices_tomorrow, i przyślij mi jego atrybuty."}
+            return {"state": "not_exposed", "text": f"Integracja cen ma już ceny na jutro (zgłasza to sama), ale encja {buy} wystawia tylko dzisiejszą dobę.{seen} "
+                    "Jutro jest w opcjonalnym sensorze JSON: w opcjach integracji Pstryk włącz „Włącz sensory JSON z cenami” — pojawi się "
+                    "sensor.pstryk_json_buy z listą prices_tomorrow, a EMS użyje go sam (nic więcej nie trzeba ustawiać)."}
+        return {"state": "missing", "text": f"Brak cen zakupu na jutro, choć zwykle są już po godz. 14.{seen} "
+                "Sprawdź, czy źródło cen je publikuje (w Pstryku: sensor.pstryk_json_buy z listą prices_tomorrow, atrybut tomorrow_available), "
+                "i czy karta/EMS wskazuje właściwą encję zakupu."}
 
     def _read_rce_arrays(self) -> dict[str, list[float | None]]:
         """Ceny SPRZEDAŻY: {'YYYY-MM-DD': [hour0_price, hour1_price, ...]} dla dziś i jutro.

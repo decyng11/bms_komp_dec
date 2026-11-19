@@ -55,6 +55,28 @@ const { chromium } = require('playwright'); const fs = require('fs');
   r = await render({ prices_sell_today: sell, prices_buy_today: buy, price_buy_source: '<img src=x onerror="window.__pwn=1">', tariff_dynamic: true });
   ok('brak wstrzyknięcia HTML w podpisie źródła', r.imgs === 0 && r.text.includes('<img'), r.html.slice(0, 200));
   ok('brak wykonania skryptu', await p.evaluate(() => window.__pwn === undefined));
+  // 6. ceny zakupu na jutro: brak → pod tabelą wyjaśnienie z backendu (czekamy / encja nie wystawia / brak), a nie same „--”
+  const noteInfo = () => p.evaluate(() => { const sh = window.__el.shadowRoot, n = sh.getElementById('priceBuyNote'), c = sh.getElementById('priceTableContainer');
+    return n ? { text: n.innerText.replace(/\s+/g, ' ').trim(), cls: n.className, imgs: n.querySelectorAll('img').length, inside: n.getBoundingClientRect().right <= c.getBoundingClientRect().right + 1 } : null; });
+  const base = { prices_sell_today: sell, prices_sell_tomorrow: sellJ, prices_buy_today: buy, price_buy_source: 'sensor.pstryk_current_buy_price.All prices', tariff_dynamic: true };
+  r = await render({ ...base, prices_buy_tomorrow: null, price_buy_tomorrow_state: 'waiting', price_buy_tomorrow_note: 'Ceny zakupu na jutro nie zostały jeszcze opublikowane (zwykle po godz. 12–14).' });
+  let n = await noteInfo();
+  ok('jutro bez cen, czekamy: tabela zakupu jest, a pod nią objaśnienie „Jutro:”', r.tables === 2 && n && /Jutro: Ceny zakupu na jutro nie zostały jeszcze opublikowane/.test(n.text) && /\bwait\b/.test(n.cls) && n.text.startsWith('⏳'), n);
+  r = await render({ ...base, prices_buy_tomorrow: null, price_buy_tomorrow_state: 'not_exposed', price_buy_tomorrow_note: 'Integracja cen ma już ceny na jutro, ale encja nie podaje ich w atrybutach. Włącz sensor.pstryk_json_buy.' });
+  n = await noteInfo();
+  ok('encja nie wystawia jutra: ostrzeżenie (bez klasy wait) ze wskazówką o sensor.pstryk_json_buy', n && !/\bwait\b/.test(n.cls) && n.text.startsWith('ℹ️') && /sensor\.pstryk_json_buy/.test(n.text), n);
+  r = await render({ ...base, prices_buy_tomorrow: buyJ, price_buy_tomorrow_state: 'ok', price_buy_tomorrow_note: 'stara notatka' });
+  ok('jutro jest: żadnego objaśnienia, nawet gdy backend przysłał starą notatkę', (await noteInfo()) === null && /price-max">0\.41</.test(r.html.slice(r.html.indexOf('Ceny zakupu'))), await noteInfo());
+  r = await render({ ...base, prices_buy_tomorrow: null });
+  ok('starszy backend (bez notatki): tak jak dotąd, bez objaśnienia', (await noteInfo()) === null && r.tables === 2);
+  r = await render({ ...base, prices_buy_tomorrow: null, price_buy_tomorrow_state: 'missing', price_buy_tomorrow_note: '<img src=x onerror="window.__pwn2=1">' });
+  n = await noteInfo();
+  ok('notatka z backendu jest tekstem (bez wstrzykiwania HTML)', n && n.imgs === 0 && n.text.includes('<img') && await p.evaluate(() => window.__pwn2 === undefined), n);
+  r = await render({ ...base, prices_buy_tomorrow: null, price_buy_tomorrow_state: 'waiting', price_buy_tomorrow_note: 'Ceny zakupu na jutro nie zostały jeszcze opublikowane. '.repeat(4) + 'sensor.pstryk_json_buy.prices_tomorrow.bardzo_dlugi_ciag_bez_spacji_'.repeat(3) });
+  await p.evaluate(() => { document.getElementById('h').style.width = '300px'; }); await p.waitForTimeout(100);
+  n = await noteInfo();
+  ok('wąska karta (300 px): długa notatka mieści się w karcie', n && n.inside, n);
+  await p.evaluate(() => { document.getElementById('h').style.width = '720px'; });
   // 5. śmieci w listach (NaN, tekst, za krótkie) — bez błędów
   r = await render({ prices_sell_today: [null, 'x', 0.5], prices_buy_today: [NaN, 1], tariff_dynamic: true });
   ok('śmieci w listach: tabele bez wyjątku', r.tables >= 1, r.tables);
