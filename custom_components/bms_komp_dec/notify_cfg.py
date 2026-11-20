@@ -58,6 +58,7 @@ CATALOG: dict[str, tuple] = {
     "sale": ("Działanie", "Sprzedaż z baterii: start i koniec", "Harmonogram rozpoczął albo zakończył sprzedaż.", False, True, 0, False, None),
     "grid_charge": ("Działanie", "Ładowanie z sieci: start i koniec", "Harmonogram włączył albo wyłączył ładowanie z sieci.", False, True, 0, False, None),
     "price_reaction": ("Działanie", "Reakcja na niską cenę", "Eksport wstrzymany przy niskiej/ujemnej cenie RCE i wznowiony.", False, True, 0, False, None),
+    "data_repair": ("Działanie", "Naprawiono uszkodzone dane", "Plik zapisu (księga zysków, statystyki, historia zużycia…) był uszkodzony — EMS go naprawił przy starcie i zachował kopię oryginału.", True, True, 0, False, None),
     "storm": ("Działanie", "Tryb burzowy", "Włączenie i automatyczne wyłączenie trybu burzowego.", True, True, 5, False, None),
     # --- urządzenia (zakładka „Urządzenia”; przy każdym urządzeniu można też wyłączyć jego powiadomienia)
     "device_cycle": ("Urządzenia", "Koniec cyklu urządzenia", "Pralka, zmywarka, suszarka… skończyła — czas, kWh i koszt cyklu.", True, True, 0, False, None),
@@ -82,7 +83,7 @@ PRIORITY: dict[str, int] = {
     "low_soc": 1, "alarm": 1, "comm_loss": 1, "grid_outage": 1, "island_overload": 1, "battery_temp_high": 1, "battery_temp_low": 1,
     "command_unconfirmed": 1, "drift": 1, "guard_action": 1, "grid_limit": 1, "grid_charge_stalled": 1, "plan_floor": 1, "set_off": 1,
     "morning_guard": 1, "grid_charge_target": 1,
-    "rce_missing": 2, "buy_prices_missing": 2, "pv_forecast_missing": 2, "plan_error": 2, "auto_apply": 2, "storm": 2, "battery_health": 2,
+    "rce_missing": 2, "data_repair": 2, "buy_prices_missing": 2, "pv_forecast_missing": 2, "plan_error": 2, "auto_apply": 2, "storm": 2, "battery_health": 2,
     "device_anomaly": 2, "device_shed": 2, "weak_pv": 2, "rce_negative": 2, "summary_daily": 2, "summary_weekly": 2, "summary_monthly": 2,
     "rce_high": 3, "load_above": 3, "high_import": 3, "battery_full": 3, "proposal": 3, "schedule_skipped": 3, "sale": 3, "grid_charge": 3,
     "price_reaction": 3, "device_cycle": 3, "device_hint": 3, "device_plan": 3, "devices_unknown": 3,

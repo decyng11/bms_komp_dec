@@ -39,9 +39,8 @@ def _f(v: Any) -> float | None:
     return x if math.isfinite(x) else None
 
 
-def best_window(curve: dict | None, hours: float, kw: float) -> tuple[datetime, datetime, float, float] | None:
-    """Najtańszy ciągły blok `hours` godzin w planie 24 h (energia z nadwyżki PV po cenie sprzedaży, reszta po cenie
-    zakupu). Zwraca (początek, koniec, koszt zł, kWh z PV)."""
+def _hour_costs(curve: dict | None, kw: float) -> tuple[datetime, list[tuple[float, float] | None]] | None:
+    """Koszt (zł) i energia z nadwyżki PV (kWh) pracy urządzenia o mocy `kw` w kolejnych godzinach planu; None = brak ceny zakupu."""
     if not curve or not curve.get("start"):
         return None
     try:
@@ -51,28 +50,76 @@ def best_window(curve: dict | None, hours: float, kw: float) -> tuple[datetime, 
     pv, load = curve.get("pv") or [], curve.get("load") or []
     buy, sell = curve.get("buy") or [], curve.get("sell") or []
     n = min(len(pv), len(load), len(buy))
-    span = max(1, int(math.ceil(hours)))
     e = max(0.01, kw)
+    out: list[tuple[float, float] | None] = []
+    for h in range(n):
+        b = _f(buy[h])
+        if b is None:
+            out.append(None)
+            continue
+        sl = _f(sell[h]) if h < len(sell) else None
+        sur = max(0.0, (_f(pv[h]) or 0.0) - (_f(load[h]) or 0.0))
+        from_pv = min(e, sur)
+        out.append((from_pv * max(0.0, sl if sl is not None else 0.0) + (e - from_pv) * b, from_pv))
+    return t0, out
+
+
+def best_window(curve: dict | None, hours: float, kw: float, deadline: datetime | None = None) -> tuple[datetime, datetime, float, float] | None:
+    """Najtańszy ciągły blok `hours` godzin w planie 24 h (energia z nadwyżki PV po cenie sprzedaży, reszta po cenie
+    zakupu). Zwraca (początek, koniec, koszt zł, kWh z PV). Z `deadline` blok musi się skończyć najpóźniej o tej porze."""
+    hc = _hour_costs(curve, kw)
+    if hc is None:
+        return None
+    t0, costs = hc
+    span = max(1, int(math.ceil(hours)))
     best = None
-    for s in range(0, max(0, n - span + 1)):
-        cost, pv_used, ok = 0.0, 0.0, True
-        for h in range(s, s + span):
-            b = _f(buy[h])
-            if b is None:
-                ok = False
-                break
-            sl = _f(sell[h]) if h < len(sell) else None
-            sur = max(0.0, (_f(pv[h]) or 0.0) - (_f(load[h]) or 0.0))
-            from_pv = min(e, sur)
-            pv_used += from_pv
-            cost += from_pv * max(0.0, sl if sl is not None else 0.0) + (e - from_pv) * b
-        if ok and (best is None or cost < best[1] - 1e-9):
+    for s in range(0, max(0, len(costs) - span + 1)):
+        window = costs[s:s + span]
+        if any(c is None for c in window):
+            continue
+        if deadline is not None and t0 + timedelta(hours=s + span) > deadline:
+            break
+        cost = sum(c[0] for c in window)
+        pv_used = sum(c[1] for c in window)
+        if best is None or cost < best[1] - 1e-9:
             best = (s, cost, pv_used)
     if best is None:
         return None
     s, cost, pv_used = best
     start = t0 + timedelta(hours=s)
     return start, start + timedelta(hours=span), round(cost, 2), round(pv_used, 2)
+
+
+def cheapest_slots(curve: dict | None, hours: float, kw: float, deadline: datetime | None = None,
+                   horizon_h: float = 24.0, not_before: datetime | None = None) -> tuple[list[datetime], float, float] | None:
+    """`hours` najtańszych godzin planu (nie muszą być sąsiednie — auto, bojler), tylko takie, które kończą się przed `deadline`
+    (bez terminu: w ciągu `horizon_h` od początku planu). Zwraca (początki godzin po kolei, koszt zł, kWh z PV); gdy do terminu jest
+    mniej godzin niż trzeba — wszystkie dostępne. `not_before` (teraz) odrzuca godziny już zakończone — nieodświeżony plan nie
+    może dać zestawu z przeszłości. None = brak planu z cenami."""
+    hc = _hour_costs(curve, kw)
+    if hc is None:
+        return None
+    t0, costs = hc
+    span = max(1, int(math.ceil(hours)))
+    limit = deadline if deadline is not None else t0 + timedelta(hours=horizon_h)
+    cand = [(c[0], i, c[1]) for i, c in enumerate(costs)
+            if c is not None and t0 + timedelta(hours=i + 1) <= limit and (not_before is None or t0 + timedelta(hours=i + 1) > not_before)]
+    if not cand:
+        return None
+    pick = sorted(cand)[:span]
+    pick.sort(key=lambda x: x[1])
+    return [t0 + timedelta(hours=i) for _c, i, _p in pick], round(sum(c for c, _i, _p in pick), 2), round(sum(p for _c, _i, p in pick), 2)
+
+
+def _ranges(starts: list[datetime]) -> str:
+    """Kolejne godziny zwinięte w przedziały: „02:00–04:00, 05:00–06:00”."""
+    out: list[list[datetime]] = []
+    for t in sorted(starts):
+        if out and t == out[-1][1]:
+            out[-1][1] = t + timedelta(hours=1)
+        else:
+            out.append([t, t + timedelta(hours=1)])
+    return ", ".join(f"{dt_util.as_local(a):%H:%M}–{dt_util.as_local(b):%H:%M}" for a, b in out)
 
 
 class DeviceController:
@@ -279,6 +326,23 @@ class DeviceController:
                 soc: float | None, curve: dict | None) -> tuple[bool, str]:
         ts = now.timestamp()
         need = float(d.get("ctl_power_w") or 1000.0)
+        # ujemna cena zakupu: tryb „neg” albo dodatkowo do „pv”/„cheap” — dostajemy zapłatę za pobór, więc włączamy odbiornik
+        if d["ctl_mode"] == "neg" or d.get("ctl_neg"):
+            thr = float(d.get("ctl_neg_price") or 0.0)
+            price = self.rt.buy_price_signed()
+            neg = price is not None and price < thr
+            if neg:
+                why = f"cena zakupu {price:+.2f} zł/kWh (< {thr:+.2f})"
+                if (is_on and owned) or self._held(rec, "neg_on", True, ts):
+                    return True, why
+                if d["ctl_mode"] == "neg":
+                    return False, f"{why} — potwierdzam przez 5 min"
+            else:
+                rec.pop("neg_on", None)
+                if d["ctl_mode"] == "neg":
+                    return False, ("brak ceny zakupu" if price is None else f"czeka na cenę zakupu < {thr:+.2f} zł/kWh (jest {price:+.2f})")
+        if d["ctl_mode"] == "neg":
+            return False, "czeka na ujemną cenę zakupu"
         if d["ctl_mode"] == "pv":
             if grid is None:
                 return (is_on and owned), "brak odczytu mocy sieci"
@@ -299,6 +363,9 @@ class DeviceController:
                 return False, f"czeka na SOC ≥ {soc_min:.0f}%"
             return False, f"czeka na nadwyżkę ≥ {need / 1000:.1f} kW (jest {export / 1000:.1f} kW)"
         # najtańsze godziny
+        deadline = self._deadline(now, d)
+        if d.get("ctl_split"):
+            return self._decide_split(d, rec, now, curve, need, deadline)
         win = rec.get("window")
         in_win = False
         if isinstance(win, list) and len(win) == 2:
@@ -312,7 +379,7 @@ class DeviceController:
         else:
             win = None
         if not in_win:                                       # okno wybieramy od nowa tylko poza oknem (nie przesuwamy w trakcie)
-            bw = best_window(curve, float(d.get("ctl_hours") or 2.0), need / 1000.0)
+            bw = best_window(curve, float(d.get("ctl_hours") or 2.0), need / 1000.0, deadline)
             if bw is not None:
                 win = [bw[0].isoformat(), bw[1].isoformat()]
                 rec["window"] = win
@@ -323,4 +390,53 @@ class DeviceController:
             return True, f"najtańsze godziny {win[0][11:16]}–{win[1][11:16]}"
         if win:
             return False, f"czeka na okno {win[0][11:16]}–{win[1][11:16]}"
+        if deadline is not None and curve:
+            return False, f"brak tak taniego okna przed {dt_util.as_local(deadline):%H:%M}"
         return False, "brak planu z cenami"
+
+    @staticmethod
+    def _deadline(now: datetime, d: dict) -> datetime | None:
+        """Najbliższa pora „gotowe do godziny X” po `now` (ctl_ready_h = 0: bez terminu)."""
+        try:
+            rh = int(d.get("ctl_ready_h") or 0)
+        except (TypeError, ValueError):
+            return None
+        if not 1 <= rh <= 23:
+            return None
+        loc = dt_util.as_local(now)
+        dl = loc.replace(hour=rh, minute=0, second=0, microsecond=0)
+        return dl if dl > loc else dl + timedelta(days=1)
+
+    def _decide_split(self, d: dict, rec: dict, now: datetime, curve: dict | None, need: float,
+                      deadline: datetime | None) -> tuple[bool, str]:
+        """Najtańsze godziny z przerwami: zestaw godzin wybieramy raz na „okres” (do terminu albo 24 h) i go nie zmieniamy,
+        żeby plan nie przestawiał godzin w trakcie. Nowy zestaw dopiero po końcu okresu."""
+        slots: list[datetime] = []
+        for x in rec.get("slots") or []:
+            try:
+                slots.append(datetime.fromisoformat(str(x)))
+            except ValueError:
+                continue
+        try:
+            period_end = datetime.fromisoformat(str(rec.get("slots_end"))) if rec.get("slots_end") else None
+        except ValueError:
+            period_end = None
+        if period_end is None or now >= period_end:
+            slots, period_end = [], None
+            rec["slots"], rec["slots_end"] = None, None
+        if not slots:
+            hours = float(d.get("ctl_hours") or 2.0)
+            got = cheapest_slots(curve, hours, need / 1000.0, deadline, not_before=now)
+            if got is None:
+                return False, ("brak godzin przed terminem" if (deadline is not None and curve) else "brak planu z cenami")
+            slots = got[0]
+            period_end = deadline if deadline is not None else now + timedelta(hours=24)
+            rec["slots"] = [t.isoformat() for t in slots]
+            rec["slots_end"] = period_end.isoformat()
+            rec["slots_cost"] = got[1]
+        upcoming = [t for t in slots if t + timedelta(hours=1) > now]
+        if any(t <= now < t + timedelta(hours=1) for t in slots):
+            return True, f"najtańsze godziny {_ranges(slots)}" + (f" (gotowe przed {dt_util.as_local(deadline):%H:%M})" if deadline else "")
+        if upcoming:
+            return False, f"czeka na godziny {_ranges(upcoming)}"
+        return False, "zaplanowane godziny minęły — następny zestaw od końca okresu"

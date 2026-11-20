@@ -11,6 +11,7 @@ from datetime import date, datetime, timedelta
 from homeassistant.core import HomeAssistant
 from homeassistant.util import dt as dt_util
 
+from . import store_guard as SG
 from .helpers import ThrottledStore
 from .holidays_pl import is_holiday
 
@@ -402,14 +403,28 @@ class G12wTariff:
         self._hourly_fn = hourly_fn      # ceny godzinowe zakupu (taryfa dynamiczna); None = tylko kubełki
         self._store = ThrottledStore(hass, STORAGE_VERSION, STORAGE_KEY, delay=60)
         self.prices: dict[str, float | None] = {"peak": None, "off_peak": None}
+        self.integrity = SG.Integrity(STORAGE_KEY, "nauczone ceny taryfy")
 
     async def async_load(self) -> None:
-        data = await self._store.async_load()
-        if isinstance(data, dict) and isinstance(data.get("prices"), dict):
-            for k in ("peak", "off_peak"):
-                v = data["prices"].get(k)
-                if _finite(v):
-                    self.prices[k] = float(v)
+        try:
+            data = await self._store.async_load()
+        except Exception as err:  # noqa: BLE001
+            _LOGGER.warning("EMS taryfa: błąd wczytywania: %s", err)
+            return
+        if data is None:
+            return
+        if not isinstance(data, dict):
+            self.integrity.note(f"plik ma kształt {type(data).__name__} zamiast słownika — pominięto", data)
+            return
+        prices = SG.as_dict(data.get("prices"), self.integrity, "ceny", data)
+        for k in ("peak", "off_peak"):
+            if prices.get(k) is None:
+                continue
+            v = SG.num(prices.get(k), 1e-4, 20.0)      # to samo kryterium co przy nauce (sample): dodatnia, nie większa niż 20
+            if v is None:
+                self.integrity.note(f"cena „{k}” ({prices.get(k)!r}) jest niepoprawna — nauczę się jej od nowa", data)
+            else:
+                self.prices[k] = v
 
     def sample(self) -> None:
         """Zapisz bieżącą cenę do bucketu peak/off_peak."""

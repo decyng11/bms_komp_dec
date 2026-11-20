@@ -1,14 +1,18 @@
 """Wspólne funkcje pomocnicze EMS komp-dec (bez zależności od innych modułów integracji)."""
 from __future__ import annotations
 
+import logging
 import math
 from typing import Any, Callable
 
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.storage import Store
+from homeassistant.util import dt as dt_util
 
 from .const import DOMAIN
+
+_LOGGER = logging.getLogger(__name__)
 
 UID_PREFIX = "bms_komp_dec_v7_"
 BAD_STATES = ("unknown", "unavailable", "none", "")
@@ -111,3 +115,15 @@ class ThrottledStore:
 def entry_settings(entry) -> dict:
     """Ustawienia wpisu: options (po rekonfiguracji) zastępują data w całości."""
     return dict(entry.options) if getattr(entry, "options", None) else dict(entry.data)
+
+
+async def backup_raw(hass: HomeAssistant, key: str, raw: Any) -> bool:
+    """Kopia oryginału pliku zapisu sprzed naprawy: „.storage/<klucz>_backup” (jedna, nadpisywana). True, gdy zapisano."""
+    if raw is None:
+        return False
+    try:
+        await Store(hass, 1, f"{key}_backup").async_save({"saved": dt_util.now().isoformat(timespec="seconds"), "raw": raw})
+        return True
+    except Exception as err:  # noqa: BLE001
+        _LOGGER.warning("EMS: nie udało się zapisać kopii %s: %s", key, err)
+        return False

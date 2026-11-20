@@ -124,6 +124,12 @@ def _price_sources(rt) -> dict[str, Any]:
     return out
 
 
+def _issues(rt, now) -> list[dict[str, Any]]:
+    """Lista „co dziś nie działa” (ta sama co w banerze karty)."""
+    from . import issues as issues_mod
+    return [{k: i.get(k) for k in ("level", "title", "detail", "fix")} for i in issues_mod.collect(rt, now)]
+
+
 async def async_build_report(rt, log_lines: int = REPORT_LOG_LINES) -> dict[str, Any]:
     """Jeden raport do wklejenia przy zgłaszaniu problemu: wersja, ustawienia, plan, auto-stosowanie (powody i historia),
     autotest i ostatnie wpisy dziennika. Zwraca {"text", "filename", "summary"}; tekst jest dodatkowo czyszczony z adresów,
@@ -152,6 +158,7 @@ async def async_build_report(rt, log_lines: int = REPORT_LOG_LINES) -> dict[str,
         "auto_apply": _redact({k: rt.state.get(k) for k in _AUTO_STATE_KEYS}),
         "state": _redact({k: rt.state.get(k) for k in _STATE_KEYS}),
         "prices": _safe(lambda: _price_sources(rt), {}),
+        "issues": _safe(lambda: _issues(rt, now), []),
         "selftest": selftest,
         "log": _safe(lambda: rt.log.last(max(1, int(log_lines))), []),
     }
@@ -168,6 +175,11 @@ async def async_build_report(rt, log_lines: int = REPORT_LOG_LINES) -> dict[str,
                 lines.append(f"[{ic.get(c.get('status'), c.get('status'))}] {c.get('title')}: {c.get('detail')}"
                              + (f" → {c.get('fix')}" if c.get("fix") else ""))
         lines.append("")
+    iss = report.get("issues") or []
+    lines.append(f"Co dziś nie działa: {len(iss)}" if iss else "Co dziś nie działa: nic")
+    for i in iss:
+        lines.append(f"[{ {'error': 'BŁĄD', 'warn': 'UWAGA'}.get(i.get('level'), 'INFO') }] {i.get('title')}: {i.get('detail')}" + (f" → {i.get('fix')}" if i.get("fix") else ""))
+    lines.append("")
     for title, key in (("Plan i propozycje", "plan"), ("Auto-stosowanie (powody, historia, ostatnie zmiany)", "auto_apply"),
                        ("Stan", "state"), ("Ustawienia (przełączniki i liczby EMS)", "settings"), ("Konfiguracja", "config"),
                        ("Źródła cen (co widzi czytnik: encje, atrybuty z listami, użyte źródło)", "prices")):

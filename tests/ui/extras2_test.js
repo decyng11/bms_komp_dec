@@ -125,6 +125,26 @@ const { seed, curve, REPORT, HEALTH, tab, sr, openModes, openSec } = T;
   ok(await e.q(() => __el.shadowRoot.querySelectorAll('#statusBanner .sb-item.bad').length === 2 && __el.shadowRoot.querySelectorAll('#statusBanner .sb-item.warn').length === 1), 'baner: kolory — 2 czerwone, 1 pomarańczowy');
   ok(await e.q(() => /⚠/.test(__el.shadowRoot.getElementById('tabDiag').textContent)), 'zakładka Ustawienia: ⚠ od alarmu z integracji');
   ok(/ⓘ/.test(bn) && await e.q(() => /niskonapięciowych/.test(__el.shadowRoot.querySelector('#statusBanner .sb-item span[title]').title)), 'baner: zastrzeżenie o modelu falownika w podpowiedzi ⓘ');
+  // „Co dziś nie działa”: lista z integracji (sensor monitor_status → issues) w banerze — zwinięta, z najważniejszymi tytułami w nagłówku
+  await seed(e, { curve: curve(), monitor: { alarms: [], watches: [], issues: [
+    { id: 'alarms', level: 'error', title: 'Alarm <img src=x onerror=window.__xss2=1>', detail: 'sensor.f = F23', fix: 'Ustawienia → Alarmy.', since: nowS - 600 },
+    { id: 'rce_tomorrow', level: 'warn', title: 'Brak pełnych cen sprzedaży (RCE) na jutro', detail: '0/24 godzin.', fix: 'Sprawdź integrację cen.', since: nowS - 3600 },
+    { id: 'data_repaired', level: 'info', title: 'Przy starcie naprawiono uszkodzone dane', detail: 'księga zysków', fix: '' }] } });
+  await sleep(300);
+  const iss = await sr(e, '#statusBanner');
+  ok(/Co dziś nie działa:/.test(iss) && /\+1/.test(iss), 'baner: „Co dziś nie działa” — dwa tytuły i „+1”');
+  ok(await e.q(() => { const d = __el.shadowRoot.querySelector('#statusBanner details.sb-issues'); return !!d && !d.open && d.querySelectorAll('li').length === 3 && d.closest('.sb-item.bad') !== null; }), 'baner: lista zwinięta, 3 pozycje, kolor wg najpoważniejszej (czerwony)');
+  ok(/od \d{1,2}:\d{2}/.test(iss) && /Sprawdź integrację cen\./.test(iss) && /0\/24 godzin\./.test(iss), 'baner: pozycje mają „od kiedy”, opis i wskazówkę naprawy');
+  ok(await e.q(() => window.__xss2 === undefined && !__el.shadowRoot.querySelector('#statusBanner img')), 'baner: tytuł z HTML w liście problemów nie jest wykonywany');
+  await seed(e, { curve: curve(), monitor: { alarms: [], watches: [], issues: [{ id: 'pv_today', level: 'warn', title: 'Brak prognozy PV na dziś', detail: 'Plan liczy tak, jakby słońca nie było.', fix: '' }] } });
+  await sleep(300);
+  ok(await e.q(() => { const d = __el.shadowRoot.querySelector('#statusBanner details.sb-issues'); return !!d && d.querySelectorAll('li').length === 1 && !/\+\d/.test(d.querySelector('summary').textContent) && d.closest('.sb-item.warn') !== null; }), 'baner: jedna pozycja — bez „+N”, kolor ostrzeżenia');
+  await seed(e, { curve: curve(), monitor: { alarms: [], watches: [], issues: [] } });
+  await sleep(300);
+  ok(await e.q(() => !__el.shadowRoot.querySelector('#statusBanner details.sb-issues')), 'baner: pusta lista problemów — brak sekcji');
+  // przywrócenie stanu sprzed tego fragmentu (alarmy i tryby dla dalszych sprawdzeń)
+  await seed(e, { curve: curve(), monitor: { fault_note: 'x', alarms: [{ entity_id: 'sensor.deye_alert', state: 'F35', text: 'Brak sieci AC' }], low_soc_active: false, watches: [], storm_until: nowS + 7200 }, storm_mode: 'on', vacation_mode: 'on' });
+  await sleep(300);
   // tryby — przeniesione do Diagnostyki (zakładka „🛡️ Tryby”)
   await tab(e, 'ems');
   ok(await e.q(() => !__el.shadowRoot.querySelector('#modesBox') && !/Tryby i powiadomienia/.test(__el.shadowRoot.querySelector('[data-tab-content="ems"]').textContent)), 'tryby: sekcji nie ma już w zakładce EMS');

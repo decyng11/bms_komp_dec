@@ -294,7 +294,7 @@
         if (!d.switch_eid || !d.ctl_mode || d.ctl_mode === 'off') return '';
         const s = this._dvS(); const c = (s.data && s.data.control) || {}; const st = (c.devices || {})[d.id] || {};
         const sw = this._hass.states[d.switch_eid]; const on = sw && sw.state === 'on';
-        const mode = d.ctl_mode === 'pv' ? 'nadwyżka PV' : 'najtańsze godziny';
+        const mode = ({ pv: 'nadwyżka PV', cheap: d.ctl_split ? 'najtańsze godziny (z przerwami)' : 'najtańsze godziny', neg: 'ujemna cena zakupu' })[d.ctl_mode] || 'najtańsze godziny';
         let txt, cls = '';
         if (!c.enabled) { txt = `🎛 ${mode} · sterowanie wyłączone`; cls = 'opacity:.7;'; }
         else if (st.manual) txt = '✋ przełączone ręcznie — EMS nie steruje do jutra';
@@ -386,11 +386,16 @@
             <label>Kiedy włączać<select data-dvf="ctl_mode">
               <option value="off" ${!e.ctl_mode || e.ctl_mode === 'off' ? 'selected' : ''}>nie steruj</option>
               <option value="pv" ${e.ctl_mode === 'pv' ? 'selected' : ''}>przy nadwyżce PV</option>
-              <option value="cheap" ${e.ctl_mode === 'cheap' ? 'selected' : ''}>w najtańszych godzinach planu</option></select></label>
+              <option value="cheap" ${e.ctl_mode === 'cheap' ? 'selected' : ''}>w najtańszych godzinach planu</option>
+              <option value="neg" ${e.ctl_mode === 'neg' ? 'selected' : ''}>przy ujemnej cenie zakupu</option></select></label>
             ${num('ctl_power_w', 'Moc urządzenia (W) — tyle nadwyżki potrzeba', 10)}${num('ctl_soc', 'Nadwyżka PV: włączaj od SOC (%)', 1)}
             ${num('ctl_hours', 'Najtańsze godziny: ile godzin pracy', 0.5)}${num('ctl_max_h', 'Limit pracy na dobę (h, 0 = bez limitu)', 0.5)}
+            ${num('ctl_ready_h', 'Najtańsze godziny: gotowe do godziny (1–23, 0 = bez terminu)', 1)}${chk('ctl_split', 'Najtańsze godziny mogą być rozdzielone (auto, bojler — nie tylko jeden blok)')}
+            ${num('ctl_neg_price', 'Ujemna cena: włączaj, gdy cena zakupu poniżej (zł/kWh)', 0.01)}${chk('ctl_neg', 'Włączaj też przy ujemnej cenie zakupu (dodatek do nadwyżki PV / najtańszych godzin)')}
             ${chk('ctl_no_shed', 'Nie dotyczy oszczędzania energii (nie wyłączaj przy niskim SOC)')}
           </div>
+          <div class="dv-note">Ujemna cena: gdy sprzedawca płaci za pobór (cena zakupu poniżej progu, domyślnie 0), EMS włącza urządzenie po 5 minutach stałej ceny i wyłącza je, gdy cena wróci. Wymaga ceny zakupu z godzinowej taryfy (np. Pstryk).
+            Termin „gotowe do godziny”: np. auto naładowane na 7:00 — EMS wybiera najtańsze godziny tak, żeby skończyć przed tą porą, i nie przestawia ich w trakcie.</div>
           <div class="dv-note">EMS włącza i wyłącza przełącznik tylko przy włączonym „Sterowaniu urządzeniami” (przełącznik nad listą urządzeń). Zmienia stan najwyżej co 10 minut, a warunek musi trwać 5 minut.
             Wyłącza tylko to, co sam włączył; gdy przełączysz urządzenie ręcznie, EMS nie steruje nim do końca dnia. Przy zaniku sieci niczego nie włącza.
             Oszczędzanie energii: gdy SOC spadnie poniżej progu z EMS → „Oszczędzanie energii”, EMS wyłącza urządzenia z przełącznikiem (poza oznaczonymi „nie dotyczy”) i włącza je po odbiciu SOC o 5 pkt.</div>
@@ -408,7 +413,7 @@
         if (a === 'range') { s.range = t.dataset.r; this._dvRender(); }
         else if (a === 'sel') { if (ev.target.closest('[data-dv="edit"]')) return; s.sel = s.sel === t.dataset.id ? 'all' : t.dataset.id; this._dvRender(); }
         else if (a === 'reload') { s.fetchedAt = 0; s.statsKey = ''; this._dvLoad(); }
-        else if (a === 'add') { s.edit = Object.assign(this._dvDefaultsFor('other', {}), { _new: true, room: '', power_eid: '', energy_eid: '', switch_eid: '', ctl_mode: 'off', ctl_power_w: 1000, ctl_soc: 90, ctl_hours: 2, ctl_max_h: 0 }); this._dvRender(); }
+        else if (a === 'add') { s.edit = Object.assign(this._dvDefaultsFor('other', {}), { _new: true, room: '', power_eid: '', energy_eid: '', switch_eid: '', ctl_mode: 'off', ctl_power_w: 1000, ctl_soc: 90, ctl_hours: 2, ctl_max_h: 0, ctl_ready_h: 0, ctl_split: false, ctl_neg: false, ctl_neg_price: 0 }); this._dvRender(); }
         else if (a === 'edit') { const d = this._dvDevs().find((x) => x.id === t.dataset.id); if (d) { s.edit = Object.assign({}, d); this._dvRender(); } }
         else if (a === 'cancel') { s.edit = null; this._dvRender(); }
         else if (a === 'save') this._dvSave();

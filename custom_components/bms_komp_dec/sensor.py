@@ -133,7 +133,7 @@ class BmsRuntimeSensor(BmsBaseEntity, SensorEntity):
         "price_sell_entity", "price_buy_entity", "price_sell_source", "price_buy_source", "tariff_mode", "tariff_dynamic",
         "price_buy_tomorrow_state", "price_buy_tomorrow_note",
         "pv_forecast_source", "pv_hourly_today", "pv_hourly_tomorrow", "pv_daily", "pv_sources", "assumptions",
-        "devices", "power_total", "accuracy", "table", "overrides", "soc_history", "why", "control_test",
+        "devices", "power_total", "accuracy", "table", "overrides", "soc_history", "why", "control_test", "issues", "reviews",
     })
 
     def __init__(self, coordinator, key, name, unit, icon):
@@ -355,6 +355,7 @@ class BmsRuntimeSensor(BmsBaseEntity, SensorEntity):
                 "auto_skip": dict(st.get("auto_skip") or {}),
                 "auto_hist": list(reversed(st.get("auto_hist") or []))[:20],
                 "recent_notifications": [e for e in rt.log.last(200) if e.get("kind") == "notify"][-10:],
+                "issues": list(rt.issues),
             }
         if self._key == "devices":
             live = rt.devices.live()
@@ -376,5 +377,5 @@ class BmsRuntimeSensor(BmsBaseEntity, SensorEntity):
             ac = rt.insights.accuracy(getattr(rt.coordinator, "load_forecast", None))
             return {"pv_bias": ac["pv"]["bias"], "pv_days": ac["pv"]["n"], "load_mape": ac["load"]["mape"],
                     "load_bias": ac["load"]["bias"], "soc_plan_error": ac["soc"]["mae"],
-                    "pv_correction": ac["pv_correction"]["factor"]}
+                    "pv_correction": ac["pv_correction"]["factor"], "reviews": rt.day_reviews(14)}
         return None

@@ -30,11 +30,16 @@ from .decision_log import DecisionLog
 from .diag_store import DiagStore
 from . import devices as devmod
 from .helpers import (
-    ThrottledStore, find_eid, normalize_price, number_value, state_float, state_str, switch_on,
+    ThrottledStore, backup_raw, find_eid, normalize_price, number_value, state_float, state_str, switch_on,
 )
+from . import store_guard as SG
+from . import review as review_mod
+from . import profiles as prof_mod
+
+ISSUES_EVERY_S = 55          # lista „co dziś nie działa” liczy się co tyle sekund
 from .holidays_pl import holiday_name, is_holiday
 from .device_ctl import DeviceController
-from .insights import Insights
+from .insights import Insights, SOC as _INS_SOC
 from .repairs_bms import Repairs
 from .ledger import Ledger
 from . import money as money_mod
@@ -158,6 +163,11 @@ class BmsRuntime:
         self._plan_lock = asyncio.Lock()
         self._report_cache: tuple[str, dict[str, Any]] | None = None
         self._state_store = ThrottledStore(hass, 1, "bms_komp_dec_runtime", delay=30)
+        self._state_integrity = SG.Integrity("bms_komp_dec_runtime", "stan EMS")
+        self._repairs_reported = False
+        self.issues: list[dict[str, Any]] = []             # „co dziś nie działa” (issues.collect), odświeżane co minutę
+        self._issues_seen: dict[str, float] = {}           # od kiedy dany problem trwa (id → znacznik czasu)
+        self._issues_at = 0.0
         self.state: dict[str, Any] = {
             "today_date": None, "today_charge": 0.0, "today_pv": 0.0,
             "yesterday_date": None, "yesterday_charge": 0.0, "yesterday_pv": 0.0,
@@ -180,18 +190,16 @@ class BmsRuntime:
 
     # ------------------------------------------------------------ lifecycle
     async def async_load(self) -> None:
-        await self.log.async_load()
-        await self.ledger.async_load()
-        await self.stats.async_load()
-        await self.diag_store.async_load()
-        try:
-            await self.devices.async_load()
-        except Exception as err:  # noqa: BLE001
-            _LOGGER.warning("EMS: nie udało się wczytać urządzeń: %s", err)
-        try:
-            await self.insights.async_load()
-        except Exception as err:  # noqa: BLE001
-            _LOGGER.warning("EMS: nie udało się wczytać historii godzinowej: %s", err)
+        # każdy plik osobno: uszkodzony jeden nie może zatrzymać startu ani pozostałych (kopia i powiadomienie — store_repair_tick)
+        for label, store in (("dziennika decyzji", self.log), ("księgi zysków", self.ledger), ("statystyk baterii", self.stats),
+                             ("magazynu Diagnostyki", self.diag_store), ("urządzeń", self.devices), ("historii godzinowej", self.insights)):
+            try:
+                await store.async_load()
+            except Exception as err:  # noqa: BLE001
+                _LOGGER.warning("EMS: nie udało się wczytać %s: %s", label, err, exc_info=True)
+                integ = getattr(store, "integrity", None)
+                if integ is not None:
+                    integ.note(f"wczytywanie nie powiodło się ({type(err).__name__}) — zaczynam od zera")
         lf = getattr(self.coordinator, "load_forecast", None)
         if lf is not None:
             lf.split_hook = lambda f, target, today: devmod.forecast_split(self.devices, f, target, today)
@@ -224,6 +232,7 @@ class BmsRuntime:
                 _LOGGER.warning("EMS: kontrola zapisanego stanu nie powiodła się: %s", err)
             if fixed:
                 _LOGGER.warning("EMS: uszkodzone wartości w zapisanym stanie przywrócono do domyślnych: %s", ", ".join(fixed))
+                self._state_integrity.note(f"pola przywrócone do domyślnych: {', '.join(fixed)}", data)
                 self.log.add("system", f"Naprawiono uszkodzony zapis stanu (pola: {', '.join(fixed)}) — wartości wróciły do domyślnych", "warn")
             try:
                 self._sign = SignLearner(self.state.get("battery_sign_votes"))
@@ -232,6 +241,42 @@ class BmsRuntime:
 
     def _save_state(self) -> None:
         self._state_store.request_save(lambda: dict(self.state))
+
+    async def issues_tick(self, now: datetime, force: bool = False) -> None:
+        """Co ~minutę odświeża listę „co dziś nie działa” i pamięta, od kiedy każdy problem trwa."""
+        ts = now.timestamp()
+        if not force and ts - self._issues_at < ISSUES_EVERY_S:
+            return
+        self._issues_at = ts
+        from . import issues as issues_mod
+        found = issues_mod.collect(self, now)
+        seen = {i["id"]: self._issues_seen.get(i["id"], ts) for i in found}
+        self._issues_seen = seen
+        self.issues = [dict(i, since=round(seen[i["id"]])) for i in found]
+
+    def integrity_items(self) -> list[SG.Integrity]:
+        """Pliki zapisu, które przy wczytywaniu trzeba było naprawić (do raportu po starcie)."""
+        stores = (self.log, self.ledger, self.stats, self.devices, self.insights, self.diag_store,
+                  getattr(self.coordinator, "load_forecast", None), getattr(self.optimizer, "tariff", None))
+        items = [st.integrity for st in stores if st is not None and isinstance(getattr(st, "integrity", None), SG.Integrity)]
+        items.append(self._state_integrity)
+        return [i for i in items if i]
+
+    async def store_repair_tick(self, now: datetime) -> None:
+        """Raz po starcie: kopia oryginału każdego naprawionego pliku, wpis w dzienniku i jedno powiadomienie."""
+        if self._repairs_reported:
+            return
+        self._repairs_reported = True
+        items = self.integrity_items()
+        if not items:
+            return
+        for it in items:
+            saved = await backup_raw(self.hass, it.key, it.raw)
+            tail = f" Kopia oryginału: .storage/{it.key}_backup." if saved else ""
+            self.log.add("system", f"Naprawiono uszkodzone dane — {it.summary()}.{tail}", "warn")
+            _LOGGER.warning("EMS: naprawiono uszkodzone dane — %s", it.summary())
+        msg = " ".join(f"{i.summary()}." for i in items) + " Oryginały zapisano w .storage (pliki …_backup); EMS działa dalej na naprawionych danych."
+        await self.monitor.notifier.send("data_repair", "🛠 EMS: naprawiono uszkodzone dane", msg[:1400], key="data_repair", level="warn")
 
     def start_settings_log(self):
         """Nasłuch zmian encji integracji → dziennik zmian ustawień (kto, kiedy, było → jest). Zwraca funkcję odpinającą."""
@@ -407,6 +452,19 @@ class BmsRuntime:
             return val
         try:
             return float(self.optimizer.tariff.get_price(dt_util.now()))
+        except Exception:  # noqa: BLE001
+            return None
+
+    def buy_price_signed(self) -> float | None:
+        """Bieżąca cena zakupu, także ujemna (buy_price() odrzuca wartości ≤ 0 i wraca do taryfy). Sterowanie urządzeniami
+        przy ujemnej cenie potrzebuje prawdziwej wartości z encji; poza zakresem ±20 zł/kWh albo bez odczytu → cena z taryfy."""
+        eid = self.optimizer.config.get(CONF_PRICE_BUY_ENTITY, DEFAULT_PRICE_BUY_ENTITY)
+        val = state_float(self.hass, eid)
+        if val is not None and math.isfinite(val) and -20.0 <= val <= 20.0:
+            return val
+        try:
+            v = float(self.optimizer.tariff.get_price(dt_util.now()))
+            return v if math.isfinite(v) else None
         except Exception:  # noqa: BLE001
             return None
 
@@ -2108,15 +2166,221 @@ class BmsRuntime:
                        f"w oknach sprzedaży wyeksportowano {fmt(act['kwh'])} kWh / {fmt(act['rev'], 2)} zł")
         elif act["kwh"] >= 0.05:
             out.append(f"Sprzedaż z baterii: bez planu, w oknach sprzedaży wyeksportowano {fmt(act['kwh'])} kWh / {fmt(act['rev'], 2)} zł")
-        ents = [e for e in self.log.last(400) if str(e.get("ts", "")).startswith(key)]
-        guards = sum(1 for e in ents if e.get("kind") == "guard" and e.get("level") == "warn")
-        autos = sum(1 for e in ents if e.get("kind") == "auto" and e.get("level") in ("ok", "warn"))
+        guards, autos = self._day_guard_counts(key)
         if guards or autos:
             out.append(f"Zabezpieczenia zadziałały: {guards}×, zmiany automatu: {autos}×")
         gb = self.grid_batt_kwh()
         if gb >= 0.1 and day == dt_util.now().date():
             out.append(f"W baterii zostało ~{fmt(gb)} kWh energii z sieci (sprzedaż zablokowana, aż dom ją zużyje)")
+        # ocena planu: dla dnia z przeszłości — jego własna; w podsumowaniu „dzisiaj” — wczorajsza (dzisiejsza powstaje dopiero po północy)
+        rkey = (day - timedelta(days=1)).isoformat() if day == dt_util.now().date() else key
+        rev = (self.state.get("day_reviews") or {}).get(rkey)
+        if review_mod.valid(rev):
+            out.append(str(rev.get("line") or review_mod.summary_line(rev)))
         return out
+
+    def _day_guard_counts(self, key: str) -> tuple[int, int]:
+        """Ile razy tego dnia zadziałały zabezpieczenia (ostrzeżenia „guard”) i ile zmian zrobił automat."""
+        ents = [e for e in self.log.last(400) if str(e.get("ts", "")).startswith(key)]
+        guards = sum(1 for e in ents if e.get("kind") == "guard" and e.get("level") == "warn")
+        autos = sum(1 for e in ents if e.get("kind") == "auto" and e.get("level") in ("ok", "warn"))
+        return guards, autos
+
+    # --------------------------------------------------------------- profile pracy (zima / lato / urlop / burza)
+    def _profile_read(self, key: str) -> Any:
+        """Bieżąca wartość ustawienia integracji: bool (przełącznik), float (liczba) albo None, gdy encja niedostępna."""
+        k = prof_mod.kind(key)
+        if k is None:
+            return None
+        raw = state_str(self.hass, find_eid(self.hass, k, key))
+        if raw is None:
+            return None
+        if k == "switch":
+            return True if raw == "on" else (False if raw == "off" else None)
+        try:
+            x = float(raw)
+        except (TypeError, ValueError):
+            return None
+        return x if math.isfinite(x) else None
+
+    async def _profile_write(self, key: str, value: Any) -> bool:
+        k = prof_mod.kind(key)
+        cv = prof_mod.check_value(key, value)
+        if k is None or cv is None:
+            return False
+        eid = find_eid(self.hass, k, key)
+        try:
+            if k == "switch":
+                await self.hass.services.async_call("switch", "turn_on" if cv else "turn_off", {"entity_id": eid}, blocking=True)
+            else:
+                await self.hass.services.async_call("number", "set_value", {"entity_id": eid, "value": cv}, blocking=True)
+        except Exception as err:  # noqa: BLE001
+            _LOGGER.warning("EMS: profil — nie udało się ustawić %s: %s", eid, err)
+            return False
+        return True
+
+    def profile_view(self) -> dict[str, Any]:
+        """Dane dla karty: lista profili z podglądem zmian, aktywny profil i możliwość powrotu."""
+        cur = prof_mod.clean_state(self.state.get("profile"))
+        active = None
+        if cur:
+            active = {"id": cur["id"], "since": cur["since"], "ended": cur["ended"], "can_revert": bool(cur["prev"]),
+                      "name": (prof_mod.get(cur["id"]) or {}).get("name"),
+                      "restore": [{"key": k, "label": prof_mod.label(k), "now_text": prof_mod.fmt(k, self._profile_read(k)),
+                                   "prev_text": prof_mod.fmt(k, v)} for k, v in cur["prev"].items()]}
+        profiles = []
+        for p in prof_mod.PROFILES:
+            ch = prof_mod.changes(p, self._profile_read)
+            profiles.append({"id": p["id"], "name": p["name"], "icon": p["icon"], "desc": p["desc"], "changes": ch,
+                             "active": bool(cur and cur["id"] == p["id"] and not cur["ended"]),
+                             "nothing_to_change": not any(c["differs"] for c in ch if c["available"])})
+        return {"profiles": profiles, "active": active}
+
+    async def apply_profile(self, pid: str) -> dict[str, Any]:
+        """Stosuje profil: najpierw cofa poprzedni (tylko nietknięte ręcznie wartości), potem zapamiętuje stan i ustawia nowe wartości."""
+        prof = prof_mod.get(pid)
+        if prof is None:
+            raise ValueError(f"nieznany profil: {pid!r}")
+        cur = prof_mod.clean_state(self.state.get("profile"))
+        if cur:
+            await self._profile_restore(cur, quiet=True)
+        prev: dict[str, Any] = {}
+        applied: dict[str, Any] = {}
+        skipped: list[str] = []
+        for key, target in prof["set"].items():
+            now = self._profile_read(key)
+            if now is None:
+                skipped.append(prof_mod.label(key))
+                continue
+            if prof_mod.same(now, target):
+                continue                                   # już ustawione — nie ruszamy i nie zapamiętujemy do cofnięcia
+            if await self._profile_write(key, target) and prof_mod.same(self._profile_read(key), target):   # odczyt zwrotny
+                prev[key], applied[key] = now, prof_mod.check_value(key, target)
+            else:
+                skipped.append(prof_mod.label(key))
+        # wartości, które i tak były już zgodne z profilem, też należą do niego (do wykrywania, że profil przestał obowiązywać)
+        for key, target in prof["set"].items():
+            if key not in applied and self._profile_read(key) is not None and prof_mod.same(self._profile_read(key), target):
+                applied[key] = prof_mod.check_value(key, target)
+        since = dt_util.now().isoformat(timespec="seconds")
+        self.state["profile"] = {"id": pid, "since": since, "prev": prev, "applied": applied, "ended": None}
+        if pid == "storm":
+            self.state["storm_until"] = None               # czas trwania liczony od teraz (modes_tick ustawi nowy)
+        self._plan_ts = 0.0
+        self._reserve_cache = None
+        self._save_state()
+        txt = f"Włączono profil „{prof['name']}”: zmieniono {prof_mod.settings_word(len(prev))}" + (f", pominięto {len(skipped)} (brak encji lub zapis nie zadziałał)" if skipped else "")
+        self.log.add("mode", txt, "ok" if not skipped else "warn", profile=pid)
+        return {"ok": True, "id": pid, "changed": len(prev), "skipped": skipped}
+
+    async def _profile_restore(self, cur: dict[str, Any], quiet: bool = False) -> dict[str, Any]:
+        restored, kept = 0, []
+        for key, old in cur["prev"].items():
+            now = self._profile_read(key)
+            if now is not None and prof_mod.same(now, old):
+                restored += 1                              # już jest tak jak przed profilem (np. tryb burzowy wygasł sam)
+                continue
+            if now is not None and not prof_mod.same(now, cur["applied"].get(key)):
+                kept.append(prof_mod.label(key))           # po profilu zmieniono ręcznie — zostaje, jak jest
+                continue
+            if await self._profile_write(key, old):
+                restored += 1
+        if not quiet:
+            name = (prof_mod.get(cur["id"]) or {}).get("name") or cur["id"]
+            self.log.add("mode", f"Cofnięto profil „{name}”: przywrócono {prof_mod.settings_word(restored)}" + (f", {len(kept)} zostawiono (zmienione ręcznie)" if kept else ""),
+                         "ok", profile=cur["id"])
+        return {"restored": restored, "kept": kept}
+
+    async def revert_profile(self) -> dict[str, Any]:
+        cur = prof_mod.clean_state(self.state.get("profile"))
+        if not cur:
+            self.state["profile"] = None
+            raise ValueError("żaden profil nie jest zastosowany")
+        res = await self._profile_restore(cur)
+        self.state["profile"] = None
+        self._plan_ts = 0.0
+        self._reserve_cache = None
+        self._save_state()
+        return {"ok": True, **res}
+
+    async def profile_tick(self, now: datetime) -> None:
+        """Profil przestaje obowiązywać, gdy któreś z jego ustawień ma dziś inną wartość (ręczna zmiana albo samoczynne wygaśnięcie
+        trybu burzowego). Nic wtedy nie cofamy — tylko zapisujemy, że profil się skończył, i zostawiamy możliwość powrotu."""
+        raw = self.state.get("profile")
+        if raw is None:
+            return
+        cur = prof_mod.clean_state(raw)
+        if cur is None:
+            self.state["profile"] = None
+            self._save_state()
+            return
+        if cur["ended"]:
+            return
+        bad = prof_mod.drifted(cur["applied"], self._profile_read)
+        if not bad:
+            return
+        cur["ended"] = {"at": dt_util.as_local(now).isoformat(timespec="seconds"), "keys": bad[:20]}
+        self.state["profile"] = cur
+        self._save_state()
+        name = (prof_mod.get(cur["id"]) or {}).get("name") or cur["id"]
+        self.log.add("mode", f"Profil „{name}” przestał obowiązywać (zmienione: {', '.join(prof_mod.label(k) for k in bad[:4])})", "info", profile=cur["id"])
+
+    # --------------------------------------------------------------- ocena planu po dobie
+    def build_day_review(self, day: date) -> dict[str, Any] | None:
+        """Plan z rana kontra to, co się stało: PV, zużycie, SOC, sprzedaż z baterii (czysta ocena w review.py)."""
+        key = day.isoformat()
+        rec = self.insights.fc.get(key) or {}
+        row = next((r for r in (self.state.get("accuracy") or []) if isinstance(r, dict) and r.get("date") == key), {})
+        lf = getattr(self.coordinator, "load_forecast", None)
+
+        def pick(*vals):
+            return next((v for v in vals if v is not None), None)
+
+        pv_fc = pick(rec.get("pv_fc"), row.get("pv_fc"))
+        pv_act = pick(rec.get("pv_act"), row.get("pv"))
+        load_fc = pick((getattr(lf, "forecast_history", None) or {}).get(key), row.get("load_fc"))
+        load_act = pick((getattr(lf, "days", None) or {}).get(key), row.get("load"))
+        soc_act = rec.get("soc_act")
+        if soc_act is None and rec.get("soc_plan") is not None:      # doba jeszcze niezamknięta w statystykach: weź SOC z godzin
+            try:
+                soc_act = [None if b is None else b[_INS_SOC] for b in self.insights._buckets(key)]  # noqa: SLF001
+            except Exception:  # noqa: BLE001
+                soc_act = None
+        guards, autos = self._day_guard_counts(key)
+        try:
+            net = self.ledger.day_net(day)
+        except Exception:  # noqa: BLE001
+            net = None
+        return review_mod.build(key, pv_fc=pv_fc, pv_act=pv_act, pv_limited=rec.get("pv_lim"), load_fc=load_fc, load_act=load_act,
+                                soc_plan=rec.get("soc_plan"), soc_act=soc_act,
+                                sale_plan=(self.state.get("sale_plan") or {}).get(key),
+                                sale_act=(self.state.get("sale_actual") or {}).get(key),
+                                net=net, guards=guards, autos=autos)
+
+    def store_day_review(self, rev: dict[str, Any]) -> None:
+        review_mod.store(self.state.setdefault("day_reviews", {}), rev)
+        self.log.add("profit", rev.get("line") or review_mod.summary_line(rev), "ok" if rev["verdict"] == "trafny" else "info",
+                     verdict=rev["verdict"], score=rev.get("score"))
+
+    def day_reviews(self, n: int = 14) -> list[dict[str, Any]]:
+        return review_mod.recent(self.state.get("day_reviews"), n)
+
+    async def review_tick(self, now: datetime) -> None:
+        """Po północy: ocena wczorajszego planu (raz na dobę). Czeka, aż statystyki zamkną dobę (SOC z całego dnia);
+        od 2:00 ocenia z tym, co jest."""
+        loc = dt_util.as_local(now)
+        day = loc.date() - timedelta(days=1)
+        key = day.isoformat()
+        if self.state.get("review_done") == key:
+            return
+        rec = self.insights.fc.get(key)
+        if not (rec is not None and "soc_act" in rec) and loc.hour < 2:
+            return
+        self.state["review_done"] = key
+        rev = self.build_day_review(day)
+        if rev is not None:
+            self.store_day_review(rev)
+        self._save_state()
 
     # --------------------------------------------------------------- tick / listenery
     async def tick(self, now: datetime) -> None:
@@ -2135,6 +2399,10 @@ class BmsRuntime:
             ("prognozy", self._insights_tick),
             ("sterowanie urządzeń", self.dev_ctl.tick),
             ("naprawy", self.repairs.tick),
+            ("naprawa danych", self.store_repair_tick),
+            ("ocena planu", self.review_tick),
+            ("profil", self.profile_tick),
+            ("problemy", self.issues_tick),
         ):
             try:
                 if name == "plan":

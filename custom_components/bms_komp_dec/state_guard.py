@@ -14,14 +14,14 @@ FLAT_DICTS = ("price_reaction", "notified", "alarms_active", "soc_day", "soc_pre
               "grid_batt", "live_apply")
 # słowniki o dowolnej zawartości
 DICTS = ("accuracy_fc", "last_applied", "notify_cfg", "grid_target_plan", "auto_skip", "sale_plan", "sale_actual", "sale_power_plan", "dev_ctl",
-         "plan_sig", "dev_done", "rejected_props", "analysis_cfg", "zeroed")
+         "plan_sig", "dev_done", "rejected_props", "analysis_cfg", "zeroed", "day_reviews")
 LISTS = ("accuracy", "watches", "overrides", "auto_enabled", "auto_disabled", "auto_hist", "inbox", "settings_log")
 FLOATS = ("today_charge", "today_pv", "yesterday_charge", "yesterday_pv")
 INTS = ("inbox_seq", "settings_log_seq")
-STRS = ("accuracy_done", "today_date", "yesterday_date", "report_sent", "sale_report_done", "pv_streak_day")
+STRS = ("accuracy_done", "today_date", "yesterday_date", "report_sent", "sale_report_done", "pv_streak_day", "review_done")
 NUMS = ("normal_charge_current", "storm_until", "vacation_since")     # liczba albo None
 BOOLS = ("low_soc_active",)
-DICT_OR_NONE = ("control_test",)
+DICT_OR_NONE = ("control_test", "profile")
 
 
 def _scalar(v: Any) -> bool:
@@ -98,6 +98,14 @@ def sanitize(state: dict[str, Any]) -> list[str]:
     if isinstance(fc, dict) and fc and not (isinstance(fc.get("date"), str)
                                            and all(fc.get(x) is None or _num(fc.get(x)) for x in ("load", "pv"))):
         reset("accuracy_fc", {})
+    # oceny planu po dobie: klucz = data, wartość musi dać się wyświetlić (inaczej karta by się wywróciła)
+    revs = state.get("day_reviews")
+    if isinstance(revs, dict):
+        from .review import valid
+        good = {k: v for k, v in revs.items() if isinstance(k, str) and valid(v)}
+        if len(good) != len(revs):
+            state["day_reviews"] = good
+            fixed.append("day_reviews")
     acc = state.get("accuracy")
     if isinstance(acc, list) and any(not isinstance(x, dict) for x in acc):
         state["accuracy"] = [x for x in acc if isinstance(x, dict)]

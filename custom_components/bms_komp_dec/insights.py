@@ -22,6 +22,7 @@ from typing import Any
 
 from homeassistant.util import dt as dt_util
 
+from . import store_guard as SG
 from .helpers import ThrottledStore
 
 _LOGGER = logging.getLogger(__name__)
@@ -186,6 +187,7 @@ class Insights:
     def __init__(self, hass) -> None:
         self.hass = hass
         self._store = ThrottledStore(hass, STORAGE_VERSION, STORAGE_KEY, delay=300)
+        self.integrity = SG.Integrity(STORAGE_KEY, "historia godzinowa")
         self.hours: dict[str, list] = {}
         self.days: dict[str, dict[str, Any]] = {}
         self.fc: dict[str, dict[str, Any]] = {}
@@ -201,23 +203,42 @@ class Insights:
         except Exception as err:  # noqa: BLE001
             _LOGGER.warning("EMS insights: błąd wczytywania: %s", err)
             return
-        if not isinstance(raw, dict):
+        if raw is None:
             return
-        for k, v in (raw.get("hours") or {}).items():
+        if not isinstance(raw, dict):
+            self.integrity.note(f"plik ma kształt {type(raw).__name__} zamiast słownika — pominięto", raw)
+            return
+        integ = self.integrity
+        bad = 0
+        for k, v in SG.as_dict(raw.get("hours"), integ, "dane godzinowe", raw).items():
             if isinstance(v, list) and len(v) == _BUCKET_LEN:
                 b = [(_f(x) or 0.0) for x in v[:10]] + [_f(v[10])]
                 self.hours[str(k)] = b
-        for k, v in (raw.get("days") or {}).items():
+            elif not isinstance(v, list):          # lista innej długości = zapis w starym układzie, pomijany po cichu
+                bad += 1
+        for k, v in SG.as_dict(raw.get("days"), integ, "dni", raw).items():
             if isinstance(v, dict):
-                self.days[str(k)] = v
-        for k, v in (raw.get("fc") or {}).items():
+                self.days[str(k)] = SG.scrub(v)
+                if SG.has_nonfinite(v):
+                    bad += 1
+            else:
+                bad += 1
+        for k, v in SG.as_dict(raw.get("fc"), integ, "prognozy", raw).items():
             if isinstance(v, dict):
                 # pola-słowniki (kształt prognozy wg godzin) muszą nimi być — inaczej `"6" in by_h` rzuca wyjątek w każdym ticku
                 v = {a: b for a, b in v.items() if isinstance(b, dict) or a not in ("pv_fc_by_h", "pv_adj_by_h")}
-                self.fc[str(k)] = v
-        for k, v in (raw.get("counters") or {}).items():
+                if SG.has_nonfinite(v):
+                    bad += 1
+                self.fc[str(k)] = SG.scrub(v)
+            else:
+                bad += 1
+        for k, v in SG.as_dict(raw.get("counters"), integ, "liczniki dnia", raw).items():
             if isinstance(v, dict):
-                self.counters[str(k)] = {a: float(b) for a, b in v.items() if _f(b) is not None}
+                self.counters[str(k)] = {a: float(b) for a, b in v.items() if SG.num(b, -1e9, 1e9) is not None}
+            else:
+                bad += 1
+        if bad:
+            integ.note(f"historia godzinowa: naprawiono lub pominięto {bad} uszkodzonych wpisów", raw)
         self._cur_day = raw.get("cur_day") if isinstance(raw.get("cur_day"), str) else None
 
     def _payload(self) -> dict[str, Any]:

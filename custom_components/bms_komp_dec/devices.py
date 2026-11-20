@@ -18,6 +18,7 @@ from typing import Any
 
 from homeassistant.util import dt as dt_util
 
+from . import store_guard as SG
 from .helpers import ThrottledStore
 
 _LOGGER = logging.getLogger(__name__)
@@ -89,7 +90,7 @@ DRIVERS = ("temp", "weekday", "flat")
 _ID_RE = re.compile(r"^[a-z0-9_]{1,40}$")
 _EID_RE = re.compile(r"^sensor\.[a-z0-9_]+$")
 _SWITCH_RE = re.compile(r"^(switch|input_boolean)\.[a-z0-9_]+$")
-CTL_MODES = ("off", "pv", "cheap")
+CTL_MODES = ("off", "pv", "cheap", "neg")
 _POWER_UNITS = {"w": 1.0, "kw": 1000.0, "mw": 1_000_000.0}
 _ENERGY_UNITS = {"wh": 0.001, "kwh": 1.0, "mwh": 1000.0}
 
@@ -163,6 +164,12 @@ def sanitize_device(raw: Any) -> dict[str, Any] | None:
         "ctl_hours": _clamp(raw.get("ctl_hours"), 0.5, 12.0, 2.0),
         "ctl_max_h": _clamp(raw.get("ctl_max_h"), 0.0, 24.0, 0.0),
         "ctl_no_shed": b("ctl_no_shed", False) if _SWITCH_RE.match(sw) else False,   # nie wyłączaj przy niskim SOC (oszczędzanie energii)
+        # ujemna cena zakupu: tryb „neg” albo dodatkowo do „pv”/„cheap” (próg w zł/kWh; domyślnie poniżej 0)
+        "ctl_neg": b("ctl_neg", False) if _SWITCH_RE.match(sw) else False,
+        "ctl_neg_price": _clamp(raw.get("ctl_neg_price"), -5.0, 5.0, 0.0),
+        # najtańsze godziny: dozwolone godziny z przerwami (auto, bojler) i termin „gotowe do godziny” (0 = bez terminu)
+        "ctl_split": b("ctl_split", False) if _SWITCH_RE.match(sw) else False,
+        "ctl_ready_h": int(_clamp(raw.get("ctl_ready_h"), 0.0, 23.0, 0.0)),
     }
 
 
@@ -206,29 +213,48 @@ class DeviceManager:
         self.data: dict[str, dict[str, Any]] = {}
         self.price_min: dict[str, float] = {}         # najniższa cena zakupu dnia (do oszczędności przesunięcia)
         self.state: dict[str, Any] = {}               # podpowiedzi / alarmy raz na dobę
+        self.integrity = SG.Integrity(STORAGE_KEY, "dane urządzeń")
 
     async def async_load(self) -> None:
         raw = await self._store.async_load()
-        if not isinstance(raw, dict):
+        if raw is None:
             return
-        self.devices = sanitize_list(raw.get("devices"))
-        data = raw.get("data") if isinstance(raw.get("data"), dict) else {}
+        if not isinstance(raw, dict):
+            self.integrity.note(f"plik ma kształt {type(raw).__name__} zamiast słownika — pominięto", raw)
+            return
+        listed = raw.get("devices")
+        self.devices = sanitize_list(listed)
+        if isinstance(listed, list) and len(self.devices) < min(len(listed), MAX_DEVICES):
+            self.integrity.note(f"pominięto {min(len(listed), MAX_DEVICES) - len(self.devices)} uszkodzonych definicji urządzeń", raw)
+        elif listed is not None and not isinstance(listed, list):
+            self.integrity.note("lista urządzeń jest uszkodzona — pominięto", raw)
+        data = SG.as_dict(raw.get("data"), self.integrity, "dane urządzeń", raw)
+
+        def fl(x: Any) -> float:
+            return SG.num(x, -1e9, 1e9) or 0.0
+
         for d in self.devices:
             src = data.get(d["id"]) if isinstance(data.get(d["id"]), dict) else {}
             rec = _blank()
-            for k in ("daily", "cost", "standby", "minprice"):
-                if isinstance(src.get(k), dict):
-                    rec[k] = {str(a): float(b) for a, b in src[k].items() if _f(b) is not None}
-            for k in ("hourly", "src"):
-                if isinstance(src.get(k), dict):
-                    rec[k] = {str(a): [float(x or 0.0) for x in b][:24 if k == "hourly" else 3]
-                              for a, b in src[k].items() if isinstance(b, list)}
-            if isinstance(src.get("cycles"), list):
-                rec["cycles"] = [c for c in src["cycles"] if isinstance(c, dict)][-KEEP_CYCLES:]
+            try:
+                for k in ("daily", "cost", "standby", "minprice"):
+                    if isinstance(src.get(k), dict):
+                        rec[k] = {str(a): float(b) for a, b in src[k].items() if SG.num(b, -1e9, 1e9) is not None}
+                for k in ("hourly", "src"):
+                    if isinstance(src.get(k), dict):
+                        rec[k] = {str(a): [fl(x) for x in b][:24 if k == "hourly" else 3]
+                                  for a, b in src[k].items() if isinstance(b, list)}
+                if isinstance(src.get("cycles"), list):
+                    rec["cycles"] = [c for c in src["cycles"] if isinstance(c, dict) and not SG.has_nonfinite(c)][-KEEP_CYCLES:]
+            except (TypeError, ValueError, OverflowError):
+                self.integrity.note(f"dane urządzenia „{d['name']}” są uszkodzone — zaczynam je od zera", raw)
+                rec = _blank()
             self.data[d["id"]] = rec
         pm = raw.get("price_min")
-        if isinstance(pm, dict):
-            self.price_min = {str(a): float(b) for a, b in pm.items() if _f(b) is not None}
+        if pm is not None and not isinstance(pm, dict):
+            self.integrity.note("najniższe ceny dnia są uszkodzone — pominięto", raw)
+        elif isinstance(pm, dict):
+            self.price_min = {str(a): float(b) for a, b in pm.items() if SG.num(b, -1e3, 1e3) is not None}
 
     def _payload(self) -> dict[str, Any]:
         data = {}

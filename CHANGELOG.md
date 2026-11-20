@@ -15,6 +15,37 @@
 - Plan sam przelicza się, gdy tylko ceny na jutro się pojawią (odczyt reaguje na każdą zmianę encji); do tego czasu na jutro obowiązują okna z konfiguracji.
 - Testy: `test_buy_tomorrow.py` (35 kontroli, w tym prawdziwe atrybuty z obu instalacji), rozszerzony `pricetable_test.js` (objaśnienia, brak wstrzykiwania HTML, wąska karta).
 
+## Nowości (po 0.9.5.6)
+
+### Co dziś nie działa — jedna lista na głównym ekranie
+- **Baner statusu zbiera wszystkie braki i usterki w jedną rozwijaną listę „🩺 Co dziś nie działa”** (nowy `issues.py`): brak cen RCE na dziś/jutro (z liczbą godzin), brak cen zakupu (taryfa dynamiczna) i informacja, że ceny na jutro jeszcze nie wyszły, brak prognozy PV na dziś/jutro, plan z błędem albo nieodświeżany od ponad 45 min, wyłączony zapis do falownika, kolizja okien ładowania i sprzedaży, niedostępny przełącznik urządzenia, alarm falownika, tryb próbny marki i informacja o naprawionych plikach. Każda pozycja ma poziom (błąd / ostrzeżenie / info), opis i podpowiedź, co zrobić; lista pokazuje też, od kiedy problem trwa. Kontrole są niezależne — wyjątek w jednej nie zasłania pozostałych.
+- Ta sama lista jest w sensorze `monitor_status` (atrybut `issues`, poza bazą rekordera) i w raporcie do zgłoszenia (sekcja „Co dziś nie działa”). Nic nie wysyła powiadomień — to widok „stan na teraz” (powiadomienia nadal obsługuje monitor).
+
+### Odporność plików zapisu (księga zysków, statystyki, taryfa, prognoza zużycia, urządzenia)
+- **Uszkodzony albo zmieniony ręcznie plik w `.storage` nie zatrzymuje już startu ani nie zatruwa sum.** Nowy `store_guard.py`: zły kształt wpisu, klucz niebędący datą, wartość „nan”/„inf” albo liczba spoza rozsądnego zakresu są pomijane pojedynczo (reszta pliku zostaje). Wcześniej jedno „nan” w księdze zysków psuło wszystkie późniejsze bilanse.
+- **Co naprawiono, jest widoczne:** kopia oryginału trafia do `.storage/<klucz>_backup`, w dzienniku pojawia się wpis z listą napraw, jest jedno powiadomienie „Naprawiono uszkodzone dane” (rodzaj `data_repair`, ważne) i pozycja w liście „Co dziś nie działa”.
+- Dotyczy: dziennika decyzji, księgi zysków, statystyk baterii (w tym pomiarów pojemności), nauczonych cen taryfy, historii zużycia i prognoz, urządzeń, statystyk prognoz PV i magazynu diagnostyki.
+
+### Urządzenia: ujemne ceny, najtańsze godziny z przerwami, „gotowe do godziny”
+- **Nowy tryb „ujemna cena zakupu”:** urządzenie włącza się, gdy energia z sieci kosztuje mniej niż próg (domyślnie 0 zł/kWh, do ustawienia od −5 do 5) — czyli gdy dostawca dopłaca za pobór. Działa też jako dodatkowa flaga przy innych trybach. Cena zakupu ze znakiem (`buy_price_signed`) nie jest już odrzucana jak zwykła cena.
+- **Najtańsze godziny „z przerwami”:** przy ładowaniu auta, bojlerze itp. można pozwolić na kilka osobnych okien zamiast jednego ciągłego (np. 4 najtańsze godziny z całej doby). Sterownik nadal pilnuje minimalnego czasu między przełączeniami, więc przekaźnik nie klika.
+- **„Gotowe do godziny”:** pole `ctl_ready_h` (0–23) — okno godzin dobierane jest tak, żeby urządzenie skończyło do wskazanej godziny (np. auto naładowane na 7:00); tylko godziny od teraz do terminu, bez wracania do godzin, które już minęły.
+- Karta (Urządzenia → edycja): lista trybów z „ujemna cena zakupu”, pola „Gotowe do godziny”, „Próg ujemnej ceny” i przełączniki „z przerwami” oraz „reaguj na ujemną cenę”.
+
+### Ocena planu po dobie
+- **Po północy EMS ocenia wczorajszy plan** (nowy `review.py`): porównuje to, co plan zakładał rano, z tym, co się stało — prognozę PV, prognozę zużycia, poziom baterii (średnia różnica SOC w pp) i sprzedaż z baterii (ile z planu wyeksportowano). Każda pozycja dostaje poziom (ok / uwaga / zły), dzień — werdykt „trafny / częściowo trafny / chybiony” i wynik 0–100.
+- **Mówi, co zawiodło najbardziej i jaki to miało skutek** („Słońca było o 10 kWh mniej, niż zakładał plan — bateria miała mniej energii…”). Produkcja PV ucięta przez pełną baterię nie jest liczona jako błąd prognozy.
+- Karta: Zysk i log → Trafność prognoz → „📋 Ocena planu po dobie” (podsumowanie ostatnich dób, najczęstszy winowajca, rozwijane dni). Jedno zdanie oceny wpada też do podsumowania dnia i dziennika decyzji; ostatnie oceny są w atrybucie `reviews` czujnika trafności i w usłudze `insights_get`. Przechowywane 30 dni, uszkodzone wpisy są pomijane.
+
+### Profile pracy: zima / lato / urlop / burza jednym kliknięciem
+- **Nowy kafelek „🎛 Profile pracy” (zakładka EMS):** gotowe zestawy zwykłych ustawień EMS. Zima (większa rezerwa, ostrożniejsza prognoza PV, ładowanie z sieci), Lato (bez dodatkowej ostrożności, mniejsza rezerwa), Urlop (tryb urlopowy, sprzedaż z baterii, powiadomienia włączone), Burza (tryb burzowy, wygasa sam).
+- **Najpierw podgląd, potem zmiana:** kliknięcie profilu pokazuje tabelę „teraz → po profilu”, ustawienia już zgodne („bez zmian”) i brakujące encje (pominięte). Zastosowanie robi odczyt zwrotny każdej wartości.
+- **Powrót jednym kliknięciem:** EMS zapamiętuje poprzednie wartości. Ustawienia, które po profilu zmienisz ręcznie, zostają, jak są. Zmiana profilu najpierw cofa poprzedni. Gdy ręcznie zmienisz ustawienie z profilu (albo tryb burzowy wygaśnie), profil uznaje się za zakończony, a powrót nadal jest możliwy.
+- Usługi: `profiles_get` (odczyt), `profile_apply` i `profile_revert` (administrator). Profil nie rusza godzin, prądów ani mocy falownika.
+
+### Testy
+- Nowe: `test_storeguard.py` (60), `test_devctl_price.py` (48), `test_issues.py` (33), `test_review.py` (79), `test_profiles.py` (79), `profiles_ui_test.js`; rozszerzone `v085_ui_test.js` (ocena planu), `extras2_test.js` (lista „co dziś nie działa”).
+
 # EMS komp-dec — zmiany w 0.9.5.6 (z 0.9.5.5)
 
 - **Zysk → „Symulacja roczna i zwrot z inwestycji”: tabela mieści się na telefonie.** Miała sztywne minimum 380 px, więc na wąskiej karcie kolumna „Rocznie” była ucięta (trzeba było przewijać w bok). Teraz nazwa scenariusza zawija się do kilku wierszy, kwoty są w pełnych złotych (z odstępem tysięcy), a tabela zawsze mieści się w karcie (sprawdzone od 320 do 390 px we wszystkich sześciu stylach).

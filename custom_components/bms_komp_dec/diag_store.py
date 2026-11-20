@@ -11,6 +11,7 @@ from typing import Any
 
 from homeassistant.util import dt as dt_util
 
+from . import store_guard as SG
 from .helpers import ThrottledStore
 
 _LOGGER = logging.getLogger(__name__)
@@ -26,6 +27,7 @@ class DiagStore:
         self.hass = hass
         self._store = ThrottledStore(hass, 1, STORAGE_KEY, delay=5)
         self.data: dict[str, dict[str, Any]] = {}
+        self.integrity = SG.Integrity(STORAGE_KEY, "magazyn Diagnostyki")
 
     async def async_load(self) -> None:
         try:
@@ -33,6 +35,8 @@ class DiagStore:
         except Exception as err:  # noqa: BLE001
             _LOGGER.warning("EMS diag store: błąd wczytywania: %s", err)
             return
+        if raw is not None and not isinstance(raw, dict):
+            self.integrity.note(f"plik ma kształt {type(raw).__name__} zamiast słownika — pominięto", raw)
         if isinstance(raw, dict):
             for k, v in raw.items():
                 if k in ALLOWED_KEYS and isinstance(v, dict) and "v" in v:

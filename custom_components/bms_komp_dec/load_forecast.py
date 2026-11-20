@@ -28,6 +28,7 @@ from typing import Any, Callable
 from homeassistant.core import HomeAssistant
 from homeassistant.util import dt as dt_util
 
+from . import store_guard as SG
 from .helpers import ThrottledStore
 from .holidays_pl import polish_holidays
 
@@ -204,6 +205,7 @@ class LoadForecaster:
         self.hass = hass
         self._get_eid = load_eid_getter
         self._store = ThrottledStore(hass, STORAGE_VERSION, STORAGE_KEY, delay=60)
+        self.integrity = SG.Integrity(STORAGE_KEY, "historia zużycia domu")
         self.days: dict[str, float] = {}
         self.profiles: dict[str, list[float]] = {}
         # prognoza z podziałem na duże urządzenia (ustawiane przez runtime): fn(forecaster, target, today) -> dict | None
@@ -235,8 +237,11 @@ class LoadForecaster:
             data = await self._store.async_load()
             if isinstance(data, dict):
                 self._load_from_storage(data)
+            elif data is not None:
+                self.integrity.note(f"plik ma kształt {type(data).__name__} zamiast słownika — pominięto", data)
         except Exception as err:
             _LOGGER.warning("EMS forecast: błąd wczytywania: %s", err)
+            self.integrity.note(f"nie udało się wczytać pliku ({type(err).__name__})")
         self._loaded = True
 
         if BACKFILL_FROM_RECORDER:
@@ -356,73 +361,94 @@ class LoadForecaster:
         self._schedule_save()
 
     def _load_from_storage(self, data: dict) -> None:
-        days = data.get("days")
-        if isinstance(days, dict):
-            for k, v in days.items():
-                try:
-                    self.days[str(k)] = float(v)
-                except (TypeError, ValueError):
-                    continue
+        integ = self.integrity
 
-        profiles = data.get("profiles")
-        if isinstance(profiles, dict):
-            for k, v in profiles.items():
-                if isinstance(v, list) and len(v) == 24:
-                    try:
-                        self.profiles[str(k)] = [float(x) for x in v]
-                    except (TypeError, ValueError):
-                        continue
-
-        fh = data.get("forecast_history")
-        if isinstance(fh, dict):
-            for k, v in fh.items():
-                try:
-                    self.forecast_history[str(k)] = float(v)
-                except (TypeError, ValueError):
+        def day_floats(src: Any, what: str, lo: float, hi: float) -> dict[str, float]:
+            out: dict[str, float] = {}
+            bad = 0
+            for k, v in SG.as_dict(src, integ, what, data).items():
+                x = SG.num(v, lo, hi)
+                if x is None or not SG.is_day(k):
+                    bad += 1
                     continue
+                out[k] = x
+            if bad:
+                integ.note(f"{what}: pominięto {bad} niepoprawnych wpisów", data)
+            return out
 
-        temps = data.get("temperatures")
-        if isinstance(temps, dict):
-            for k, v in temps.items():
-                try:
-                    self.temperatures[str(k)] = float(v)
-                except (TypeError, ValueError):
-                    continue
+        self.days.update(day_floats(data.get("days"), "zużycie dzienne", 0.0, 3000.0))
 
-        sf = data.get("seasonal_factors")
-        if isinstance(sf, dict):
-            for k, v in sf.items():
-                try:
-                    self.seasonal_factors[int(k)] = float(v)
-                except (TypeError, ValueError):
-                    continue
+        bad = 0
+        for k, v in SG.as_dict(data.get("profiles"), integ, "profile godzinowe", data).items():
+            vals = [SG.num(x, 0.0) for x in v] if isinstance(v, list) and len(v) == 24 else None
+            if not SG.is_day(k) or vals is None or any(x is None for x in vals):
+                bad += 1
+                continue
+            self.profiles[k] = vals          # type: ignore[assignment]
+        if bad:
+            integ.note(f"profile godzinowe: pominięto {bad} niepoprawnych wpisów", data)
+
+        self.forecast_history.update(day_floats(data.get("forecast_history"), "historia prognoz", 0.0, 3000.0))
+        self.temperatures.update(day_floats(data.get("temperatures"), "temperatury", -90.0, 70.0))
+
+        bad = 0
+        for k, v in SG.as_dict(data.get("seasonal_factors"), integ, "współczynniki sezonowe", data).items():
+            try:
+                m = int(k)
+            except (TypeError, ValueError):
+                bad += 1
+                continue
+            x = SG.num(v, 0.05, 20.0)
+            if not 1 <= m <= 12 or x is None:
+                bad += 1
+                continue
+            self.seasonal_factors[m] = x
+        if bad:
+            integ.note(f"współczynniki sezonowe: pominięto {bad} niepoprawnych wpisów", data)
 
         acc = data.get("hourly_accum")
         if isinstance(acc, dict) and isinstance(acc.get("values"), list) and len(acc["values"]) == 24 and acc.get("date"):
+            vals = [SG.num(x, 0.0) for x in acc["values"]]
+            cov = acc.get("cov")
+            covs = [SG.num(x, 0.0) for x in cov] if isinstance(cov, list) and len(cov) == 24 else None
             try:
-                self._hourly_accum = [float(x) for x in acc["values"]]
-                self._hourly_sample_date = date.fromisoformat(str(acc["date"]))
-                cov = acc.get("cov")
-                if isinstance(cov, list) and len(cov) == 24:
-                    self._hourly_cov = [max(0.0, float(x)) for x in cov]
-                else:   # zapis sprzed 0.6.6 nie znał pokrycia — zakładamy pełne godziny
-                    self._hourly_cov = [3600.0] * 24
-            except (TypeError, ValueError):
-                self._hourly_accum = [0.0] * 24
-                self._hourly_cov = [0.0] * 24
-                self._hourly_sample_date = None
+                day = date.fromisoformat(str(acc["date"]))
+            except ValueError:
+                day = None
+            if day is None or any(x is None for x in vals) or (covs is not None and any(x is None for x in covs)):
+                integ.note("bieżące sumy godzinowe są uszkodzone — zaczynam je od zera", data)
+            else:
+                self._hourly_accum = vals                       # type: ignore[assignment]
+                self._hourly_sample_date = day
+                # zapis sprzed 0.6.6 nie znał pokrycia — zakładamy pełne godziny
+                self._hourly_cov = covs if covs is not None else [3600.0] * 24   # type: ignore[assignment]
+        elif acc is not None and not isinstance(acc, dict):
+            integ.note("bieżące sumy godzinowe są uszkodzone — zaczynam je od zera", data)
 
-        if isinstance(data.get("hdd_coef"), (int, float)):
-            self.hdd_coef = float(data["hdd_coef"])
-        if isinstance(data.get("cdd_coef"), (int, float)):
-            self.cdd_coef = float(data["cdd_coef"])
+        for attr, key in (("hdd_coef", "hdd_coef"), ("cdd_coef", "cdd_coef")):
+            if data.get(key) is None:
+                continue
+            x = SG.num(data.get(key), -1000.0, 1000.0)
+            if x is None:
+                integ.note(f"współczynnik {key} jest niepoprawny — liczę od nowa", data)
+            else:
+                setattr(self, attr, x)
         pr = data.get("params")
-        if isinstance(pr, dict):
-            for k, dv in DEFAULT_PARAMS.items():
-                if isinstance(pr.get(k), (int, float)):
-                    self.params[k] = float(pr[k])
+        if pr is not None and not isinstance(pr, dict):
+            integ.note("parametry modelu są uszkodzone — wracają domyślne", data)
+        elif isinstance(pr, dict):
+            for k in DEFAULT_PARAMS:
+                if pr.get(k) is None:
+                    continue
+                x = SG.num(pr.get(k), -1e6, 1e6)
+                if x is None:
+                    integ.note(f"parametr modelu „{k}” jest niepoprawny — wraca domyślny", data)
+                else:
+                    self.params[k] = x
         if isinstance(data.get("tune"), dict):
-            self.tune = data["tune"]
+            self.tune = SG.scrub(data["tune"])
+            if SG.has_nonfinite(data["tune"]):
+                integ.note("w dostrojeniu modelu były wartości nan/inf — usunięto", data)
 
     def _schedule_save(self) -> None:
         self._store.request_save(

@@ -8,6 +8,7 @@ from typing import Any
 from homeassistant.core import HomeAssistant
 from homeassistant.util import dt as dt_util
 
+from . import store_guard as SG
 from .helpers import ThrottledStore
 
 _LOGGER = logging.getLogger(__name__)
@@ -28,6 +29,7 @@ class Ledger:
         self._store = ThrottledStore(hass, 1, STORAGE_KEY, delay=300)
         self.days: dict[str, dict[str, float]] = {}
         self._last_ts: datetime | None = None
+        self.integrity = SG.Integrity(STORAGE_KEY, "księga zysków")
 
     async def async_load(self) -> None:
         try:
@@ -35,17 +37,15 @@ class Ledger:
         except Exception as err:  # noqa: BLE001
             _LOGGER.warning("EMS ledger: błąd wczytywania: %s", err)
             return
-        if isinstance(data, dict) and isinstance(data.get("days"), dict):
-            for k, v in data["days"].items():
-                if not isinstance(v, dict):
-                    continue
-                day = _empty_day()
-                for f in day:
-                    try:
-                        day[f] = float(v.get(f, 0.0))
-                    except (TypeError, ValueError):
-                        pass
-                self.days[str(k)] = day
+        if data is None:
+            return
+        if not isinstance(data, dict):
+            self.integrity.note(f"plik ma kształt {type(data).__name__} zamiast słownika — pominięto", data)
+            return
+        for k, row in SG.clean_day_map(data.get("days"), SG.LEDGER_FIELDS, self.integrity, "dni księgi", data).items():
+            day = _empty_day()
+            day.update(row)
+            self.days[k] = day
 
     def update(self, now: datetime, grid_power_w: float | None,
                sell_price: float | None, buy_price: float | None, peak: bool | None = None) -> None:

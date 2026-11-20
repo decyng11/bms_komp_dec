@@ -9,6 +9,7 @@ from typing import Any, Callable
 from homeassistant.core import HomeAssistant
 from homeassistant.util import dt as dt_util
 
+from . import store_guard as SG
 from .helpers import ThrottledStore
 
 _LOGGER = logging.getLogger(__name__)
@@ -25,6 +26,7 @@ class DecisionLog:
         self.hass = hass
         self._store = ThrottledStore(hass, 1, STORAGE_KEY, delay=30)
         self.entries: deque[dict[str, Any]] = deque(maxlen=MAX_ENTRIES)
+        self.integrity = SG.Integrity(STORAGE_KEY, "dziennik decyzji")
         self._listeners: list[Callable[[], None]] = []
 
     async def async_load(self) -> None:
@@ -33,10 +35,20 @@ class DecisionLog:
         except Exception as err:  # noqa: BLE001
             _LOGGER.warning("EMS log: błąd wczytywania: %s", err)
             return
-        if isinstance(data, dict) and isinstance(data.get("entries"), list):
-            for item in data["entries"][-MAX_ENTRIES:]:
-                if isinstance(item, dict) and "ts" in item and "msg" in item:
-                    self.entries.append(item)
+        if data is None:
+            return
+        if not isinstance(data, dict) or not isinstance(data.get("entries"), list):
+            self.integrity.note("plik ma niepoprawny kształt — pominięto", data)
+            return
+        bad = 0
+        for item in data["entries"][-MAX_ENTRIES:]:
+            # ts i msg są czytane jako napisy (parse_datetime, wyszukiwanie w tekście) — inny typ psułby listę w karcie
+            if isinstance(item, dict) and isinstance(item.get("ts"), str) and isinstance(item.get("msg"), str):
+                self.entries.append(item)
+            else:
+                bad += 1
+        if bad:
+            self.integrity.note(f"pominięto {bad} uszkodzonych wpisów", data)
 
     def add_listener(self, cb: Callable[[], None]) -> Callable[[], None]:
         self._listeners.append(cb)

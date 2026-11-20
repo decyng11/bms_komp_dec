@@ -335,3 +335,23 @@ settings_log_get:
           min: 1
           max: 150
           mode: box
+
+profiles_get:
+  name: Profile pracy
+  description: Gotowe zestawy ustawień (zima, lato, urlop, burza) z podglądem zmian i informacją, który profil jest zastosowany.
+
+profile_apply:
+  name: Zastosuj profil pracy
+  description: Ustawia przełączniki i liczby integracji według wybranego profilu i zapamiętuje poprzednie wartości, żeby można było wrócić (administrator).
+  fields:
+    id:
+      name: Profil
+      required: true
+      example: winter
+      selector:
+        select:
+          options: [winter, summer, vacation, storm]
+
+profile_revert:
+  name: Cofnij profil pracy
+  description: Przywraca ustawienia sprzed ostatnio zastosowanego profilu (te zmienione ręcznie po profilu zostają bez zmian) (administrator).

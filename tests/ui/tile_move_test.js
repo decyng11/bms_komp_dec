@@ -111,7 +111,7 @@ const stored = (e) => e.q(() => { try { return JSON.parse(localStorage.getItem('
   await e.q(() => __el.shadowRoot.querySelector('#editBar [data-lay="reset-tab"]').click());
   ok(JSON.stringify(await ids(e, 'main')) === JSON.stringify(MAIN), 'reset zakładki Główny: obce kafelki wróciły do siebie, własne wróciły: ' + (await ids(e, 'main')));
   const emsIds = await ids(e, 'ems'), chIds = await ids(e, 'charts');
-  ok(emsIds.includes('ems-sell') === false ? false : (emsIds.length === 6 && !emsIds.includes('main-flow')), 'reset zakładki Główny: EMS ma znów 6 własnych sekcji: ' + emsIds);
+  ok(emsIds.includes('ems-sell') === false ? false : (emsIds.length === 7 && !emsIds.includes('main-flow')), 'reset zakładki Główny: EMS ma znów 7 własnych sekcji: ' + emsIds);
   ok(chIds.length === 11 && chIds.includes('ch-pvprod') && !chIds.includes('main-active'), 'reset zakładki Główny: Plan ma znów 11 własnych kafelków: ' + chIds.length);
   ok(await e.q(() => localStorage.getItem('bms_panel_layout') === null || JSON.parse(localStorage.getItem('bms_panel_layout')).order === undefined || !Object.keys(JSON.parse(localStorage.getItem('bms_panel_layout')).order).length), 'po resecie nie zostaje zapis przeniesień');
   await e.q(() => __el._layEditOff());

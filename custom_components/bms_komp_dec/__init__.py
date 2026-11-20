@@ -42,6 +42,7 @@ _SERVICES = (
     "diag_store_get_all", "diag_store_set", "diag_store_delete",
     "notify_settings_get", "notify_settings_set", "notify_test", "inbox_action", "devices_get", "devices_set", "devices_discover", "insights_get", "self_test", "diagnostic_report",
     "override_set", "override_clear", "analysis_get", "analysis_set", "control_test", "settings_log_get",
+    "profiles_get", "profile_apply", "profile_revert",
 )
 _SUGGEST_HOUR = 16   # RCE na jutro jest publikowane po południu — wcześniej propozycja bazowała na starych danych
 
@@ -428,7 +429,10 @@ def _register_services(hass: HomeAssistant) -> None:
     async def handle_insights_get(call):
         rt = _need_runtime(hass)
         lf = getattr(rt.coordinator, "load_forecast", None)
+        from .review import tally
+        reviews = rt.day_reviews(14)
         return {"savings": rt.insights.savings(), "accuracy": rt.insights.accuracy(lf),
+                "reviews": reviews, "reviews_tally": tally(reviews),
                 "pv_correction_on": switch_on(hass, "pv_forecast_correction", True),
                 "wear_cost": round(float(rt.optimizer.wear_cost()), 4) if hasattr(rt.optimizer, "wear_cost") else 0.0}
 
@@ -467,6 +471,28 @@ def _register_services(hass: HomeAssistant) -> None:
             raise HomeAssistantError(f"Nadpisanie: {err}") from err
         await rt.override_tick(now)
         return {"overrides": [dict(o, text=rt.override_text(o)) for o in items]}
+
+    # --- profile pracy: podgląd dla każdego, zastosowanie i cofnięcie tylko administrator
+    async def handle_profiles_get(call):
+        return _need_runtime(hass).profile_view()
+
+    async def handle_profile_apply(call):
+        await _require_admin(hass, call)
+        rt = _need_runtime(hass)
+        try:
+            res = await rt.apply_profile(str(call.data.get("id") or ""))
+        except ValueError as err:
+            raise HomeAssistantError(str(err)) from err
+        return {**res, **rt.profile_view()}
+
+    async def handle_profile_revert(call):
+        await _require_admin(hass, call)
+        rt = _need_runtime(hass)
+        try:
+            res = await rt.revert_profile()
+        except ValueError as err:
+            raise HomeAssistantError(str(err)) from err
+        return {**res, **rt.profile_view()}
 
     async def handle_override_clear(call):
         await _require_admin(hass, call)
@@ -516,6 +542,9 @@ def _register_services(hass: HomeAssistant) -> None:
         ("analysis_set", handle_analysis_set, SupportsResponse.OPTIONAL),
         ("control_test", handle_control_test, SupportsResponse.OPTIONAL),
         ("settings_log_get", handle_settings_log_get, SupportsResponse.ONLY),
+        ("profiles_get", handle_profiles_get, SupportsResponse.ONLY),
+        ("profile_apply", handle_profile_apply, SupportsResponse.OPTIONAL),
+        ("profile_revert", handle_profile_revert, SupportsResponse.OPTIONAL),
         ("devices_set", handle_devices_set, SupportsResponse.OPTIONAL),
         ("notify_settings_get", handle_notify_get, SupportsResponse.ONLY),
         ("notify_settings_set", handle_notify_set, SupportsResponse.OPTIONAL),

@@ -18,6 +18,7 @@ from typing import Any
 from homeassistant.core import HomeAssistant
 from homeassistant.util import dt as dt_util
 
+from . import store_guard as SG
 from .helpers import ThrottledStore
 
 _LOGGER = logging.getLogger(__name__)
@@ -52,6 +53,7 @@ class BatteryStats:
         self.caps: list[dict[str, Any]] = []
         self._iv: dict[str, Any] | None = None          # trwający odcinek ładowania
         self._last_ts: float | None = None
+        self.integrity = SG.Integrity(STORAGE_KEY, "statystyki baterii")
 
     async def async_load(self) -> None:
         try:
@@ -59,13 +61,13 @@ class BatteryStats:
         except Exception as err:  # noqa: BLE001
             _LOGGER.warning("EMS stats: błąd wczytywania: %s", err)
             return
-        if not isinstance(data, dict):
+        if data is None:
             return
-        for k, v in (data.get("days") or {}).items():
-            if isinstance(v, dict):
-                self.days[str(k)] = {f: x for f, x in ((f, _f(v.get(f))) for f in (*_FIELDS, "soc0", "soc1", "t1h")) if x is not None}
-        if isinstance(data.get("caps"), list):
-            self.caps = [c for c in data["caps"] if isinstance(c, dict) and _f(c.get("cap")) is not None][-CAP_KEEP:]
+        if not isinstance(data, dict):
+            self.integrity.note(f"plik ma kształt {type(data).__name__} zamiast słownika — pominięto", data)
+            return
+        self.days.update(SG.clean_day_map(data.get("days"), SG.STATS_FIELDS, self.integrity, "dni statystyk", data))
+        self.caps = SG.clean_caps(data.get("caps"), self.integrity, data)[-CAP_KEEP:]
 
     def _data(self) -> dict[str, Any]:
         return {"days": self.days, "caps": self.caps[-CAP_KEEP:]}

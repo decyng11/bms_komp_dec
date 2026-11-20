@@ -61,7 +61,7 @@
 
     Object.assign(BmsPanel.prototype, {
       _exS() {
-        if (!this._ex) this._ex = { ins: { data: null, at: 0, loading: false, err: '', period: 'last30' }, planOverride: null, rep: { year: null, month: null, data: null, loading: false, err: '' }, wiz: { state: 'idle', data: null, err: '' }, keys: {} };
+        if (!this._ex) this._ex = { ins: { data: null, at: 0, loading: false, err: '', period: 'last30' }, planOverride: null, rep: { year: null, month: null, data: null, loading: false, err: '' }, wiz: { state: 'idle', data: null, err: '' }, prof: { data: null, at: 0, loading: false, err: '', sel: null, busy: false, msg: '' }, keys: {} };
         return this._ex;
       },
       _exCss() {
@@ -76,6 +76,7 @@
         this._safe(() => this._exPlan());
         this._safe(() => this._exLog());
         this._safe(() => this._exWiz());
+        this._safe(() => this._exProf());
         this._safe(() => this._exPlus());
       },
       _exLog() {
@@ -613,10 +614,127 @@
             ? ch.map((r) => `${hzName(r.h)}: ${nm(r.tune)} (błąd ${exFmt(r.tune.mae, 2)} kWh zamiast ${exFmt(r.tune.mae_default, 2)} kWh)`).join('; ') + '.'
             : 'Na razie standardowe 30 dni jest najlepsze albo żaden wariant nie był wyraźnie lepszy.'}</div>`;
         })();
-        return `<div class="ex-tiles">${tiles.join('')}</div>${hzTable}${hzTune}${charts}
+        const rv = (Array.isArray(s.data.reviews) ? s.data.reviews : []).filter((r) => r && typeof r === 'object' && Array.isArray(r.items)).slice(0, 7);
+        const vCol = (v) => v === 'trafny' ? 'var(--green)' : (v === 'chybiony' ? 'var(--red)' : 'var(--orange)');
+        const lCol = (l) => l === 'ok' ? 'var(--green)' : (l === 'bad' ? 'var(--red)' : 'var(--orange)');
+        const dDay = (d) => { const m = /^\d{4}-(\d{2})-(\d{2})$/.exec(String(d || '')); return m ? `${m[2]}.${m[1]}` : exEsc(String(d || '')); };
+        const cName = { pv: 'prognoza PV', load: 'prognoza zużycia', soc: 'poziom baterii', sale: 'sprzedaż z baterii' };
+        const tl = s.data.reviews_tally || {};
+        const tc = tl.counts || {};
+        const tallyTxt = tl.n ? `Ostatnie ${exFmt(tl.n, 0)} dób: plan trafny <b>${exFmt(tc['trafny'] || 0, 0)}×</b>, częściowo trafny <b>${exFmt(tc['częściowo trafny'] || 0, 0)}×</b>, chybiony <b>${exFmt(tc['chybiony'] || 0, 0)}×</b>${tl.top_culprit && cName[tl.top_culprit] ? ` · najczęściej zawodziło: <b>${exEsc(cName[tl.top_culprit])}</b> (${exFmt(tl.top_culprit_n || 0, 0)}×)` : ''}.` : '';
+        const revRow = (r, i) => {
+          const items = r.items.filter((x) => x && typeof x === 'object');
+          const chips = items.map((x) => `<span style="color:${lCol(x.level)};white-space:nowrap;">${exEsc(x.short || x.label || '')}</span>`).join(' · ');
+          const cul = r.culprit && r.culprit.text ? `<div style="margin-top:4px;"><b>Co zawiodło:</b> ${exEsc(r.culprit.text)}</div>` : '<div style="margin-top:4px;color:var(--green);">Nic istotnego nie zawiodło.</div>';
+          const det = items.map((x) => `<div style="color:var(--muted);">• ${exEsc(x.label || '')}: ${exEsc(x.detail || '')}</div>`).join('');
+          const facts = Array.isArray(r.facts) && r.facts.length ? `<div style="margin-top:4px;color:var(--muted);">${r.facts.map(exEsc).join(' · ')}</div>` : '';
+          return `<details data-role="review-day" ${i === 0 ? 'open' : ''} style="border-top:1px solid var(--border,rgba(128,128,128,.25));padding:6px 0;">
+            <summary style="cursor:pointer;font-size:12px;"><b>${dDay(r.date)}</b> <span style="color:${vCol(r.verdict)};font-weight:600;">${exEsc(r.verdict || '')}</span> <span style="color:var(--muted);">(${exFmt(r.score, 0)}/100)</span><div style="font-size:11px;margin-top:2px;">${chips}</div></summary>
+            <div style="font-size:12px;margin:4px 0 2px 12px;">${cul}${det}${facts}</div></details>`;
+        };
+        const reviewHtml = rv.length
+          ? `<div data-role="plan-review" style="margin-bottom:14px;"><div style="font-size:12px;font-weight:600;margin-bottom:4px;">📋 Ocena planu po dobie</div>
+              <div style="font-size:12px;color:var(--muted);margin-bottom:6px;">${tallyTxt}</div>${rv.map(revRow).join('')}</div>`
+          : `<div class="ex-note" data-role="plan-review">📋 Ocena planu po dobie: pierwsza pojawi się po północy — EMS porówna wtedy plan z rana (prognoza PV, zużycie, poziom baterii, sprzedaż) z tym, co się faktycznie stało, i wskaże, co zawiodło.</div>`;
+        return `${reviewHtml}<div class="ex-tiles">${tiles.join('')}</div>${hzTable}${hzTune}${charts}
           <div class="ex-note">Błąd to średnia różnica prognozy i wykonania w procentach (dni z co najmniej 0,5 kWh), z ostatnich 30 dni. Prognoza PV jest zapisywana rano (od 6:00) dla każdego z 7 dni do przodu, prognoza zużycia — dzień wcześniej.
             Korekta PV jest liczona osobno dla każdego dnia do przodu (mediana wykonania do prognozy z 30 dni, w granicach 0,5–1,4), uwzględnia stały wzorzec godzinowy i poprawia dzisiejszy dzień na podstawie godzin, które już minęły.
             Dni, w których bateria była pełna i falownik ucinał produkcję, nie uczą modelu. „Błąd po korekcie” liczony jest z prognoz faktycznie wydanych po korekcie, więc pokazuje, czy korekta pomaga. Zakres to typowy błąd tego dnia.</div>`;
+      },
+    });
+
+    // =====================================================================
+    //  PROFILE PRACY: zima / lato / urlop / burza jednym kliknięciem, z podglądem zmian i powrotem do poprzednich ustawień
+    // =====================================================================
+    Object.assign(BmsPanel.prototype, {
+      _exProf() {
+        const box = this._el('exProfBox');
+        if (!box || !this._tabNeeds('ems')) return;
+        const s = this._exS().prof;
+        if (!box.dataset.exBound) {
+          box.dataset.exBound = '1';
+          box.addEventListener('click', (ev) => {
+            const b = ev.target && ev.target.closest ? ev.target.closest('[data-pf]') : null;
+            if (!b || b.disabled) return;
+            const a = b.dataset.pf, ps = this._exS().prof;
+            if (a === 'pick') { ps.sel = ps.sel === b.dataset.id ? null : b.dataset.id; ps.msg = ''; this._exProf(); }
+            else if (a === 'cancel') { ps.sel = null; this._exProf(); }
+            else if (a === 'apply') this._exProfAct('profile_apply', { id: b.dataset.id });
+            else if (a === 'revert') this._exProfAct('profile_revert', {});
+            else if (a === 'reload') { ps.at = 0; this._exProf(); }
+          });
+        }
+        if (!s.loading && !s.busy && Date.now() - s.at > 120000) this._exProfLoad();
+        const key = JSON.stringify([s.at, s.err, s.sel, s.busy, s.msg, !!s.data, this._dgIsAdmin(), TC('text')]);
+        if (box.dataset.exKey === key) return;
+        box.dataset.exKey = key;
+        box.innerHTML = this._exProfHtml();
+      },
+      async _exProfLoad() {
+        const s = this._exS().prof;
+        s.loading = true;
+        try { s.data = exResp(await exCall(this, 'profiles_get', {})) || null; s.err = ''; }
+        catch (e) { s.err = exErr(e); }
+        s.at = Date.now(); s.loading = false;
+        this._exProf();
+      },
+      async _exProfAct(service, data) {
+        const s = this._exS().prof;
+        if (s.busy) return;
+        s.busy = true; s.msg = ''; this._exProf();
+        try {
+          const r = exResp(await exCall(this, service, data)) || {};
+          if (Array.isArray(r.profiles)) { s.data = { profiles: r.profiles, active: r.active || null }; s.at = Date.now(); }
+          s.sel = null;
+          const nm = (s.data && s.data.active && s.data.active.name) || '';
+          if (service === 'profile_apply') s.msg = `ok:Profil „${nm}” włączony — zmieniono ${exFmt(r.changed, 0)} ustawień${(r.skipped || []).length ? `, pominięto ${r.skipped.length} (brak encji lub zapis nie zadziałał)` : ''}.`;
+          else s.msg = `ok:Przywrócono ${exFmt(r.restored, 0)} ustawień${(r.kept || []).length ? `; ${r.kept.length} zostawiono, bo zmieniłeś je ręcznie` : ''}.`;
+        } catch (e) { s.msg = 'err:' + exErr(e); }
+        s.busy = false;
+        this._exProf();
+      },
+      _exProfHtml() {
+        const s = this._exS().prof;
+        if (!s.data) {
+          if (s.err) return `<div class="chart-empty" style="color:var(--red);">Nie udało się wczytać profili: ${exEsc(s.err)}</div><div class="ex-note">Wymaga integracji ze zmianą „profile pracy”.</div><button class="btn" data-pf="reload" style="margin-top:8px;">Spróbuj ponownie</button>`;
+          return '<div class="chart-empty">Ładowanie…</div>';
+        }
+        const admin = this._dgIsAdmin();
+        const profiles = (Array.isArray(s.data.profiles) ? s.data.profiles : []).filter((p) => p && p.id);
+        const act = s.data.active && typeof s.data.active === 'object' ? s.data.active : null;
+        const when = (iso) => { const d = new Date(iso); return isFinite(d) ? d.toLocaleString('pl-PL', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : ''; };
+        const msg = s.msg ? (s.msg.startsWith('ok:') ? `<div class="ex-chip ok" style="display:block;border-radius:12px;padding:8px 12px;margin-bottom:10px;">${exEsc(s.msg.slice(3))}</div>`
+          : `<div class="ex-chip bad" style="display:block;border-radius:12px;padding:8px 12px;margin-bottom:10px;">Nie udało się: ${exEsc(s.msg.slice(4))}</div>`) : '';
+        let banner = '';
+        if (act) {
+          const rs = (Array.isArray(act.restore) ? act.restore : []).map((r) => `<div style="color:var(--muted);">• ${exEsc(r.label)}: ${exEsc(r.now_text)} → ${exEsc(r.prev_text)}</div>`).join('');
+          const ended = act.ended && act.ended.at;
+          banner = `<div style="background:var(--surface);border-radius:12px;padding:10px 12px;margin-bottom:12px;font-size:12px;line-height:1.5;">
+            ${ended ? `ℹ️ Profil <b>${exEsc(act.name || act.id)}</b> (od ${exEsc(when(act.since))}) przestał obowiązywać ${exEsc(when(act.ended.at))} — zmieniono ręcznie albo tryb wygasł sam.`
+                    : `✅ Zastosowany profil: <b>${exEsc(act.name || act.id)}</b> (od ${exEsc(when(act.since))}).`}
+            ${act.can_revert ? `<details style="margin-top:6px;"><summary style="cursor:pointer;">Co przywróci powrót do poprzednich ustawień</summary><div style="margin:4px 0 0 12px;">${rs}</div></details>
+              <button type="button" class="btn" data-pf="revert" style="margin-top:8px;padding:8px 14px;flex-direction:row;gap:8px;" ${s.busy || !admin ? 'disabled' : ''}><span>↩️</span><span class="label">Wróć do ustawień sprzed profilu</span></button>` : ''}
+          </div>`;
+        }
+        const chips = `<div style="display:flex;gap:8px;flex-wrap:wrap;">${profiles.map((p) => `<button type="button" class="btn" data-pf="pick" data-id="${exEsc(p.id)}" aria-pressed="${s.sel === p.id}"
+            style="padding:10px 16px;flex-direction:row;gap:8px;${p.active ? 'outline:2px solid var(--green);' : (s.sel === p.id ? 'outline:2px solid var(--accent,#0a84ff);' : '')}"><span style="font-size:16px;">${exEsc(p.icon || '')}</span><span class="label">${exEsc(p.name)}${p.active ? ' ✓' : ''}</span></button>`).join('')}</div>`;
+        let prev = '';
+        const sel = profiles.find((p) => p.id === s.sel);
+        if (sel) {
+          const rows = (Array.isArray(sel.changes) ? sel.changes : []).map((c) => c.available
+            ? `<tr><td>${exEsc(c.label)}</td><td style="text-align:right;color:var(--muted);">${exEsc(c.now_text)}</td><td style="text-align:right;${c.differs ? 'font-weight:700;' : 'color:var(--muted);'}">${exEsc(c.target_text)}${c.differs ? '' : ' (bez zmian)'}</td></tr>`
+            : `<tr><td style="color:var(--muted);">${exEsc(c.label)}</td><td colspan="2" style="text-align:right;color:var(--orange);">brak encji — pominięte</td></tr>`).join('');
+          prev = `<div data-role="profile-preview" style="margin-top:12px;border-top:1px solid var(--line);padding-top:10px;">
+            <div style="font-size:12px;margin-bottom:8px;">${exEsc(sel.desc || '')}</div>
+            <div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-size:12px;"><thead><tr style="color:var(--muted);text-align:right;"><th style="text-align:left;font-weight:600;">Ustawienie</th><th style="font-weight:600;">Teraz</th><th style="font-weight:600;">Po profilu</th></tr></thead><tbody>${rows}</tbody></table></div>
+            ${sel.nothing_to_change ? '<div class="ex-note">Wszystko jest już ustawione tak jak w tym profilu — nic się nie zmieni.</div>' : ''}
+            ${admin ? '' : '<div class="ex-note" style="color:var(--orange);">Zmiana profilu wymaga konta administratora Home Assistant.</div>'}
+            <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px;">
+              <button type="button" class="btn" data-pf="apply" data-id="${exEsc(sel.id)}" style="padding:10px 16px;flex-direction:row;gap:8px;" ${s.busy || !admin ? 'disabled' : ''}><span>✅</span><span class="label">${s.busy ? 'Stosuję…' : `Zastosuj profil „${exEsc(sel.name)}”`}</span></button>
+              <button type="button" class="btn" data-pf="cancel" style="padding:10px 16px;flex-direction:row;gap:8px;"><span class="label">Anuluj</span></button></div></div>`;
+        }
+        return `${msg}${banner}<div class="ex-note" style="margin:0 0 10px;font-size:12px;">Gotowe zestawy ustawień jednym kliknięciem. Najpierw zobaczysz, co dokładnie się zmieni; po zastosowaniu EMS zapamięta poprzednie wartości i możesz do nich wrócić.</div>${chips}${prev}
+          <div class="ex-note">Profil zmienia tylko zwykłe ustawienia EMS (te same, które można zmienić ręcznie) — nie rusza godzin, prądów ani mocy falownika. Gdy ręcznie zmienisz którekolwiek ustawienie z profilu, profil uznaje się za zakończony.</div>`;
       },
     });
 

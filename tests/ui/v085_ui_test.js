@@ -7,8 +7,20 @@ let fails = 0; const ok = (c, m) => { if (!c) { fails++; console.log('FAIL', m);
 const sleep = (ms) => new Promise(r => setTimeout(r, ms));
 const DEV = JSON.parse(fs.readFileSync('devices_payload.json', 'utf8'));
 const day = (i) => { const d = new Date(2026, 10, 6 - i); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
+const REV = (i, verdict, score, culprit, items, facts) => ({ date: day(i), verdict, score, culprit, items, facts: facts || [], line: 'x' });
 const INS = {
   pv_correction_on: true, wear_cost: 0,
+  reviews: [
+    REV(1, 'częściowo trafny', 67, { id: 'pv', label: 'Produkcja PV', level: 'bad', text: 'Słońca było o 10,0 kWh mniej, niż zakładał plan <img src=x onerror=window.__pwn2=1>.' },
+      [{ id: 'pv', label: 'Produkcja PV', level: 'bad', short: 'prognoza PV zawyżona o 100%', detail: 'prognoza 20,0 kWh, wykonanie 10,0 kWh' },
+       { id: 'load', label: 'Zużycie domu', level: 'ok', short: 'zużycie ±4%', detail: 'prognoza 14,0 kWh, wykonanie 13,5 kWh' }], ['Bilans dnia: +4,20 zł', 'Zabezpieczenia zadziałały 2×']),
+    REV(2, 'trafny', 100, null, [{ id: 'pv', label: 'Produkcja PV', level: 'ok', short: 'PV ±3%', detail: 'prognoza 10,0 kWh, wykonanie 9,7 kWh' }]),
+    REV(3, 'chybiony', 25, { id: 'sale', label: 'Sprzedaż z baterii', level: 'bad', text: 'W oknach sprzedaży wyeksportowano 0,0 kWh zamiast planowanych 5,0 kWh.' },
+      [{ id: 'sale', label: 'Sprzedaż z baterii', level: 'bad', short: 'sprzedaż 0% planu', detail: 'plan ~5,0 kWh, wyeksportowano 0,0 kWh' }]),
+    { date: 'zepsuty', verdict: 'trafny' },
+    null,
+  ],
+  reviews_tally: { n: 3, counts: { 'trafny': 1, 'częściowo trafny': 1, 'chybiony': 1 }, top_culprit: 'pv', top_culprit_n: 2 },
   savings: {
     today: { days: 1, actual: 2.1, nobat: 5.4, simple: 3.9, vs_nobat: 3.3, vs_simple: 1.8 },
     last30: { days: 12, actual: 40.0, nobat: 95.5, simple: 70.2, vs_nobat: 55.5, vs_simple: 30.2 },
@@ -68,6 +80,23 @@ const ST = {
   const acc = await sr(e, '#exAccBox');
   ok(acc && /18,5%/.test(acc) && /zawyżona o 12%/.test(acc) && /20,0%/.test(acc) && /4,5 pp/.test(acc) && /× 0,88/.test(acc), 'trafność: błąd PV, zużycia, SOC i korekta');
   ok(await e.q(() => __el.shadowRoot.querySelectorAll('#exAccBox div[title*="prognoza"]').length === 20), 'wykresy prognoza/wykonanie: PV i zużycie po 10 dni');
+  // ocena planu po dobie
+  ok(/Ocena planu po dobie/.test(acc) && /Ostatnie 3 dób: plan trafny 1×, częściowo trafny 1×, chybiony 1×/.test(acc) && /najczęściej zawodziło: prognoza PV \(2×\)/.test(acc), 'ocena planu: podsumowanie ostatnich dób i najczęstszy winowajca');
+  ok(await e.q(() => __el.shadowRoot.querySelectorAll('#exAccBox [data-role="review-day"]').length === 3), 'ocena planu: 3 dni (uszkodzone wpisy pominięte)');
+  ok(await e.q(() => __el.shadowRoot.querySelectorAll('#exAccBox [data-role="review-day"]')[0].open === true && __el.shadowRoot.querySelectorAll('#exAccBox [data-role="review-day"]')[1].open === false), 'ocena planu: najnowszy dzień rozwinięty, reszta zwinięta');
+  ok(/prognoza PV zawyżona o 100%/.test(acc) && /Co zawiodło: Słońca było o 10,0 kWh mniej/.test(acc) && /Bilans dnia: \+4,20 zł/.test(acc) && /Zabezpieczenia zadziałały 2×/.test(acc), 'ocena planu: co zawiodło, pozycje i fakty dnia');
+  ok(/Nic istotnego nie zawiodło/.test(acc) && /sprzedaż 0% planu/.test(acc) && /(67|100|25)\/100/.test(acc), 'ocena planu: dzień trafny i chybiony, wynik /100');
+  ok(await e.q(() => !__el.shadowRoot.querySelector('#exAccBox img') && !window.__pwn2), 'ocena planu: treść zescape-owana');
+  const dd = (i) => day(i).slice(8) + '.' + day(i).slice(5, 7);
+  ok(await e.q((exp) => Array.from(__el.shadowRoot.querySelectorAll('#exAccBox [data-role="review-day"] > summary > b')).map((b) => b.textContent).join(',') === exp, [dd(1), dd(2), dd(3)].join(',')), 'ocena planu: daty dd.mm');
+  // brak ocen → komunikat zamiast pustego bloku
+  const e3 = await openCard(b, {});
+  await seed(e3, { curve: c, report: REPORT(), health: HEALTH });
+  await e3.q((ins) => { const x = JSON.parse(JSON.stringify(ins)); delete x.reviews; delete x.reviews_tally; window.__svc = { 'bms_komp_dec.insights_get': () => ({ response: x }) }; window.__el.hass = window.__mk(); }, INS);
+  await tab(e3, 'log'); await sleep(1200);
+  ok(/pierwsza pojawi się po północy/.test(await sr(e3, '#exAccBox')) && !(await e3.q(() => __el.shadowRoot.querySelector('#exAccBox [data-role="review-day"]'))), 'brak ocen: komunikat o pierwszej ocenie po północy');
+  ok(/18,5%/.test(await sr(e3, '#exAccBox')), 'brak ocen: reszta trafności nadal widoczna');
+  ok(e3.errs.length === 0, 'brak błędów JS (brak ocen) ' + JSON.stringify(e3.errs));
   // błąd usługi
   const e2 = await openCard(b, {});
   await seed(e2, { curve: c, report: REPORT(), health: HEALTH });
@@ -86,17 +115,19 @@ const ST = {
   ok(/Sterowanie urządzeniami wyłączone/.test(await sr(e, '#devRoot')), 'główny przełącznik widoczny (wyłączony)');
   await e.q(() => __el.shadowRoot.querySelector('[data-dv="edit"]').click()); await sleep(200);
   ok(await e.q(() => Array.from(__el.shadowRoot.querySelectorAll('#dvSw option')).map((o) => o.value).join(',') === 'input_boolean.pompa,switch.bojler'), 'podpowiedzi przełączników (bez switch.bms_*)');
+  ok(await e.q(() => Array.from(__el.shadowRoot.querySelectorAll('[data-dvf="ctl_mode"] option')).map((o) => o.value).join(',') === 'off,pv,cheap,neg'), 'lista trybów: nie steruj, PV, najtańsze, ujemna cena');
   await e.q(() => { const R = __el.shadowRoot; const m = R.querySelector('[data-dvf="ctl_mode"]'); m.value = 'pv'; m.dispatchEvent(new Event('change', { bubbles: true })); });
   await e.q(() => __el.shadowRoot.querySelector('[data-dv="save"]').click()); await sleep(200);
   ok(/wskaż jego przełącznik/.test(await sr(e, '#dvMsg')), 'tryb bez przełącznika → komunikat');
   await e.q(() => { const R = __el.shadowRoot; R.querySelector('[data-dvf="switch_eid"]').value = 'light.lampa'; });
   await e.q(() => __el.shadowRoot.querySelector('[data-dv="save"]').click()); await sleep(200);
   ok(/switch\.nazwa albo input_boolean/.test(await sr(e, '#dvMsg')), 'zły przełącznik → komunikat');
-  await e.q(() => { const R = __el.shadowRoot; R.querySelector('[data-dvf="switch_eid"]').value = 'switch.bojler'; R.querySelector('[data-dvf="ctl_power_w"]').value = '2500'; R.querySelector('[data-dvf="ctl_max_h"]').value = '3'; });
+  await e.q(() => { const R = __el.shadowRoot; R.querySelector('[data-dvf="switch_eid"]').value = 'switch.bojler'; R.querySelector('[data-dvf="ctl_power_w"]').value = '2500'; R.querySelector('[data-dvf="ctl_max_h"]').value = '3'; R.querySelector('[data-dvf="ctl_ready_h"]').value = '7'; R.querySelector('[data-dvf="ctl_neg_price"]').value = '-0.05'; R.querySelector('[data-dvf="ctl_split"]').checked = true; R.querySelector('[data-dvf="ctl_neg"]').checked = true; });
   await e.q(() => __el.shadowRoot.querySelector('[data-dv="save"]').click()); await sleep(600);
   const saved = await e.q(() => window.__dvSet[0]);
   const d0 = saved && saved[0];
   ok(d0 && d0.switch_eid === 'switch.bojler' && d0.ctl_mode === 'pv' && d0.ctl_power_w === 2500 && d0.ctl_max_h === 3, 'zapis: przełącznik, tryb, moc, limit ' + JSON.stringify(d0 && [d0.switch_eid, d0.ctl_mode, d0.ctl_power_w, d0.ctl_max_h]));
+  ok(d0 && d0.ctl_ready_h === 7 && d0.ctl_neg_price === -0.05 && d0.ctl_split === true && d0.ctl_neg === true, 'zapis: termin, próg ujemnej ceny, godziny z przerwami, dodatek ujemnej ceny ' + JSON.stringify(d0 && [d0.ctl_ready_h, d0.ctl_neg_price, d0.ctl_split, d0.ctl_neg]));
   // kafelek ze stanem sterowania + główny przełącznik
   await e.q((dev) => {
     const p = JSON.parse(JSON.stringify(dev)); p.devices[0].switch_eid = 'switch.bojler'; p.devices[0].ctl_mode = 'pv';
@@ -108,6 +139,20 @@ const ST = {
   const live = await sr(e, '#dvLive');
   ok(/nadwyżka PV · wył\. · nadwyżka PV 3\.1 kW/.test(live), 'kafelek: tryb, stan i powód');
   ok(/Sterowanie urządzeniami włączone \(1 urządzenie/.test(await sr(e, '#devRoot')), 'główny przełącznik: włączony, 1 urządzenie');
+  await e.q((dev) => {
+    const p = JSON.parse(JSON.stringify(dev)); p.devices[0].switch_eid = 'switch.bojler'; p.devices[0].ctl_mode = 'neg';
+    p.control = { enabled: true, devices: { [p.devices[0].id]: { mode: 'neg', reason: 'cena zakupu -0.12 zł/kWh (< +0.00)', manual: false } } };
+    window.__svc['bms_komp_dec.devices_get'] = () => ({ response: p }); window.__el.hass = window.__mk();
+  }, DEV);
+  await e.q(() => __el.shadowRoot.querySelector('[data-dv="reload"]').click()); await sleep(700);
+  ok(/ujemna cena zakupu · wył\. · cena zakupu -0\.12/.test(await sr(e, '#dvLive')), 'kafelek: tryb „ujemna cena zakupu” z powodem');
+  await e.q((dev) => {
+    const p = JSON.parse(JSON.stringify(dev)); p.devices[0].switch_eid = 'switch.bojler'; p.devices[0].ctl_mode = 'cheap'; p.devices[0].ctl_split = true;
+    p.control = { enabled: true, devices: { [p.devices[0].id]: { mode: 'cheap', reason: 'czeka na godziny 02:00–03:00, 04:00–06:00', manual: false } } };
+    window.__svc['bms_komp_dec.devices_get'] = () => ({ response: p }); window.__el.hass = window.__mk();
+  }, DEV);
+  await e.q(() => __el.shadowRoot.querySelector('[data-dv="reload"]').click()); await sleep(700);
+  ok(/najtańsze godziny \(z przerwami\) · wył\. · czeka na godziny 02:00–03:00, 04:00–06:00/.test(await sr(e, '#dvLive')), 'kafelek: najtańsze godziny z przerwami');
   await e.q(() => { const c = __el.shadowRoot.querySelector('[data-dv="ctl-master"]'); c.checked = false; c.dispatchEvent(new Event('change', { bubbles: true })); }); await sleep(300);
   ok(await e.q(() => (window.__calls || []).some((c) => c[0] === 'switch' && c[1] === 'turn_off' && /device_control/.test(JSON.stringify(c[2])))), 'wyłączenie sterowania: switch.turn_off');
 
