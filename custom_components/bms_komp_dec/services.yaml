@@ -355,3 +355,70 @@ profile_apply:
 profile_revert:
   name: Cofnij profil pracy
   description: Przywraca ustawienia sprzed ostatnio zastosowanego profilu (te zmienione ręcznie po profilu zostają bez zmian) (administrator).
+
+pv_caution_apply:
+  name: Zastosuj propozycję ostrożności prognozy PV
+  description: Ustawia ostrożność prognozy PV w planie na wartość proponowaną z ocen dobowych (administrator). Zmianę można cofnąć.
+
+pv_caution_revert:
+  name: Cofnij zmianę ostrożności prognozy PV
+  description: Przywraca ostrożność sprzed ostatniej zmiany z propozycji, o ile nie zmieniono jej ręcznie w międzyczasie (administrator).
+
+pv_caution_dismiss:
+  name: Odrzuć propozycję ostrożności prognozy PV
+  description: Ucisza propozycję zmiany ostrożności prognozy PV na 7 dni (administrator).
+
+profile_save:
+  name: Zapisz własny profil
+  description: Zapisuje bieżące zwykłe ustawienia EMS (bez godzin, prądów, mocy i zabezpieczeń) jako własny profil o podanej nazwie; ta sama nazwa nadpisuje profil (administrator).
+  fields:
+    name:
+      name: Nazwa
+      required: true
+      example: Weekend
+      selector:
+        text:
+    icon:
+      name: Ikona
+      required: false
+      example: "⭐"
+      selector:
+        text:
+
+profile_delete:
+  name: Usuń własny profil
+  description: Usuwa własny profil (gotowych profili nie da się usunąć) (administrator).
+  fields:
+    id:
+      name: Id profilu
+      required: true
+      example: u_1
+      selector:
+        text:
+
+profile_schedule:
+  name: Zaplanuj profil na daty
+  description: Włącza profil sam pierwszego dnia i cofa go po ostatnim dniu (np. urlop od–do); wraca poprzedni profil, jeśli jakiś był (administrator).
+  fields:
+    id:
+      name: Profil
+      required: true
+      example: vacation
+      selector:
+        text:
+    from:
+      name: Od (RRRR-MM-DD)
+      required: true
+      example: "2026-12-20"
+      selector:
+        text:
+    to:
+      name: Do (RRRR-MM-DD, włącznie)
+      required: true
+      example: "2026-12-28"
+      selector:
+        text:
+
+profile_schedule_clear:
+  name: Anuluj plan profilu
+  description: Anuluje zaplanowany profil; trwający plan kończy od razu i przywraca poprzednie ustawienia (administrator).

@@ -35,6 +35,9 @@ from .helpers import (
 from . import store_guard as SG
 from . import review as review_mod
 from . import profiles as prof_mod
+from . import arbproof as arb_mod
+from . import autonomy as auto_mod
+from . import pvcaution as pvc_mod
 
 ISSUES_EVERY_S = 55          # lista „co dziś nie działa” liczy się co tyle sekund
 from .holidays_pl import holiday_name, is_holiday
@@ -566,6 +569,9 @@ class BmsRuntime:
         kwh = self.grid_batt_kwh()
         before = kwh
         h = dt_s / 3600.0
+        pool = getattr(self, "_arb_pool", None)
+        pool = kwh if pool is None else min(float(pool), kwh)            # po restarcie: najgorszy przypadek = cały licznik
+        arb_in = arb_out = arb_leak = 0.0
         if chg_w > 0:
             gc = False
             try:
@@ -577,10 +583,18 @@ class BmsRuntime:
             else:
                 from_grid = min(chg_w, max(0.0, gp - (0.0 if gc else self.GRID_BATT_DEADBAND_W)))
             kwh += from_grid / 1000.0 * h
-        elif chg_w < 0 and kwh > 0:
+            arb_in = from_grid / 1000.0 * h
+            pool += arb_in
+        elif chg_w < 0:
             export = max(0.0, -gp) if gp is not None else 0.0
+            to_grid = min(-chg_w, export)                                # bateria oddaje do sieci (nie PV)
             to_house = max(0.0, -chg_w - export)
-            kwh = max(0.0, kwh - to_house / 1000.0 * h)
+            arb_out = to_grid / 1000.0 * h
+            if pool > 0:
+                arb_leak = min(arb_out, pool)                            # najpierw schodzi do sieci energia z sieci (górna granica)
+                pool = max(0.0, pool - arb_leak - to_house / 1000.0 * h)
+            if kwh > 0:
+                kwh = max(0.0, kwh - to_house / 1000.0 * h)
         soc = self.soc()
         if soc is not None:
             try:
@@ -589,9 +603,52 @@ class BmsRuntime:
             except Exception:  # noqa: BLE001
                 pass
         mem["kwh"] = round(kwh, 4)
+        self._arb_pool = min(pool, kwh)
+        if arb_in or arb_out:
+            self._arb_note(dt_util.as_local(now).date().isoformat(), arb_in, arb_out, arb_leak)
         if abs(kwh - float(mem.get("saved", 0.0) or 0.0)) >= 0.05 or (kwh == 0.0 and before > 0.0):
             mem["saved"] = mem["kwh"]
             self._save_state()
+
+    # ------------------------------------------ na ile godzin starczy baterii
+    def _track_load(self, now: datetime) -> None:
+        """Wygładzony pobór domu (średnia wykładnicza, ~5 min) — baza szacunku „na ile godzin starczy baterii”."""
+        prev_ts = getattr(self, "_load_ts", None)
+        self._load_ts = now
+        dt_s = 0.0 if prev_ts is None else (now - prev_ts).total_seconds()
+        self._load_ema = auto_mod.ema(getattr(self, "_load_ema", None), (self.coordinator.data or {}).get("load_power"), dt_s)
+
+    def autonomy(self) -> dict[str, Any] | None:
+        """Ile godzin bateria utrzyma dom bez PV i sieci: energia nad progiem odcięcia ÷ wygładzony pobór; None, gdy brak danych."""
+        soc = self.soc()
+        w = getattr(self, "_load_ema", None)
+        if soc is None or w is None:
+            return None
+        try:
+            floor = float(self.inverter_floor()["hourly"][dt_util.now().hour])
+        except Exception:  # noqa: BLE001
+            floor = number_value(self.hass, "reserve_floor_soc", 15.0)
+        cap = float(self.optimizer.config.get(CONF_BATTERY_CAPACITY_KWH, DEFAULT_BATTERY_CAPACITY_KWH))
+        est = auto_mod.estimate(soc, floor, cap, w)
+        if est is None:
+            return None
+        est["text"] = auto_mod.fmt_hours(est["hours"], est["capped"])
+        est["floor"] = round(floor, 1)
+        est["soc"] = round(float(soc), 1)
+        return est
+
+    def _arb_note(self, day: str, grid_in: float, out: float, leak: float) -> None:
+        store = self.state.get("arb_proof")
+        if not isinstance(store, dict):
+            store = self.state["arb_proof"] = {}
+        arb_mod.add(store, day, grid_in, out, leak)
+
+    def arb_tol(self) -> float:
+        return number_value(self.hass, "grid_arbitrage_block_kwh", 0.5)
+
+    def arb_proof(self, n: int = 14) -> list[dict[str, Any]]:
+        """Dowód zakazu arbitrażu dla ostatnich dób (najnowsze pierwsze)."""
+        return arb_mod.rows(self.state.get("arb_proof"), n, self.arb_tol())
 
     def grid_batt_block(self) -> str | None:
         """Zakaz sprzedaży, dopóki w baterii jest energia naładowana z sieci (tolerancja = „Blokada arbitrażu”; 0 = wył.)."""
@@ -1264,9 +1321,15 @@ class BmsRuntime:
             load = (self.coordinator.data or {}).get("load_power")
             thr = (n.cfg()["kinds"].get("island_overload") or {}).get("thr", 5.0)
             if isinstance(load, (int, float)) and load > float(thr) * 1000.0:
-                top = ", ".join(f"{nm} {p / 1000:.1f} kW" for nm, p in dm.top_now())
+                top_l = dm.top_now()
+                top = ", ".join(f"{nm} {p / 1000:.1f} kW" for nm, p in top_l)
+                try:
+                    au = self.autonomy()
+                except Exception:  # noqa: BLE001
+                    au = None
+                left = (f" Bateria wystarczy na ok. {au['text']}." + auto_mod.extend_hint(au, top_l)) if au else ""
                 await n.send("island_overload", "⚡ EMS: duży pobór przy zaniku sieci",
-                             f"Dom pobiera {load / 1000:.1f} kW z baterii (próg {float(thr):.1f} kW)." + (f" Największe: {top}." if top else ""),
+                             f"Dom pobiera {load / 1000:.1f} kW z baterii (próg {float(thr):.1f} kW)." + left + (f" Największe: {top}." if top else ""),
                              key="island")
 
     def _remember_grid_target(self, plan: dict[str, Any] | None) -> None:
@@ -2102,6 +2165,18 @@ class BmsRuntime:
             except Exception:  # noqa: BLE001
                 pass
             try:
+                wl = review_mod.week_line(self.state.get("day_reviews"), start.isoformat(), day.isoformat())
+                if wl:
+                    lines.append(wl)
+            except Exception:  # noqa: BLE001
+                pass
+            try:
+                al = arb_mod.week_line(self.state.get("arb_proof"), start.isoformat(), day.isoformat(), self.arb_tol())
+                if al:
+                    lines.append(al)
+            except Exception:  # noqa: BLE001
+                pass
+            try:
                 cap = float(self.optimizer.config.get(CONF_BATTERY_CAPACITY_KWH, DEFAULT_BATTERY_CAPACITY_KWH))
                 s7 = self.stats.summary(cap)
                 if s7.get("eff_7d") is not None:
@@ -2122,6 +2197,12 @@ class BmsRuntime:
             lines.extend(self._plan_vs_actual_lines(day))
         except Exception as err:  # noqa: BLE001
             _LOGGER.debug("EMS: podsumowanie plan vs wykonanie: %s", err)
+        try:
+            ar = next((r for r in self.arb_proof(40) if r["date"] == day.isoformat()), None)
+            if ar and ar["level"] != "idle":
+                lines.append(arb_mod.line(ar))
+        except Exception as err:  # noqa: BLE001
+            _LOGGER.debug("EMS: dowód braku arbitrażu: %s", err)
         cmds = [e for e in self.log.last(300) if e.get("kind") == "command" and e.get("level") == "ok"
                 and str(e.get("ts", "")).startswith(day.isoformat())]
         if cmds:
@@ -2225,20 +2306,150 @@ class BmsRuntime:
         active = None
         if cur:
             active = {"id": cur["id"], "since": cur["since"], "ended": cur["ended"], "can_revert": bool(cur["prev"]),
-                      "name": (prof_mod.get(cur["id"]) or {}).get("name"),
+                      "name": self._profile_name(cur["id"], None),
                       "restore": [{"key": k, "label": prof_mod.label(k), "now_text": prof_mod.fmt(k, self._profile_read(k)),
                                    "prev_text": prof_mod.fmt(k, v)} for k, v in cur["prev"].items()]}
         profiles = []
-        for p in prof_mod.PROFILES:
+        for p in list(prof_mod.PROFILES) + self._custom_profiles():
             ch = prof_mod.changes(p, self._profile_read)
             profiles.append({"id": p["id"], "name": p["name"], "icon": p["icon"], "desc": p["desc"], "changes": ch,
+                             "custom": bool(p.get("custom")),
                              "active": bool(cur and cur["id"] == p["id"] and not cur["ended"]),
                              "nothing_to_change": not any(c["differs"] for c in ch if c["available"])})
-        return {"profiles": profiles, "active": active}
+        plan = prof_mod.clean_plan(self.state.get("profile_plan"))
+        plan_v = None
+        if plan:
+            plan_v = dict(plan, name=self._profile_name(plan["id"], None), phase=prof_mod.plan_phase(plan, dt_util.now().date()))
+        return {"profiles": profiles, "active": active, "plan": plan_v, "custom_limit": prof_mod.MAX_CUSTOM,
+                "custom_keys": [{"key": k, "label": prof_mod.label(k)} for k in prof_mod.CUSTOM_KEYS],
+                "icons": list(prof_mod.CUSTOM_ICONS)}
+
+    # --- własne profile i profil z datami
+    def _custom_profiles(self) -> list[dict[str, Any]]:
+        return prof_mod.clean_custom(self.state.get("custom_profiles"))
+
+    def _profile_def(self, pid: Any) -> dict[str, Any] | None:
+        return prof_mod.find(pid, self._custom_profiles())
+
+    def _profile_name(self, pid: Any, default: Any) -> Any:
+        p = self._profile_def(pid)
+        if p:
+            return p["name"]
+        return "Własny profil (usunięty)" if prof_mod.is_custom_id(pid) else default
+
+    def profile_save(self, name: Any, icon: Any = None) -> dict[str, Any]:
+        """Zapisuje bieżące ustawienia (tylko z listy CUSTOM_KEYS) jako własny profil; ta sama nazwa = nadpisanie."""
+        new, rec, replaced = prof_mod.make_custom(name, icon, self._profile_read, self.state.get("custom_profiles"),
+                                                  dt_util.now().isoformat(timespec="seconds"))
+        self.state["custom_profiles"] = new
+        self._save_state()
+        self.log.add("mode", f"Zapisano własny profil „{rec['name']}” ({prof_mod.settings_word(len(rec['set']))})" + (" — nadpisano poprzedni o tej nazwie" if replaced else ""), "ok")
+        return {"ok": True, "id": rec["id"], "replaced": replaced}
+
+    def profile_delete(self, pid: Any) -> dict[str, Any]:
+        if not prof_mod.is_custom_id(pid):
+            raise ValueError("Można usunąć tylko własny profil")
+        cur = self._custom_profiles()
+        rec = next((c for c in cur if c["id"] == pid), None)
+        if rec is None:
+            raise ValueError("Nie ma takiego profilu")
+        self.state["custom_profiles"] = [c for c in cur if c["id"] != pid]
+        plan = prof_mod.clean_plan(self.state.get("profile_plan"))
+        dropped_plan = bool(plan and plan["id"] == pid and plan["status"] == "waiting")
+        if dropped_plan:
+            self.state["profile_plan"] = None           # zaplanowany, a jeszcze niezaczęty — nie ma czego włączać
+        self._save_state()
+        self.log.add("mode", f"Usunięto własny profil „{rec['name']}”" + (" i jego plan z datami" if dropped_plan else ""), "ok")
+        return {"ok": True, "dropped_plan": dropped_plan}
+
+    def profile_schedule(self, pid: Any, d_from: Any, d_to: Any) -> dict[str, Any]:
+        """Planuje profil na zakres dat (od pierwszego dnia 00:00 do końca ostatniego dnia). Jeden plan naraz."""
+        plan = prof_mod.check_plan(pid, d_from, d_to, dt_util.now().date(), self._custom_profiles())
+        old = prof_mod.clean_plan(self.state.get("profile_plan"))
+        if old and old["status"] == "active":
+            raise ValueError("Poprzedni plan jeszcze trwa — anuluj go albo poczekaj do końca")
+        self.state["profile_plan"] = plan
+        self._save_state()
+        self.log.add("mode", f"Zaplanowano profil „{self._profile_name(pid, pid)}” od {plan['from']} do {plan['to']} (włącza się sam, po ostatnim dniu wraca do poprzednich ustawień)", "ok")
+        return {"ok": True, "plan": plan}
+
+    async def profile_schedule_clear(self) -> dict[str, Any]:
+        """Anuluje plan. Trwający plan: kończy go od razu (cofa profil, jeśli to nadal ten sam, i wraca do poprzedniego)."""
+        plan = prof_mod.clean_plan(self.state.get("profile_plan"))
+        if not plan:
+            self.state["profile_plan"] = None
+            raise ValueError("Nie ma zaplanowanego profilu")
+        if plan["status"] == "active":
+            await self._profile_plan_finish(plan, "anulowany")
+        else:
+            self.state["profile_plan"] = None
+            self._save_state()
+            self.log.add("mode", f"Anulowano zaplanowany profil „{self._profile_name(plan['id'], plan['id'])}”", "ok")
+        return {"ok": True}
+
+    async def _profile_plan_finish(self, plan: dict[str, Any], how: str) -> None:
+        name = self._profile_name(plan["id"], plan["id"])
+        cur = prof_mod.clean_state(self.state.get("profile"))
+        reverted = False
+        if cur and cur["id"] == plan["id"]:
+            await self._profile_restore(cur, quiet=True)
+            self.state["profile"] = None
+            reverted = True
+            self._plan_ts = 0.0
+            self._reserve_cache = None
+        resumed = None
+        if reverted and plan.get("resume") and self._profile_def(plan["resume"]):
+            try:
+                await self.apply_profile(plan["resume"])
+                resumed = self._profile_name(plan["resume"], plan["resume"])
+            except ValueError:
+                resumed = None
+        self.state["profile_plan"] = None
+        self._save_state()
+        txt = (f"Profil „{name}” {how}: " + ("przywrócono poprzednie ustawienia" if reverted else "nic do przywracania (profil był już zmieniony lub cofnięty ręcznie)")
+               + (f"; wrócił profil „{resumed}”" if resumed else ""))
+        self.log.add("mode", txt, "ok")
+        await self.monitor.notifier.send("profile_plan", f"📅 EMS: koniec profilu „{name}”", txt + ".", level="info")
+
+    async def profile_plan_tick(self, now: datetime) -> None:
+        """Start planu pierwszego dnia (po 00:00) i koniec po ostatnim dniu. Po restarcie HA nadrabia: spóźniony start nadal włącza profil,
+        o ile ostatni dzień jeszcze trwa; plan, którego termin w całości minął, jest odrzucany z wpisem w dzienniku."""
+        raw = self.state.get("profile_plan")
+        if raw is None:
+            return
+        plan = prof_mod.clean_plan(raw)
+        if plan is None:
+            self.state["profile_plan"] = None
+            self._save_state()
+            return
+        today = dt_util.as_local(now).date()
+        phase = prof_mod.plan_phase(plan, today)
+        name = self._profile_name(plan["id"], None)
+        if plan["status"] == "waiting":
+            if phase == "before":
+                return
+            if phase == "after" or name is None or self._profile_def(plan["id"]) is None:
+                self.state["profile_plan"] = None
+                self._save_state()
+                why = "termin już minął" if phase == "after" else "profil został usunięty"
+                self.log.add("mode", f"Zaplanowany profil „{name or plan['id']}” nie został włączony: {why}", "warn")
+                await self.monitor.notifier.send("profile_plan", "📅 EMS: plan profilu nie wystartował", f"Profil „{name or plan['id']}” (od {plan['from']} do {plan['to']}) nie został włączony: {why}.", level="warn")
+                return
+            before = prof_mod.clean_state(self.state.get("profile"))
+            resume = before["id"] if before and not before["ended"] and before["id"] != plan["id"] else None
+            res = await self.apply_profile(plan["id"])
+            self.state["profile_plan"] = dict(plan, status="active", resume=resume)
+            self._save_state()
+            txt = f"Zaplanowany profil „{name}” włączony (do końca dnia {plan['to']}): zmieniono {prof_mod.settings_word(res.get('changed', 0))}"
+            self.log.add("mode", txt, "ok")
+            await self.monitor.notifier.send("profile_plan", f"📅 EMS: włączono profil „{name}”", txt + ". Po ostatnim dniu ustawienia wrócą same.", level="info")
+            return
+        if phase == "after":
+            await self._profile_plan_finish(plan, "zakończony (minął ostatni dzień)")
 
     async def apply_profile(self, pid: str) -> dict[str, Any]:
         """Stosuje profil: najpierw cofa poprzedni (tylko nietknięte ręcznie wartości), potem zapamiętuje stan i ustawia nowe wartości."""
-        prof = prof_mod.get(pid)
+        prof = self._profile_def(pid)
         if prof is None:
             raise ValueError(f"nieznany profil: {pid!r}")
         cur = prof_mod.clean_state(self.state.get("profile"))
@@ -2286,7 +2497,7 @@ class BmsRuntime:
             if await self._profile_write(key, old):
                 restored += 1
         if not quiet:
-            name = (prof_mod.get(cur["id"]) or {}).get("name") or cur["id"]
+            name = self._profile_name(cur["id"], cur["id"])
             self.log.add("mode", f"Cofnięto profil „{name}”: przywrócono {prof_mod.settings_word(restored)}" + (f", {len(kept)} zostawiono (zmienione ręcznie)" if kept else ""),
                          "ok", profile=cur["id"])
         return {"restored": restored, "kept": kept}
@@ -2322,8 +2533,76 @@ class BmsRuntime:
         cur["ended"] = {"at": dt_util.as_local(now).isoformat(timespec="seconds"), "keys": bad[:20]}
         self.state["profile"] = cur
         self._save_state()
-        name = (prof_mod.get(cur["id"]) or {}).get("name") or cur["id"]
+        name = self._profile_name(cur["id"], cur["id"])
         self.log.add("mode", f"Profil „{name}” przestał obowiązywać (zmienione: {', '.join(prof_mod.label(k) for k in bad[:4])})", "info", profile=cur["id"])
+
+    # --------------------------------------------------------------- autokorekta ostrożności prognozy PV
+    def pv_caution(self) -> dict[str, Any]:
+        """Widok dla karty: bieżąca ostrożność, propozycja zmiany (z ocen z ostatnich dób) i ostatnia zmiana do cofnięcia."""
+        cur = self._profile_read(pvc_mod.KEY)
+        st = self.state.get("pv_caution")
+        out: dict[str, Any] = {"current": cur, "proposal": None, "last": None, "can_revert": False}
+        last = pvc_mod.clean_state(st)["last"]
+        if last:
+            out["last"] = dict(last)
+            out["can_revert"] = pvc_mod.can_revert(st, cur) is not None
+        if cur is None or not switch_on(self.hass, "pv_forecast_correction", True):
+            return out                      # bez korekty planer w ogóle nie stosuje ostrożności — nie ma co proponować
+        today = dt_util.now().date()
+        try:
+            lo = None
+            try:
+                lo = self.optimizer.pv_lo_ratio(1, self.optimizer._read_pv_hourly(1))  # noqa: SLF001
+            except Exception:  # noqa: BLE001
+                lo = None
+            out["proposal"] = pvc_mod.evaluate(self.insights.pv_caution_pairs(today), cur, today, st, lo)
+        except Exception as err:  # noqa: BLE001
+            _LOGGER.debug("EMS: autokorekta ostrożności PV: %s", err)
+        return out
+
+    def _profile_follow(self, key: str, old: Any, new: Any) -> None:
+        """Aktywny profil nie ma uznać zmiany ostrożności zrobionej przez autokorektę za ręczną (inaczej „przestałby obowiązywać”)."""
+        cur = prof_mod.clean_state(self.state.get("profile"))
+        if cur and not cur["ended"] and key in cur["applied"] and prof_mod.same(cur["applied"][key], old):
+            raw = self.state.get("profile")
+            if isinstance(raw, dict) and isinstance(raw.get("applied"), dict):
+                raw["applied"][key] = new
+
+    async def pv_caution_apply(self) -> dict[str, Any]:
+        view = self.pv_caution()
+        prop = view["proposal"]
+        if not prop:
+            raise ValueError("Nie ma teraz propozycji zmiany ostrożności (dane się zmieniły albo już ją zastosowano)")
+        cur, to = view["current"], prop["to"]
+        if not await self._profile_write(pvc_mod.KEY, to) or not prof_mod.same(self._profile_read(pvc_mod.KEY), to):
+            raise ValueError("Nie udało się ustawić ostrożności prognozy PV (sprawdź encję w ustawieniach)")
+        self.state["pv_caution"] = {"last": {"date": dt_util.now().date().isoformat(), "from": cur, "to": to, "reverted": False}, "dismissed": None}
+        self._profile_follow(pvc_mod.KEY, cur, to)
+        self._plan_ts = 0.0
+        self._save_state()
+        self.log.add("mode", f"Ostrożność prognozy PV: {cur:.0f}% → {to:.0f}% (propozycja z ocen dobowych, zatwierdzona w panelu)", "ok")
+        return {"ok": True, "from": cur, "to": to}
+
+    async def pv_caution_revert(self) -> dict[str, Any]:
+        cur = self._profile_read(pvc_mod.KEY)
+        last = pvc_mod.can_revert(self.state.get("pv_caution"), cur)
+        if not last:
+            raise ValueError("Nie ma czego cofnąć: ostrożność została już zmieniona inaczej albo wcześniej cofnięta")
+        if not await self._profile_write(pvc_mod.KEY, last["from"]) or not prof_mod.same(self._profile_read(pvc_mod.KEY), last["from"]):
+            raise ValueError("Nie udało się przywrócić poprzedniej ostrożności")
+        self.state["pv_caution"] = {"last": dict(last, reverted=True), "dismissed": dt_util.now().date().isoformat()}
+        self._profile_follow(pvc_mod.KEY, last["to"], last["from"])
+        self._plan_ts = 0.0
+        self._save_state()
+        self.log.add("mode", f"Cofnięto zmianę ostrożności prognozy PV: {last['to']:.0f}% → {last['from']:.0f}%", "ok")
+        return {"ok": True, "from": last["to"], "to": last["from"]}
+
+    def pv_caution_dismiss(self) -> dict[str, Any]:
+        st = pvc_mod.clean_state(self.state.get("pv_caution"))
+        st["dismissed"] = dt_util.now().date().isoformat()
+        self.state["pv_caution"] = st
+        self._save_state()
+        return {"ok": True}
 
     # --------------------------------------------------------------- ocena planu po dobie
     def build_day_review(self, day: date) -> dict[str, Any] | None:
@@ -2351,11 +2630,19 @@ class BmsRuntime:
             net = self.ledger.day_net(day)
         except Exception:  # noqa: BLE001
             net = None
+        sale_plan = (self.state.get("sale_plan") or {}).get(key)
+        sale_act = (self.state.get("sale_actual") or {}).get(key)
+        sale_why = None
+        if sale_plan:
+            try:
+                socs = [float(x) for x in (soc_act or []) if isinstance(x, (int, float)) and not isinstance(x, bool)]
+                sale_why = review_mod.sale_reason(self.log.last(600), key, soc_max=max(socs) if socs else None,
+                                                  min_soc=number_value(self.hass, "min_soc_for_sell", 0.0))
+            except Exception as err:  # noqa: BLE001
+                _LOGGER.debug("EMS: powód braku sprzedaży: %s", err)
         return review_mod.build(key, pv_fc=pv_fc, pv_act=pv_act, pv_limited=rec.get("pv_lim"), load_fc=load_fc, load_act=load_act,
-                                soc_plan=rec.get("soc_plan"), soc_act=soc_act,
-                                sale_plan=(self.state.get("sale_plan") or {}).get(key),
-                                sale_act=(self.state.get("sale_actual") or {}).get(key),
-                                net=net, guards=guards, autos=autos)
+                                soc_plan=rec.get("soc_plan"), soc_act=soc_act, sale_plan=sale_plan, sale_act=sale_act,
+                                sale_why=sale_why, net=net, guards=guards, autos=autos)
 
     def store_day_review(self, rev: dict[str, Any]) -> None:
         review_mod.store(self.state.setdefault("day_reviews", {}), rev)
@@ -2402,6 +2689,7 @@ class BmsRuntime:
             ("naprawa danych", self.store_repair_tick),
             ("ocena planu", self.review_tick),
             ("profil", self.profile_tick),
+            ("profil z datami", self.profile_plan_tick),
             ("problemy", self.issues_tick),
         ):
             try:
@@ -2522,6 +2810,12 @@ class BmsRuntime:
     def _sale_report(self, day: date) -> None:
         """Wpis w dzienniku: plan vs faktyczny eksport w oknach sprzedaży za dzień `day`; porządkuje stare dane."""
         key = day.isoformat()
+        try:
+            ar = next((r for r in self.arb_proof(40) if r["date"] == key), None)
+            if ar and ar["level"] != "idle":
+                self.log.add("profit", arb_mod.line(ar), {"ok": "ok", "warn": "warn", "bad": "warn"}.get(ar["level"], "info"), leak=ar["leak"])
+        except Exception as err:  # noqa: BLE001
+            _LOGGER.debug("EMS: wpis o arbitrażu: %s", err)
         plan = (self.state.get("sale_plan") or {}).get(key)
         act = (self.state.get("sale_actual") or {}).get(key) or {"kwh": 0.0, "rev": 0.0}
         cut = (day - timedelta(days=self.SALE_KEEP_DAYS)).isoformat()
@@ -2554,6 +2848,10 @@ class BmsRuntime:
             self.ledger.update(now, self.grid_power(), self.sell_price(), self.buy_price(), peak)
         except Exception as err:  # noqa: BLE001
             _LOGGER.debug("EMS ledger: %s", err)
+        try:
+            self._track_load(now)
+        except Exception as err:  # noqa: BLE001
+            _LOGGER.debug("EMS wygładzony pobór domu: %s", err)
         try:
             self._track_grid_batt(now)
         except Exception as err:  # noqa: BLE001

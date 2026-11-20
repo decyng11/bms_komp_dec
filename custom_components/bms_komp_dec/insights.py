@@ -327,6 +327,44 @@ class Insights:
     def _buckets(self, d: str) -> list[list | None]:
         return [self.hours.get(f"{d}T{h:02d}") for h in range(24)]
 
+    def pv_history(self, today: date, days: int = 10) -> dict[str, list[float | None]]:
+        """Produkcja PV (kWh na godzinę) z ostatnich `days` dób przed `today` — baza zapasowej prognozy (pvfallback)."""
+        out: dict[str, list[float | None]] = {}
+        for i in range(1, max(1, int(days)) + 1):
+            d = (today - timedelta(days=i)).isoformat()
+            out[d] = [None if b is None or not isinstance(b[PV], (int, float)) else float(b[PV]) for b in self._buckets(d)]
+        return out
+
+    def pv_caution_pairs(self, today: date, h: int = 1) -> list[tuple[str, float, float]]:
+        """(data, prognoza wydana h dni wcześniej po korekcie z historii — bez ostrożności, wykonanie) — baza autokorekty ostrożności PV."""
+        return [((today - timedelta(days=i)).isoformat(), f_, a_) for i, f_, a_ in self._pv_pairs_dated(h, today, "adj")]
+
+    def buy_history(self, today: date, days: int = 14) -> dict[str, list[float | None]]:
+        """Średnia cena zakupu (zł/kWh) w każdej godzinie ostatnich `days` dób przed `today` — baza szacunku cen na jutro
+        (buyestimate). Godzina z mniej niż pół godziny pomiaru ceny nie liczy się."""
+        out: dict[str, list[float | None]] = {}
+        for i in range(1, max(1, int(days)) + 1):
+            d = (today - timedelta(days=i)).isoformat()
+            row: list[float | None] = []
+            for b in self._buckets(d):
+                p = None
+                if b is not None and isinstance(b[BUY_T], (int, float)) and b[BUY_T] >= 1800:
+                    p = hour_prices(b)[0]
+                row.append(p if isinstance(p, (int, float)) and math.isfinite(p) else None)
+            out[d] = row
+        return out
+
+    def load_history(self, today: date, days: int = 16) -> dict[str, list[float | None]]:
+        """Zużycie domu (kWh na godzinę) z ostatnich `days` dób przed `today` — baza wykrywania nietypowego nocnego poboru."""
+        out: dict[str, list[float | None]] = {}
+        for i in range(1, max(1, int(days)) + 1):
+            d = (today - timedelta(days=i)).isoformat()
+            out[d] = [None if b is None or not isinstance(b[LOAD], (int, float)) else float(b[LOAD]) for b in self._buckets(d)]
+        return out
+
+    def load_day(self, day: date) -> list[float | None]:
+        return [None if b is None or not isinstance(b[LOAD], (int, float)) else float(b[LOAD]) for b in self._buckets(day.isoformat())]
+
     def _soc0(self, d: str) -> float | None:
         prev = (date.fromisoformat(d) - timedelta(days=1)).isoformat()
         b = self.hours.get(f"{prev}T23")

@@ -13,6 +13,7 @@ from .const import (
 )
 from .const import DOMAIN, RUNTIME_SENSORS, SENSORS
 from . import accuracy as acc
+from . import buyestimate as buyest_mod
 from . import money as money_mod
 from . import inverter_ctl as ictl
 from .entity import BmsBaseEntity
@@ -125,14 +126,14 @@ class BmsRuntimeSensor(BmsBaseEntity, SensorEntity):
     """Dziennik decyzji, bilans PLN i dynamiczna rezerwa SOC (liczone przez BmsRuntime)."""
 
     _unrecorded_attributes = frozenset({
-        "entries", "history", "cheap_start", "cheap_end", "usable_kwh", "inverter_floor_source", "inverter_floor_hourly",
+        "entries", "history", "cheap_start", "cheap_end", "usable_kwh", "autonomy", "inverter_floor_source", "inverter_floor_hourly",
         "tariff_peaks", "tariff_label", "tariff_night", "tariff_midday", "battery_sign_source",
         "ctl_work_mode", "ctl_charge_current", "ctl_export_surplus", "ctl_tou", "inverter_prefix",
         "curve", "proposals", "days", "watches", "alarms", "recent_notifications", "inbox", "inbox_rejected", "inbox_auto_read", "auto_skip", "auto_hist",
         "prices_sell_today", "prices_sell_tomorrow", "prices_buy_today", "prices_buy_tomorrow",
         "price_sell_entity", "price_buy_entity", "price_sell_source", "price_buy_source", "tariff_mode", "tariff_dynamic",
-        "price_buy_tomorrow_state", "price_buy_tomorrow_note",
-        "pv_forecast_source", "pv_hourly_today", "pv_hourly_tomorrow", "pv_daily", "pv_sources", "assumptions",
+        "price_buy_tomorrow_state", "price_buy_tomorrow_note", "prices_buy_tomorrow_est", "price_buy_tomorrow_est_note",
+        "pv_forecast_source", "pv_hourly_today", "pv_hourly_tomorrow", "pv_daily", "pv_sources", "pv_fallback", "assumptions",
         "devices", "power_total", "accuracy", "table", "overrides", "soc_history", "why", "control_test", "issues", "reviews",
     })
 
@@ -225,6 +226,12 @@ class BmsRuntimeSensor(BmsBaseEntity, SensorEntity):
         except Exception:  # noqa: BLE001
             pass
         try:
+            au = rt.autonomy()
+            if au is not None:
+                out["autonomy"] = au
+        except Exception:  # noqa: BLE001
+            pass
+        try:
             w = next_offpeak_window(now)
             if w:
                 out["cheap_start"], out["cheap_end"], out["cheap_now"] = w[0].isoformat(), w[1].isoformat(), w[2]
@@ -292,6 +299,12 @@ class BmsRuntimeSensor(BmsBaseEntity, SensorEntity):
                     st = opt.buy_tomorrow_status()
                     out["price_buy_tomorrow_state"] = st.get("state")
                     out["price_buy_tomorrow_note"] = st.get("text")
+                    if st.get("state") != "ok" and out["tariff_dynamic"]:
+                        # tylko podgląd: osobny atrybut, planer go nie widzi (nie przechodzi przez buy_hourly_for)
+                        est = buyest_mod.estimate(rt.insights.buy_history(today), tom)
+                        if est:
+                            out["prices_buy_tomorrow_est"] = r4(est["prices"])
+                            out["price_buy_tomorrow_est_note"] = buyest_mod.note(est)
         except Exception:  # noqa: BLE001
             pass
         return out

@@ -190,6 +190,7 @@ SWITCHES = [
     ("vacation_mode", "Tryb urlopowy (minimalne zużycie)", "mdi:palm-tree", False),
     ("auto_apply_dry_run", "Auto-stosowanie: tylko podgląd (bez zapisu)", "mdi:eye-check", False),
     ("pv_forecast_correction", "Korekta prognozy PV z historii (planer)", "mdi:solar-power-variant", True),
+    ("pv_fallback_forecast", "Zapasowa prognoza PV z ostatnich dni (gdy brak Solcast / Forecast.Solar)", "mdi:weather-sunny-alert", True),
     ("live_load_correction", "Korekta planu o bieżące zużycie domu", "mdi:home-lightning-bolt", True),
     ("sale_power_fit", "Obniżaj moc sprzedaży do zapasu energii", "mdi:flash-triangle", True),
     ("device_control", "Sterowanie urządzeniami (włączanie przełączników)", "mdi:power-socket-eu", False),

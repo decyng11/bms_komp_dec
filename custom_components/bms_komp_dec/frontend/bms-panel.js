@@ -631,6 +631,8 @@
     .price-header { font-size: 15px; font-weight: 700; margin-bottom: 12px; }
     .price-note { margin: 8px 0 2px; padding: 8px 10px; border: 1px solid var(--line); border-left: 3px solid var(--warn, #fbbf24); border-radius: 8px; font-size: 12px; line-height: 1.45; color: var(--text2); text-align: left; overflow-wrap: anywhere; }
     .price-note.wait { border-left-color: var(--accent, #60a5fa); }
+    .price-note.est { border-left-color: var(--line); }
+    .price-est { opacity: .7; font-style: italic; }
     .price-table { width: 100%; border-collapse: collapse; font-size: 13px; text-align: center; }
     .price-table th { border-bottom: 1px solid var(--line); padding: 8px 4px; color: var(--text2); font-weight: 700; }
     .price-table td { border-bottom: 1px solid var(--surface); padding: 8px 4px; }
@@ -1315,7 +1317,7 @@
       const fc = this._weatherForecast;
       const todayKey = this._todayKey();
       const tmrKey = this._tomorrowKey();
-      const pvSig = PV_FORECAST_DAYS.map((_l, i) => { const di = this._pvDayInfo(i); return String(this._pvDayKwh(i)) + (di ? ':' + di.lo + ':' + di.hi + ':' + di.factor : ''); }).join('|');
+      const pvSig = PV_FORECAST_DAYS.map((_l, i) => { const di = this._pvDayInfo(i); return String(this._pvDayKwh(i)) + (di ? ':' + di.lo + ':' + di.hi + ':' + di.factor + (di.est ? ':est' : '') : ''); }).join('|');
       const cacheKey = todayKey + '#' + JSON.stringify(fc.slice(0, 7)) + '#' + pvSig;
       if (this._lastWeatherKey === cacheKey) return;
       this._lastWeatherKey = cacheKey;
@@ -1338,7 +1340,7 @@
             <div class="day">${label}</div>
             <div class="wt-row"><div class="icon">${icon}</div><div class="temp-max">${maxT}</div></div>
             <div class="temp-min">min ${minT}</div>
-            ${pvVal !== null ? `<div class="pv"${this._pvTip(pvOffset)}>${pvVal.toFixed(1)} kWh</div>${this._pvRange(pvOffset)}` : ''}
+            ${pvVal !== null ? `<div class="pv"${this._pvTip(pvOffset)}>${((this._pvDayInfo(pvOffset) || {}).est === true ? '~' : '') + pvVal.toFixed(1)} kWh</div>${this._pvRange(pvOffset)}` : ''}
           </div>
         `;
       }
@@ -2375,15 +2377,16 @@
       return [];
     }
 
-    // tabela 2 × 12 godzin (dziś / jutro); wartości w zł/kWh, null = brak ceny
-    _priceTableHtml(today, tomorrow, title, src, cheapIsGood = false) {
+    // tabela 2 × 12 godzin (dziś / jutro); wartości w zł/kWh, null = brak ceny; est = kolumna „jutro” to szacunek (podgląd, nie ceny z rynku)
+    _priceTableHtml(today, tomorrow, title, src, cheapIsGood = false, est = false) {
       const vals = (a) => (a || []).filter(v => v !== null);
       const mm = (a) => { const v = vals(a); return v.length ? [Math.max(...v), Math.min(...v)] : [null, null]; };
       const [maxD, minD] = mm(today), [maxJ, minJ] = mm(tomorrow);
-      const fmt = (val, max, min) => {
+      const fmt = (val, max, min, isEst = false) => {
         if (val === null || val === undefined) return '--';
-        const str = val.toFixed(2);
+        const str = (isEst ? '~' : '') + val.toFixed(2);
         // sprzedaż: najwyższa cena = zielona (dobrze); zakup (cheapIsGood): najniższa = zielona, najwyższa = czerwona
+        if (isEst) return `<span class="price-est">${str}</span>`;
         if (val === max) return `<span class="${cheapIsGood ? 'price-min' : 'price-max'}">${str}</span>`;
         if (val === min) return `<span class="${cheapIsGood ? 'price-max' : 'price-min'}">${str}</span>`;
         return str;
@@ -2392,17 +2395,17 @@
       const nowHour = new Date().getHours();
       let html = title ? `<div class="price-header" style="margin-top:8px;">${this._esc(title)}${src ? ` <span style="opacity:.6;font-size:11px;">(${this._esc(src)})</span>` : ''}</div>` : '';
       html += `<table class="price-table">
-        <tr><th>Godz.</th><th>Dziś</th><th>Jutro</th><th width="10"></th>
-            <th>Godz.</th><th>Dziś</th><th>Jutro</th></tr>`;
+        <tr><th>Godz.</th><th>Dziś</th><th>${est ? 'Jutro szac.' : 'Jutro'}</th><th width="10"></th>
+            <th>Godz.</th><th>Dziś</th><th>${est ? 'Jutro szac.' : 'Jutro'}</th></tr>`;
       for (let i = 0; i < 12; i++) {
         const h1 = `${String(i).padStart(2, '0')}-${String(i + 1).padStart(2, '0')}`;
         const h2 = `${String(i + 12).padStart(2, '0')}-${String((i + 13) % 24).padStart(2, '0')}`;
         const rc1 = i === nowHour ? ' class="price-now-hour"' : '';
         const rc2 = (i + 12) === nowHour ? ' class="price-now-hour"' : '';
         html += `<tr>
-          <td${rc1}><b>${h1}</b></td><td${rc1}>${fmt(at(today, i), maxD, minD)}</td><td${rc1}>${fmt(at(tomorrow, i), maxJ, minJ)}</td>
+          <td${rc1}><b>${h1}</b></td><td${rc1}>${fmt(at(today, i), maxD, minD)}</td><td${rc1}>${fmt(at(tomorrow, i), maxJ, minJ, est)}</td>
           <td></td>
-          <td${rc2}><b>${h2}</b></td><td${rc2}>${fmt(at(today, i + 12), maxD, minD)}</td><td${rc2}>${fmt(at(tomorrow, i + 12), maxJ, minJ)}</td>
+          <td${rc2}><b>${h2}</b></td><td${rc2}>${fmt(at(today, i + 12), maxD, minD)}</td><td${rc2}>${fmt(at(tomorrow, i + 12), maxJ, minJ, est)}</td>
         </tr>`;
       }
       return html + `</table>`;
@@ -2420,15 +2423,19 @@
       const sT = arr24(a.prices_sell_today), sJ = arr24(a.prices_sell_tomorrow);
       if (sT || sJ) {
         const bT = arr24(a.prices_buy_today), bJ = arr24(a.prices_buy_tomorrow);
+        // podgląd: gdy prawdziwych cen zakupu na jutro jeszcze nie ma, pokazujemy szacunek z historii (planer go nie używa)
+        const bE = (!bJ && bT) ? arr24(a.prices_buy_tomorrow_est) : null;
+        const bEN = bE && typeof a.price_buy_tomorrow_est_note === 'string' ? a.price_buy_tomorrow_est_note : '';
         const cur = num(Number(a.price_sell));
         header.textContent = `Ceny sprzedaży > Teraz: ${cur === null ? '--' : cur.toFixed(2)} PLN/kWh`;
         const bNote = (bT || bJ) && !bJ && typeof a.price_buy_tomorrow_note === 'string' ? a.price_buy_tomorrow_note : '';
         const bNoteWait = a.price_buy_tomorrow_state === 'waiting';
-        const key = JSON.stringify([sT, sJ, bT, bJ, a.price_sell_source, a.price_buy_source, bNote, bNoteWait, new Date().getHours()]);
+        const key = JSON.stringify([sT, sJ, bT, bJ, bE, bEN, a.price_sell_source, a.price_buy_source, bNote, bNoteWait, new Date().getHours()]);
         if (this._lastPriceTableKey === key) return;
         this._lastPriceTableKey = key;
         let html = this._priceTableHtml(sT, sJ, '', '');
-        if (bT || bJ) html += this._priceTableHtml(bT, bJ, 'Ceny zakupu (taryfa dynamiczna)', a.price_buy_source || a.price_buy_entity || '', true);
+        if (bT || bJ) html += this._priceTableHtml(bT, bJ || bE, 'Ceny zakupu (taryfa dynamiczna)', a.price_buy_source || a.price_buy_entity || '', true, !!bE);
+        if (bEN) html += `<div class="price-note est" id="priceBuyEstNote">📈 ${this._esc(bEN)}</div>`;
         if (bNote) html += `<div class="price-note${bNoteWait ? ' wait' : ''}" id="priceBuyNote">${bNoteWait ? '⏳' : 'ℹ️'} <b>Jutro:</b> ${this._esc(bNote)}</div>`;
         container.innerHTML = html;
         return;
@@ -3526,6 +3533,7 @@
             </div>
             <div class="badge-warn" id="warn-sprzedaz-zablokowana"><div class="badge danger on" id="badge-sprzedaz-zablokowana">⛔ Sprzedaż zablokowana (import)</div></div>
             <div class="badge-warn" id="warn-grid-batt"><div class="badge danger on" id="badge-grid-batt"></div></div>
+            <div id="autonomyBox" data-role="autonomy" style="display:none;margin-top:8px;font-size:13px;"></div>
           </div>
 
           <!-- Przepływ mocy (węzły) -->
@@ -4316,6 +4324,20 @@
       try { this._renderInner(); } catch (e) { console.warn('EMS PANEL render error:', e); }
     }
 
+    // „Na ile godzin starczy baterii”: energia nad progiem odcięcia ÷ wygładzony pobór domu, bez PV (liczy integracja)
+    _renderAutonomy() {
+      const el = this._el('autonomyBox'); if (!el) return;
+      const rs = this._hass && this._hass.states[this._eid('sensor', 'reserve_soc')];
+      const au = rs && rs.attributes && rs.attributes.autonomy;
+      if (!au || typeof au !== 'object' || typeof au.text !== 'string' || !au.text || typeof au.hours !== 'number' || !isFinite(au.hours)) { el.style.display = 'none'; el.textContent = ''; return; }
+      const f = (x) => (isFinite(Number(x)) ? Math.round(Number(x)) : '?');
+      const col = au.hours < 2 ? 'var(--red)' : (au.hours < 6 ? 'var(--orange)' : 'var(--green)');
+      el.innerHTML = '';
+      const b = document.createElement('b'); b.style.color = col; b.textContent = au.text;
+      el.append('🔋 Bateria starczy na ok. ', b, document.createTextNode(` — dom bierze ${f(au.load_w)} W, do progu ${f(au.floor)}%, bez PV i sieci.`));
+      el.title = `Do progu odcięcia zostało ~${isFinite(Number(au.usable_kwh)) ? Number(au.usable_kwh).toFixed(1).replace('.', ',') : '?'} kWh (po sprawności). Pobór wygładzony z ostatnich ~5 minut; w prawdziwym zaniku sieci z PV czas będzie dłuższy.`;
+      el.style.display = '';
+    }
     _renderFloorAlert() {
       const el = this._el('floorAlert'); if (!el) return;
       const rs = this._hass && this._hass.states[this._eid('sensor', 'reserve_soc')];
@@ -4406,6 +4428,7 @@
     _renderInner() {
       this._safe(() => this._renderPriceBar());
       this._safe(() => this._renderFloorAlert());
+      this._safe(() => this._renderAutonomy());
       this._safe(() => this._renderStatusBanner());
       // ekran główny korzysta z dodatków (rachunek dnia, wykres SOC, przyciski nadpisań) — ładujemy moduł, gdy integracja podaje „Widok planu”
       if (this._tabNeeds('main') && !MODULES.extras.ready && Object.keys(this._pvAttrs()).length) this._safe(() => this._exEnsure());
@@ -5587,6 +5610,7 @@
 
     _pvRange(offset) {
       const d = this._pvDayInfo(offset);
+      if (d && d.est === true) return '<div class="pv-rng" data-role="pv-est">szac.</div>';      // brak prognozy: średnia z ostatnich dni
       if (!d || typeof d.lo !== 'number' || typeof d.hi !== 'number') return '';
       const f = (x) => x.toFixed(1).replace('.', ',');
       return `<div class="pv-rng">${f(d.lo)}–${f(d.hi)}</div>`;
@@ -5594,6 +5618,10 @@
 
     _pvTip(offset) {
       const d = this._pvDayInfo(offset);
+      if (d && d.est === true) {
+        const a = this._pvInt(), fb = a && a.pv_fallback;
+        return ` title="Brak prognozy PV — szacunek: typowy dzień z ostatnich ${fb && typeof fb.days === 'number' ? fb.days : ''} dni, pomnożony przez ostrożność ${fb && typeof fb.caution === 'number' ? String(fb.caution).replace('.', ',') : ''}. To nie jest prognoza pogody."`;
+      }
       if (!d || typeof d.raw !== 'number' || typeof d.factor !== 'number') return '';
       const f = (x, n) => x.toFixed(n).replace('.', ',');
       const src = d.range === 'solcast' ? 'zakres z Solcast' : d.range === 'historia' ? 'zakres z historii błędów' : 'zakres szacunkowy (za mało historii)';

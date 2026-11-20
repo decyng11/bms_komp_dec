@@ -108,6 +108,10 @@ Parametry falownika, strefy czasowe, alarmy, kopie ustawień, tryby i kreator in
 
 Szczegółowa instrukcja obsługi z opisem każdej zakładki jest w pliku [Instrukcja_EMS_komp-dec.pdf](docs/Instrukcja_EMS_komp-dec.pdf).
 
+## Status kilku instalacji naraz (opcjonalnie)
+
+Jeśli prowadzisz EMS u siebie i u znajomych, skrypt [tools/fleet_status.py](tools/fleet_status.py) pokaże na jednej liście lub stronie HTML, co u kogo „dziś nie działa” i jak wypadła ostatnia ocena planu. Działa poza Home Assistantem (sama biblioteka standardowa Pythona), tylko odczytuje dwa czujniki EMS przez sieć prywatną (np. Tailscale) i niczego nie zmienia. Wymaga zgody znajomego i jego tokenu — token Home Assistanta nie jest „tylko do odczytu”, więc dla znajomego załóż osobne konto bez uprawnień administratora. Szczegóły i przykład pliku konfiguracyjnego są na początku skryptu.
+
 ## Czego potrzebujesz
 
 Home Assistanta w wersji 2024.11 lub nowszej (tyle wpisałem w `hacs.json`, na starszych nie sprawdzałem) i hybrydowego falownika Deye z loggerem Solarman. Falowniki Sofar z magazynem (G3 i hybrydowe) są obsługiwane eksperymentalnie: na start EMS tylko zapisuje w dzienniku, co by ustawił, a zapis włączasz sam, gdy to sprawdzisz. Falownik możesz podłączyć przez integrację ha-solarman albo bezpośrednio do loggera, ale to drugie jest na razie eksperymentalne. Reszta jest opcjonalna: ceny z RCE lub Pstryka, prognoza PV i encja pogody.

@@ -147,7 +147,9 @@ class DeviceController:
                 continue
             rec = st.get(d["id"]) or {}
             sw = self.hass.states.get(d["switch_eid"])
+            cond_ok, cond_why = self.cond_state(d)
             out[d["id"]] = {"mode": d["ctl_mode"], "switch": d["switch_eid"], "state": sw.state if sw else None,
+                            "cond": ({"eid": d["ctl_cond_eid"], "ok": cond_ok, "why": cond_why} if d.get("ctl_cond_eid") else None),
                             "owned": rec.get("cmd") == "on", "manual": bool(rec.get("manual")),
                             "reason": rec.get("reason"), "on_h": round(float(rec.get("on_s") or 0.0) / 3600.0, 2),
                             "window": rec.get("window"), "last": rec.get("last")}
@@ -170,6 +172,23 @@ class DeviceController:
         rec["reason"] = why
         self.rt.log.add("devices", f"{d['name']}: {'włączono' if on else 'wyłączono'} — {why}", "ok")
         self.rt._save_state()  # noqa: SLF001
+
+    def cond_state(self, d: dict) -> tuple[bool, str | None]:
+        """Warunek uruchomienia urządzenia (np. „auto podłączone”): (spełniony, powód niespełnienia).
+
+        Bez warunku zawsze spełniony. Encja niedostępna albo nieznana = niespełniony (lepiej nie włączyć niż włączyć w ciemno)."""
+        eid = str(d.get("ctl_cond_eid") or "")
+        if not eid:
+            return True, None
+        allowed = [x for x in str(d.get("ctl_cond_states") or "on").split(",") if x] or ["on"]
+        st = self.hass.states.get(eid)
+        name = str(((st.attributes or {}).get("friendly_name") if st is not None else None) or eid)
+        if st is None or str(st.state).lower() in ("unknown", "unavailable", "none", ""):
+            return False, f"warunek: {name} niedostępny"
+        cur = str(st.state).strip().lower()
+        if cur in allowed:
+            return True, None
+        return False, f"warunek: {name} = {cur} (potrzebne: {' lub '.join(allowed)})"
 
     def _power_w(self, d: dict) -> float | None:
         eid = d.get("power_eid")
@@ -304,11 +323,15 @@ class DeviceController:
                 want, why = False, f"dzienny limit pracy {limit_h:g} h"
             if want and outage:
                 want, why = False, "zanik sieci"
+            if want:
+                cond_ok, cond_why = self.cond_state(d)
+                if not cond_ok:
+                    want, why = False, str(cond_why)
             rec["reason"] = why
             can_switch = ts - float(rec.get("ts") or 0.0) >= MIN_SWITCH_S
             if want and not is_on and can_switch:
                 await self._switch(d, rec, True, why, now)
-            elif not want and is_on and owned and (can_switch or outage or why.startswith("dzienny limit")):
+            elif not want and is_on and owned and (can_switch or outage or why.startswith(("dzienny limit", "warunek"))):
                 await self._switch(d, rec, False, why, now)
 
     def _held(self, rec: dict, key: str, cond: bool, ts: float) -> bool:

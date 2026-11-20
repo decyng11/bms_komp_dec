@@ -82,6 +82,36 @@ const PAY = JSON.parse(fs.readFileSync('devices_payload.json', 'utf8'));
   await e.q(() => { window.confirm = () => true; __el.shadowRoot.querySelector('[data-dv="del"]').click(); }); await sleep(500);
   const del = await e.q(() => window.__dvSet[1]);
   ok(del && del.length === 2 && !del.some((d) => d.id === 'tv'), 'usunięcie urządzenia');
+  // warunek uruchomienia urządzenia
+  await e.q(() => __el.shadowRoot.querySelector('[data-dv="edit"][data-id="tv"]').click()); await sleep(200);
+  ok(await e.q(() => !!__el.shadowRoot.querySelector('[data-dvf="ctl_cond_eid"]') && !!__el.shadowRoot.querySelector('[data-dvf="ctl_cond_states"]')), 'edytor: pola warunku są');
+  ok(await e.q(() => __el.shadowRoot.querySelector('[data-dvf="ctl_cond_states"]').value) === 'on', 'edytor: domyślny dozwolony stan „on”');
+  await e.q(() => { const R = __el.shadowRoot; R.querySelector('[data-dvf="switch_eid"]').value = 'switch.tv_gniazdko'; R.querySelector('[data-dvf="ctl_mode"]').value = 'cheap'; R.querySelector('[data-dvf="ctl_cond_eid"]').value = 'Auto Podłączone'; });
+  await e.q(() => __el.shadowRoot.querySelector('[data-dv="save"]').click()); await sleep(200);
+  ok(/Encja warunku musi mieć postać/.test(await sr(e, '#dvMsg')), 'zła encja warunku → komunikat');
+  await e.q(() => { const R = __el.shadowRoot; R.querySelector('[data-dvf="switch_eid"]').value = ''; R.querySelector('[data-dvf="ctl_mode"]').value = 'off'; R.querySelector('[data-dvf="ctl_cond_eid"]').value = 'binary_sensor.auto_podlaczone'; });
+  await e.q(() => __el.shadowRoot.querySelector('[data-dv="save"]').click()); await sleep(200);
+  ok(/Warunek działa tylko razem z przełącznikiem/.test(await sr(e, '#dvMsg')), 'warunek bez przełącznika → komunikat');
+  const n0 = await e.q(() => window.__dvSet.length);
+  await e.q(() => { const R = __el.shadowRoot; R.querySelector('[data-dvf="switch_eid"]').value = 'switch.tv_gniazdko'; R.querySelector('[data-dvf="ctl_mode"]').value = 'cheap'; R.querySelector('[data-dvf="ctl_cond_states"]').value = 'on, charging'; });
+  await e.q(() => __el.shadowRoot.querySelector('[data-dv="save"]').click()); await sleep(600);
+  const cs = await e.q((n) => window.__dvSet[n], n0);
+  const tvs = cs && cs.find((d) => d.id === 'tv');
+  ok(tvs && tvs.ctl_cond_eid === 'binary_sensor.auto_podlaczone' && tvs.ctl_cond_states === 'on, charging' && tvs.switch_eid === 'switch.tv_gniazdko', 'zapis: warunek trafia do usługi devices_set');
+  // kafelek: powód niespełnionego warunku i „warunek spełniony”
+  await e.q(() => {
+    const S = (v, a) => ({ state: String(v), attributes: a || {}, last_updated: 'x' });
+    const dev = Object.assign({}, window.__dvDev || {});
+    window.__states['switch.tv_gniazdko'] = S('off');
+    __el._dvS().data.devices = (__el._dvS().data.devices || []).map((d) => d.id === 'tv' ? Object.assign({}, d, { switch_eid: 'switch.tv_gniazdko', ctl_mode: 'cheap', ctl_cond_eid: 'binary_sensor.auto_podlaczone' }) : d);
+    __el._dvS().data.control = { enabled: true, devices: { tv: { reason: 'warunek: Auto podłączone = off (potrzebne: on)', cond: { eid: 'binary_sensor.auto_podlaczone', ok: false } } } };
+    __el.hass = __el._hass;
+  });
+  const tvDev = await e.q(() => __el._dvDevs().find((d) => d.id === 'tv'));
+  const chip = await e.q((d) => __el._dvCtlChip(d), tvDev);
+  ok(/warunek: Auto podłączone = off \(potrzebne: on\)/.test(chip) && !/warunek spełniony/.test(chip), 'kafelek: powód niespełnionego warunku: ' + chip);
+  await e.q(() => { __el._dvS().data.control.devices.tv = { reason: 'czeka na tańszą godzinę', cond: { eid: 'binary_sensor.auto_podlaczone', ok: true, why: null } }; });
+  ok(/warunek spełniony/.test(await e.q((d) => __el._dvCtlChip(d), tvDev)), 'kafelek: „warunek spełniony”');
   ok(e.errs.length === 0, 'brak błędów JS ' + JSON.stringify(e.errs));
   const el = await e.page.evaluateHandle(() => __el.shadowRoot.querySelector('#devRoot'));
   await e.page.setViewportSize({ width: 1100, height: 1600 }); await sleep(200);

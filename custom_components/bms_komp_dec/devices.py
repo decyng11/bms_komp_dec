@@ -90,6 +90,8 @@ DRIVERS = ("temp", "weekday", "flat")
 _ID_RE = re.compile(r"^[a-z0-9_]{1,40}$")
 _EID_RE = re.compile(r"^sensor\.[a-z0-9_]+$")
 _SWITCH_RE = re.compile(r"^(switch|input_boolean)\.[a-z0-9_]+$")
+_COND_RE = re.compile(r"^[a-z_]+\.[a-z0-9_]+$")               # encja warunku: dowolna domena, tylko do odczytu stanu
+COND_MAX_STATES = 6
 CTL_MODES = ("off", "pv", "cheap", "neg")
 _POWER_UNITS = {"w": 1.0, "kw": 1000.0, "mw": 1_000_000.0}
 _ENERGY_UNITS = {"wh": 0.001, "kwh": 1.0, "mwh": 1000.0}
@@ -170,7 +172,18 @@ def sanitize_device(raw: Any) -> dict[str, Any] | None:
         # najtańsze godziny: dozwolone godziny z przerwami (auto, bojler) i termin „gotowe do godziny” (0 = bez terminu)
         "ctl_split": b("ctl_split", False) if _SWITCH_RE.match(sw) else False,
         "ctl_ready_h": int(_clamp(raw.get("ctl_ready_h"), 0.0, 23.0, 0.0)),
+        # warunek uruchomienia: EMS włącza urządzenie tylko, gdy encja ma jeden z dozwolonych stanów (np. auto podłączone = on)
+        **_sanitize_cond(raw, bool(_SWITCH_RE.match(sw))),
     }
+
+
+def _sanitize_cond(raw: dict[str, Any], has_switch: bool) -> dict[str, Any]:
+    eid = str(raw.get("ctl_cond_eid") or "").strip().lower()
+    if not has_switch or not _COND_RE.match(eid):
+        return {"ctl_cond_eid": "", "ctl_cond_states": "on"}
+    parts = [re.sub(r"\s+", " ", p).strip().lower()[:30] for p in str(raw.get("ctl_cond_states") or "on").split(",")]
+    states = list(dict.fromkeys(p for p in parts if p))[:COND_MAX_STATES] or ["on"]
+    return {"ctl_cond_eid": eid, "ctl_cond_states": ",".join(states)}
 
 
 def sanitize_list(items: Any) -> list[dict[str, Any]]:

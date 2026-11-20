@@ -298,7 +298,7 @@
         let txt, cls = '';
         if (!c.enabled) { txt = `🎛 ${mode} · sterowanie wyłączone`; cls = 'opacity:.7;'; }
         else if (st.manual) txt = '✋ przełączone ręcznie — EMS nie steruje do jutra';
-        else txt = `🎛 ${mode} · ${on ? 'wł.' : 'wył.'}${st.reason ? ' · ' + st.reason : ''}`;
+        else txt = `🎛 ${mode} · ${on ? 'wł.' : 'wył.'}${st.reason ? ' · ' + st.reason : ''}${st.cond && st.cond.ok === true ? ' · warunek spełniony' : ''}`;
         return `<div class="s" style="margin-top:4px;${cls}">${dvEsc(txt)}</div>`;
       },
       _dvCtlBar() {
@@ -353,6 +353,7 @@
         const pw = ents.filter((x) => ['w', 'kw'].includes(unitOf(x))).sort();
         const en = ents.filter((x) => ['wh', 'kwh', 'mwh'].includes(unitOf(x))).sort();
         const sws = Object.keys(this._hass.states).filter((x) => /^(switch|input_boolean)\./.test(x) && !/^switch\.(bms_|inverter)/.test(x) && !/inverter|falownik/.test(x)).sort();
+        const conds = Object.keys(this._hass.states).filter((x) => /^(binary_sensor|input_boolean|person|device_tracker|lock)\./.test(x)).sort().slice(0, 300);
         const rooms = Array.from(new Set(this._dvDevs().map((d) => d.room).filter(Boolean)));
         const catSel = `<select data-dvf="category">${groups.map((g) => `<optgroup label="${dvEsc(g)}">${cats.filter((c) => c.group === g).map((c) => `<option value="${dvEsc(c.key)}" ${e.category === c.key ? 'selected' : ''}>${dvEsc(c.icon)} ${dvEsc(c.name)}</option>`).join('')}</optgroup>`).join('')}</select>`;
         const chk = (k, l) => `<label class="chk"><input type="checkbox" data-dvf="${k}" ${e[k] ? 'checked' : ''}/> ${l}</label>`;
@@ -393,7 +394,10 @@
             ${num('ctl_ready_h', 'Najtańsze godziny: gotowe do godziny (1–23, 0 = bez terminu)', 1)}${chk('ctl_split', 'Najtańsze godziny mogą być rozdzielone (auto, bojler — nie tylko jeden blok)')}
             ${num('ctl_neg_price', 'Ujemna cena: włączaj, gdy cena zakupu poniżej (zł/kWh)', 0.01)}${chk('ctl_neg', 'Włączaj też przy ujemnej cenie zakupu (dodatek do nadwyżki PV / najtańszych godzin)')}
             ${chk('ctl_no_shed', 'Nie dotyczy oszczędzania energii (nie wyłączaj przy niskim SOC)')}
+            <label>Warunek: encja (np. auto podłączone)<input type="text" list="dvCond" data-dvf="ctl_cond_eid" placeholder="binary_sensor.auto_podlaczone" value="${dvEsc(e.ctl_cond_eid || '')}"/><datalist id="dvCond">${conds.map((x) => `<option value="${dvEsc(x)}">`).join('')}</datalist></label>
+            <label>Warunek: dozwolone stany (po przecinku)<input type="text" maxlength="120" data-dvf="ctl_cond_states" placeholder="on" value="${dvEsc(e.ctl_cond_states || 'on')}"/></label>
           </div>
+          <div class="dv-note">Warunek: EMS włączy urządzenie tylko wtedy, gdy wskazana encja ma jeden z dozwolonych stanów (np. <code>binary_sensor.auto_podlaczone</code> = <code>on</code>). Gdy warunek przestanie być spełniony albo encja będzie niedostępna, EMS nie włącza urządzenia, a włączone przez siebie wyłącza od razu. Zostaw puste, jeśli warunku nie potrzebujesz.</div>
           <div class="dv-note">Ujemna cena: gdy sprzedawca płaci za pobór (cena zakupu poniżej progu, domyślnie 0), EMS włącza urządzenie po 5 minutach stałej ceny i wyłącza je, gdy cena wróci. Wymaga ceny zakupu z godzinowej taryfy (np. Pstryk).
             Termin „gotowe do godziny”: np. auto naładowane na 7:00 — EMS wybiera najtańsze godziny tak, żeby skończyć przed tą porą, i nie przestawia ich w trakcie.</div>
           <div class="dv-note">EMS włącza i wyłącza przełącznik tylko przy włączonym „Sterowaniu urządzeniami” (przełącznik nad listą urządzeń). Zmienia stan najwyżej co 10 minut, a warunek musi trwać 5 minut.
@@ -413,7 +417,7 @@
         if (a === 'range') { s.range = t.dataset.r; this._dvRender(); }
         else if (a === 'sel') { if (ev.target.closest('[data-dv="edit"]')) return; s.sel = s.sel === t.dataset.id ? 'all' : t.dataset.id; this._dvRender(); }
         else if (a === 'reload') { s.fetchedAt = 0; s.statsKey = ''; this._dvLoad(); }
-        else if (a === 'add') { s.edit = Object.assign(this._dvDefaultsFor('other', {}), { _new: true, room: '', power_eid: '', energy_eid: '', switch_eid: '', ctl_mode: 'off', ctl_power_w: 1000, ctl_soc: 90, ctl_hours: 2, ctl_max_h: 0, ctl_ready_h: 0, ctl_split: false, ctl_neg: false, ctl_neg_price: 0 }); this._dvRender(); }
+        else if (a === 'add') { s.edit = Object.assign(this._dvDefaultsFor('other', {}), { _new: true, room: '', power_eid: '', energy_eid: '', switch_eid: '', ctl_mode: 'off', ctl_power_w: 1000, ctl_soc: 90, ctl_hours: 2, ctl_max_h: 0, ctl_ready_h: 0, ctl_split: false, ctl_neg: false, ctl_neg_price: 0, ctl_cond_eid: '', ctl_cond_states: 'on' }); this._dvRender(); }
         else if (a === 'edit') { const d = this._dvDevs().find((x) => x.id === t.dataset.id); if (d) { s.edit = Object.assign({}, d); this._dvRender(); } }
         else if (a === 'cancel') { s.edit = null; this._dvRender(); }
         else if (a === 'save') this._dvSave();
@@ -470,6 +474,8 @@
         if (!e.power_eid && !e.energy_eid) { if (msg) msg.textContent = 'Wskaż encję mocy (W) albo energii (kWh).'; return; }
         if (bad(e.power_eid) || bad(e.energy_eid)) { if (msg) msg.textContent = 'Encja musi mieć postać sensor.nazwa_encji.'; return; }
         if (e.switch_eid && !/^(switch|input_boolean)\.[a-z0-9_]+$/.test(e.switch_eid)) { if (msg) msg.textContent = 'Przełącznik musi mieć postać switch.nazwa albo input_boolean.nazwa.'; return; }
+        if (e.ctl_cond_eid && !/^[a-z_]+\.[a-z0-9_]+$/.test(String(e.ctl_cond_eid).toLowerCase())) { if (msg) msg.textContent = 'Encja warunku musi mieć postać domena.nazwa_encji (np. binary_sensor.auto_podlaczone).'; return; }
+        if (e.ctl_cond_eid && !e.switch_eid) { if (msg) msg.textContent = 'Warunek działa tylko razem z przełącznikiem urządzenia.'; return; }
         if (e.ctl_mode && e.ctl_mode !== 'off' && !e.switch_eid) { if (msg) msg.textContent = 'Żeby EMS sterował urządzeniem, wskaż jego przełącznik.'; return; }
         if (!String(e.name || '').trim()) { if (msg) msg.textContent = 'Podaj nazwę.'; return; }
         const list = this._dvDevs().filter((d) => d.id !== e.id);

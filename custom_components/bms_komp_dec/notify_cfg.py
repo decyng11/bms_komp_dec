@@ -42,6 +42,8 @@ CATALOG: dict[str, tuple] = {
     "set_off": ("Ceny i plan", "Zestaw potrzebny w planie jest wyłączony", "Plan przewiduje okno (ładowanie z sieci albo sprzedaż) w ciągu 90 minut, a przełącznik zestawu jest wyłączony — okno nie wystartuje.", True, True, 720, False, None),
     "rce_high": ("Ceny i plan", "Wysoka cena sprzedaży jutro", "Jutro cena RCE przekracza próg; podaje godzinę i plan sprzedaży.", True, True, 1440, False,
                  ("próg", "zł/kWh", 1.0, 0.1, 5.0, 0.05)),
+    "plan_tomorrow": ("Ceny i plan", "Plan na jutro", "Po opublikowaniu cen na jutro (ok. 16:30): kiedy ładowanie z sieci, kiedy sprzedaż z baterii, ile na tym zarobisz i ile PV jest prognozowane — jedno krótkie zdanie, raz na dobę. Domyślnie tylko w skrzynce (dzwonek).", True, False, 1440, False, None),
+    "pv_caution": ("Ceny i plan", "Propozycja: ostrożność prognozy PV", "Z ocen dobowych wynika, że prognoza PV bywa stale zawyżona (albo zaniżona) — EMS proponuje zmianę ostrożności planu. Nic nie zmienia sam; zatwierdzasz jednym kliknięciem (Zysk i log → Trafność prognoz). Najwyżej raz w tygodniu.", True, False, 10080, False, None),
     "buy_prices_missing": ("Ceny i plan", "Brak cen zakupu (taryfa dynamiczna)", "Taryfa dynamiczna, a encja zakupu nie podaje cen godzinowych na dziś.", True, True, 1440, False, None),
     "pv_forecast_missing": ("Ceny i plan", "Brak prognozy PV", "Po 18:00 brak godzinowej prognozy PV na jutro (Solcast / Forecast.Solar).", True, True, 1440, False, None),
     "weak_pv": ("Ceny i plan", "Słaba prognoza PV na jutro", "Prognoza PV na jutro poniżej progu (z informacją o planowanym ładowaniu z sieci).", True, True, 1440, False,
@@ -59,6 +61,9 @@ CATALOG: dict[str, tuple] = {
     "grid_charge": ("Działanie", "Ładowanie z sieci: start i koniec", "Harmonogram włączył albo wyłączył ładowanie z sieci.", False, True, 0, False, None),
     "price_reaction": ("Działanie", "Reakcja na niską cenę", "Eksport wstrzymany przy niskiej/ujemnej cenie RCE i wznowiony.", False, True, 0, False, None),
     "data_repair": ("Działanie", "Naprawiono uszkodzone dane", "Plik zapisu (księga zysków, statystyki, historia zużycia…) był uszkodzony — EMS go naprawił przy starcie i zachował kopię oryginału.", True, True, 0, False, None),
+    "night_draw": ("Działanie", "Nocny pobór wyższy niż zwykle", "Rano: średni pobór domu w nocy (1:00–5:00) jest wyraźnie wyższy niż zwykle — coś zostało włączone na noc. Raz na dobę.", True, True, 1440, False,
+                   ("ile razy więcej niż zwykle", "×", 1.6, 1.2, 5.0, 0.1)),
+    "profile_plan": ("Działanie", "Profil z kalendarza: start i koniec", "Profil zaplanowany na daty (np. urlop) włączył się albo się skończył, i co przywrócono.", True, True, 0, False, None),
     "storm": ("Działanie", "Tryb burzowy", "Włączenie i automatyczne wyłączenie trybu burzowego.", True, True, 5, False, None),
     # --- urządzenia (zakładka „Urządzenia”; przy każdym urządzeniu można też wyłączyć jego powiadomienia)
     "device_cycle": ("Urządzenia", "Koniec cyklu urządzenia", "Pralka, zmywarka, suszarka… skończyła — czas, kWh i koszt cyklu.", True, True, 0, False, None),
@@ -84,8 +89,8 @@ PRIORITY: dict[str, int] = {
     "command_unconfirmed": 1, "drift": 1, "guard_action": 1, "grid_limit": 1, "grid_charge_stalled": 1, "plan_floor": 1, "set_off": 1,
     "morning_guard": 1, "grid_charge_target": 1,
     "rce_missing": 2, "data_repair": 2, "buy_prices_missing": 2, "pv_forecast_missing": 2, "plan_error": 2, "auto_apply": 2, "storm": 2, "battery_health": 2,
-    "device_anomaly": 2, "device_shed": 2, "weak_pv": 2, "rce_negative": 2, "summary_daily": 2, "summary_weekly": 2, "summary_monthly": 2,
-    "rce_high": 3, "load_above": 3, "high_import": 3, "battery_full": 3, "proposal": 3, "schedule_skipped": 3, "sale": 3, "grid_charge": 3,
+    "device_anomaly": 2, "device_shed": 2, "profile_plan": 2, "night_draw": 2, "weak_pv": 2, "rce_negative": 2, "summary_daily": 2, "summary_weekly": 2, "summary_monthly": 2,
+    "rce_high": 3, "plan_tomorrow": 3, "pv_caution": 3, "load_above": 3, "high_import": 3, "battery_full": 3, "proposal": 3, "schedule_skipped": 3, "sale": 3, "grid_charge": 3,
     "price_reaction": 3, "device_cycle": 3, "device_hint": 3, "device_plan": 3, "devices_unknown": 3,
 }
 PRIO_LABELS = {1: "krytyczne", 2: "ważne", 3: "info"}

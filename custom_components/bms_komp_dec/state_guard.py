@@ -14,7 +14,7 @@ FLAT_DICTS = ("price_reaction", "notified", "alarms_active", "soc_day", "soc_pre
               "grid_batt", "live_apply")
 # słowniki o dowolnej zawartości
 DICTS = ("accuracy_fc", "last_applied", "notify_cfg", "grid_target_plan", "auto_skip", "sale_plan", "sale_actual", "sale_power_plan", "dev_ctl",
-         "plan_sig", "dev_done", "rejected_props", "analysis_cfg", "zeroed", "day_reviews")
+         "plan_sig", "dev_done", "rejected_props", "analysis_cfg", "zeroed", "day_reviews", "arb_proof", "pv_caution")
 LISTS = ("accuracy", "watches", "overrides", "auto_enabled", "auto_disabled", "auto_hist", "inbox", "settings_log")
 FLOATS = ("today_charge", "today_pv", "yesterday_charge", "yesterday_pv")
 INTS = ("inbox_seq", "settings_log_seq")
@@ -106,6 +106,33 @@ def sanitize(state: dict[str, Any]) -> list[str]:
         if len(good) != len(revs):
             state["day_reviews"] = good
             fixed.append("day_reviews")
+    arb = state.get("arb_proof")
+    if isinstance(arb, dict):
+        from .arbproof import clean as arb_clean
+        good_arb = arb_clean(arb)
+        if good_arb != arb:
+            state["arb_proof"] = good_arb
+            fixed.append("arb_proof")
+    cps = state.get("custom_profiles")
+    if cps is not None:
+        from .profiles import clean_custom
+        good_cp = clean_custom(cps)
+        if good_cp != cps:
+            state["custom_profiles"] = good_cp
+            fixed.append("custom_profiles")
+    if state.get("profile_plan") is not None:
+        from .profiles import clean_plan
+        good_pl = clean_plan(state.get("profile_plan"))
+        if good_pl != state.get("profile_plan"):
+            state["profile_plan"] = good_pl
+            fixed.append("profile_plan")
+    pvc = state.get("pv_caution")
+    if isinstance(pvc, dict) and pvc:
+        from .pvcaution import clean_state as pvc_clean
+        good_pvc = pvc_clean(pvc)
+        if good_pvc != pvc:
+            state["pv_caution"] = good_pvc
+            fixed.append("pv_caution")
     acc = state.get("accuracy")
     if isinstance(acc, list) and any(not isinstance(x, dict) for x in acc):
         state["accuracy"] = [x for x in acc if isinstance(x, dict)]

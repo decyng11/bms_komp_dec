@@ -61,7 +61,7 @@
 
     Object.assign(BmsPanel.prototype, {
       _exS() {
-        if (!this._ex) this._ex = { ins: { data: null, at: 0, loading: false, err: '', period: 'last30' }, planOverride: null, rep: { year: null, month: null, data: null, loading: false, err: '' }, wiz: { state: 'idle', data: null, err: '' }, prof: { data: null, at: 0, loading: false, err: '', sel: null, busy: false, msg: '' }, keys: {} };
+        if (!this._ex) this._ex = { ins: { data: null, at: 0, loading: false, err: '', period: 'last30', cbusy: false, cmsg: '' }, planOverride: null, rep: { year: null, month: null, data: null, loading: false, err: '' }, wiz: { state: 'idle', data: null, err: '' }, prof: { data: null, at: 0, loading: false, err: '', sel: null, busy: false, msg: '', name: '', icon: '', dFrom: '', dTo: '' }, keys: {} };
         return this._ex;
       },
       _exCss() {
@@ -525,11 +525,53 @@
             if (!b) return;
             if (b.dataset.exi === 'period') { s.period = b.dataset.p; this._exInsights(); }
             else if (b.dataset.exi === 'reload') { s.at = 0; this._exInsights(); }
+            else if (b.dataset.exi === 'cau-apply') this._exCautionAct('pv_caution_apply');
+            else if (b.dataset.exi === 'cau-revert') this._exCautionAct('pv_caution_revert');
+            else if (b.dataset.exi === 'cau-dismiss') this._exCautionAct('pv_caution_dismiss');
           });
         });
-        const key = JSON.stringify([s.at, s.err, s.period, !!s.data, TC('text')]);
+        const key = JSON.stringify([s.at, s.err, s.period, !!s.data, TC('text'), s.cbusy, s.cmsg, this._dgIsAdmin(), JSON.stringify((s.data && s.data.pv_caution) || null)]);
         if (sb && sb.dataset.exKey !== key) { sb.dataset.exKey = key; sb.innerHTML = this._exSavHtml(); }
         if (ab && ab.dataset.exKey !== key) { ab.dataset.exKey = key; ab.innerHTML = this._exAccHtml(); }
+      },
+      async _exCautionAct(service) {
+        const s = this._exS().ins;
+        if (s.cbusy) return;
+        s.cbusy = true; s.cmsg = ''; this._exInsights();
+        try {
+          const r = exResp(await exCall(this, service, {})) || {};
+          if (r.pv_caution && typeof r.pv_caution === 'object' && s.data) s.data.pv_caution = r.pv_caution;
+          if (service === 'pv_caution_apply') s.cmsg = `ok:Ostrożność prognozy PV ustawiona na ${exFmt(r.to, 0)}%. Plan przeliczy się przy najbliższej okazji; możesz to cofnąć.`;
+          else if (service === 'pv_caution_revert') s.cmsg = `ok:Przywrócono ostrożność ${exFmt(r.to, 0)}%.`;
+          else s.cmsg = 'ok:Propozycja odrzucona — wróci najwcześniej za 7 dni, jeśli dane nadal ją uzasadnią.';
+        } catch (e) { s.cmsg = 'err:' + exErr(e); }
+        s.cbusy = false;
+        this._exInsights();
+      },
+      // Autokorekta ostrożności prognozy PV: propozycja z ocen dobowych (zatwierdza admin), cofnięcie ostatniej zmiany
+      _exCautionHtml(s) {
+        const pc = s.data && s.data.pv_caution && typeof s.data.pv_caution === 'object' ? s.data.pv_caution : null;
+        if (!pc) return '';
+        const admin = this._dgIsAdmin();
+        const cur = exNum(pc.current);
+        const prop = pc.proposal && typeof pc.proposal === 'object' && typeof pc.proposal.text === 'string' && exNum(pc.proposal.to) !== null ? pc.proposal : null;
+        const last = pc.can_revert && pc.last && typeof pc.last === 'object' ? pc.last : null;
+        const msg = s.cmsg ? (s.cmsg.startsWith('ok:') ? `<div class="ex-chip ok" data-role="pv-caution-msg" style="display:block;border-radius:12px;padding:8px 12px;margin-bottom:8px;">${exEsc(s.cmsg.slice(3))}</div>`
+          : `<div class="ex-chip bad" data-role="pv-caution-msg" style="display:block;border-radius:12px;padding:8px 12px;margin-bottom:8px;">Nie udało się: ${exEsc(s.cmsg.slice(4))}</div>`) : '';
+        const dis = s.cbusy ? 'disabled' : '';
+        const btn = (a, label, primary) => `<button class="btn" data-exi="${a}" ${dis} style="padding:6px 14px;font-size:12px;${primary ? 'background:var(--accent,#0a84ff);color:#fff;' : ''}">${label}</button>`;
+        let body = '';
+        if (prop) {
+          body = `<div class="ex-chip warn" data-role="pv-caution" style="display:block;border-radius:12px;padding:10px 12px;">
+              <div style="font-weight:600;">☀️ Propozycja: ostrożność prognozy PV ${exFmt(prop.from, 0)}% → ${exFmt(prop.to, 0)}%</div>
+              <div style="font-size:12px;margin-top:4px;color:var(--text);">${exEsc(prop.text)}</div>
+              <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px;">${admin ? btn('cau-apply', `Zastosuj (${exFmt(prop.to, 0)}%)`, true) + btn('cau-dismiss', 'Nie teraz') : '<span style="font-size:12px;color:var(--muted);">Zatwierdzić może administrator.</span>'}</div></div>`;
+        } else if (last) {
+          body = `<div class="ex-note" data-role="pv-caution">☀️ Ostrożność prognozy PV: ${exFmt(last.to, 0)}% (zmieniona z ${exFmt(last.from, 0)}% dnia ${exEsc(exDay(last.date))} na podstawie ocen dobowych).${admin ? `<div style="margin-top:6px;">${btn('cau-revert', `Cofnij do ${exFmt(last.from, 0)}%`)}</div>` : ''}</div>`;
+        } else if (cur !== null) {
+          body = `<div class="ex-note" data-role="pv-caution">☀️ Ostrożność prognozy PV w planie: ${exFmt(cur, 0)}%. EMS sprawdza, czy prognoza PV bywa stale zawyżona albo zaniżona; gdy tak, pojawi się tu propozycja zmiany do zatwierdzenia jednym kliknięciem (z możliwością cofnięcia).</div>`;
+        }
+        return body || msg ? `<div style="margin-bottom:14px;">${msg}${body}</div>` : '';
       },
       _exSavHtml() {
         const s = this._exS().ins;
@@ -636,7 +678,16 @@
           ? `<div data-role="plan-review" style="margin-bottom:14px;"><div style="font-size:12px;font-weight:600;margin-bottom:4px;">📋 Ocena planu po dobie</div>
               <div style="font-size:12px;color:var(--muted);margin-bottom:6px;">${tallyTxt}</div>${rv.map(revRow).join('')}</div>`
           : `<div class="ex-note" data-role="plan-review">📋 Ocena planu po dobie: pierwsza pojawi się po północy — EMS porówna wtedy plan z rana (prognoza PV, zużycie, poziom baterii, sprzedaż) z tym, co się faktycznie stało, i wskaże, co zawiodło.</div>`;
-        return `${reviewHtml}<div class="ex-tiles">${tiles.join('')}</div>${hzTable}${hzTune}${charts}
+        const ap = (Array.isArray(s.data.arb_proof) ? s.data.arb_proof : []).filter((r) => r && typeof r === 'object' && typeof r.date === 'string').slice(0, 7);
+        const apCol = (l) => l === 'ok' ? 'var(--green)' : (l === 'bad' ? 'var(--red)' : (l === 'warn' ? 'var(--orange)' : 'var(--muted)'));
+        const apIco = (l) => l === 'ok' ? '✔' : (l === 'bad' ? '⚠' : (l === 'warn' ? '!' : '–'));
+        const apRows = ap.map((r) => `<tr data-level="${exEsc(r.level || '')}"><td>${dDay(r.date)}</td><td style="text-align:right;">${exFmt(r.in, 1)} kWh</td><td style="text-align:right;">${exFmt(r.out, 1)} kWh</td><td style="text-align:right;font-weight:600;">${exFmt(r.leak, 1)} kWh</td><td style="color:${apCol(r.level)};">${apIco(r.level)} ${exEsc(r.text || '')}</td></tr>`).join('');
+        const arbHtml = ap.length
+          ? `<div data-role="arb-proof" style="margin-bottom:14px;"><div style="font-size:12px;font-weight:600;margin-bottom:4px;">🔒 Dowód: nie sprzedajemy prądu z sieci</div>
+              <div style="font-size:12px;color:var(--muted);margin-bottom:6px;">Zakaz „ładuj z sieci → sprzedaj”: kolumna „z sieci sprzedane” ma być 0. To górna granica — liczymy, że do sieci schodzi najpierw energia, którą bateria wcześniej pobrała z sieci.</div>
+              <div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-size:12px;"><thead><tr style="text-align:left;color:var(--muted);"><th>Dzień</th><th style="text-align:right;">Z sieci do baterii</th><th style="text-align:right;">Z baterii do sieci</th><th style="text-align:right;">Z sieci sprzedane</th><th>Wynik</th></tr></thead><tbody>${apRows}</tbody></table></div></div>`
+          : `<div class="ex-note" data-role="arb-proof">🔒 Dowód braku arbitrażu: od teraz EMS liczy każdej doby, ile energii poszło z sieci do baterii, ile z baterii do sieci i ile z tego mogło pochodzić z sieci (ma być 0). Pierwszy wiersz pojawi się, gdy bateria zacznie się ładować z sieci albo oddawać energię do sieci.</div>`;
+        return `${this._exCautionHtml(s)}${reviewHtml}${arbHtml}<div class="ex-tiles">${tiles.join('')}</div>${hzTable}${hzTune}${charts}
           <div class="ex-note">Błąd to średnia różnica prognozy i wykonania w procentach (dni z co najmniej 0,5 kWh), z ostatnich 30 dni. Prognoza PV jest zapisywana rano (od 6:00) dla każdego z 7 dni do przodu, prognoza zużycia — dzień wcześniej.
             Korekta PV jest liczona osobno dla każdego dnia do przodu (mediana wykonania do prognozy z 30 dni, w granicach 0,5–1,4), uwzględnia stały wzorzec godzinowy i poprawia dzisiejszy dzień na podstawie godzin, które już minęły.
             Dni, w których bateria była pełna i falownik ucinał produkcję, nie uczą modelu. „Błąd po korekcie” liczony jest z prognoz faktycznie wydanych po korekcie, więc pokazuje, czy korekta pomaga. Zakres to typowy błąd tego dnia.</div>`;
@@ -662,10 +713,27 @@
             else if (a === 'apply') this._exProfAct('profile_apply', { id: b.dataset.id });
             else if (a === 'revert') this._exProfAct('profile_revert', {});
             else if (a === 'reload') { ps.at = 0; this._exProf(); }
+            else if (a === 'schedule') this._exProfAct('profile_schedule', { id: b.dataset.id, from: ps.dFrom, to: ps.dTo });
+            else if (a === 'plan-clear') this._exProfAct('profile_schedule_clear', {});
+            else if (a === 'save') this._exProfAct('profile_save', { name: ps.name, icon: ps.icon || undefined });
+            else if (a === 'delete') this._exProfAct('profile_delete', { id: b.dataset.id });
           });
+          // pola formularza zapisują wartość bez przerysowania (żeby nie gubić fokusu); data i ikona przerysowują, bo zmieniają stan przycisków
+          const onField = (ev) => {
+            const f = ev.target && ev.target.closest ? ev.target.closest('[data-pf-in]') : null;
+            if (!f) return;
+            const ps = this._exS().prof, k = f.dataset.pfIn;
+            if (k === 'name') ps.name = String(f.value || '').slice(0, 24);
+            else if (k === 'icon') ps.icon = String(f.value || '');
+            else if (k === 'from') ps.dFrom = String(f.value || '');
+            else if (k === 'to') ps.dTo = String(f.value || '');
+            if (ev.type === 'change' && k !== 'name') this._exProf();
+          };
+          box.addEventListener('input', onField);
+          box.addEventListener('change', onField);
         }
         if (!s.loading && !s.busy && Date.now() - s.at > 120000) this._exProfLoad();
-        const key = JSON.stringify([s.at, s.err, s.sel, s.busy, s.msg, !!s.data, this._dgIsAdmin(), TC('text')]);
+        const key = JSON.stringify([s.at, s.err, s.sel, s.busy, s.msg, !!s.data, this._dgIsAdmin(), TC('text'), s.icon, s.dFrom, s.dTo]);
         if (box.dataset.exKey === key) return;
         box.dataset.exKey = key;
         box.innerHTML = this._exProfHtml();
@@ -684,11 +752,17 @@
         s.busy = true; s.msg = ''; this._exProf();
         try {
           const r = exResp(await exCall(this, service, data)) || {};
-          if (Array.isArray(r.profiles)) { s.data = { profiles: r.profiles, active: r.active || null }; s.at = Date.now(); }
-          s.sel = null;
+          if (Array.isArray(r.profiles)) { s.data = { profiles: r.profiles, active: r.active || null, plan: r.plan || null, custom_limit: r.custom_limit, icons: r.icons, custom_keys: r.custom_keys }; s.at = Date.now(); }
           const nm = (s.data && s.data.active && s.data.active.name) || '';
+          const planNm = (s.data && s.data.plan && s.data.plan.name) || '';
           if (service === 'profile_apply') s.msg = `ok:Profil „${nm}” włączony — zmieniono ${exFmt(r.changed, 0)} ustawień${(r.skipped || []).length ? `, pominięto ${r.skipped.length} (brak encji lub zapis nie zadziałał)` : ''}.`;
-          else s.msg = `ok:Przywrócono ${exFmt(r.restored, 0)} ustawień${(r.kept || []).length ? `; ${r.kept.length} zostawiono, bo zmieniłeś je ręcznie` : ''}.`;
+          else if (service === 'profile_revert') s.msg = `ok:Przywrócono ${exFmt(r.restored, 0)} ustawień${(r.kept || []).length ? `; ${r.kept.length} zostawiono, bo zmieniłeś je ręcznie` : ''}.`;
+          else if (service === 'profile_save') { s.msg = r.replaced ? 'ok:Własny profil nadpisany bieżącymi ustawieniami.' : 'ok:Zapisano własny profil z bieżących ustawień.'; s.name = ''; }
+          else if (service === 'profile_delete') s.msg = 'ok:Własny profil usunięty' + (r.dropped_plan ? ' razem z jego planem.' : '.');
+          else if (service === 'profile_schedule') s.msg = `ok:Zaplanowano profil „${planNm}” od ${exDay(s.dFrom)} do ${exDay(s.dTo)} (włącza się sam, po ostatnim dniu wraca do poprzednich ustawień).`;
+          else s.msg = 'ok:Plan profilu anulowany.';
+          if (service !== 'profile_save') s.sel = null;
+          if (service === 'profile_schedule') { s.dFrom = ''; s.dTo = ''; }
         } catch (e) { s.msg = 'err:' + exErr(e); }
         s.busy = false;
         this._exProf();
@@ -705,6 +779,12 @@
         const when = (iso) => { const d = new Date(iso); return isFinite(d) ? d.toLocaleString('pl-PL', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : ''; };
         const msg = s.msg ? (s.msg.startsWith('ok:') ? `<div class="ex-chip ok" style="display:block;border-radius:12px;padding:8px 12px;margin-bottom:10px;">${exEsc(s.msg.slice(3))}</div>`
           : `<div class="ex-chip bad" style="display:block;border-radius:12px;padding:8px 12px;margin-bottom:10px;">Nie udało się: ${exEsc(s.msg.slice(4))}</div>`) : '';
+        const plan = s.data.plan && typeof s.data.plan === 'object' && s.data.plan.id && /^\d{4}-\d{2}-\d{2}$/.test(String(s.data.plan.from || '')) && /^\d{4}-\d{2}-\d{2}$/.test(String(s.data.plan.to || '')) ? s.data.plan : null;
+        const planBanner = plan
+          ? `<div data-role="profile-plan" style="background:var(--surface);border-radius:12px;padding:10px 12px;margin-bottom:12px;font-size:12px;line-height:1.5;">
+              📅 ${plan.status === 'active' ? 'Trwa zaplanowany profil' : 'Zaplanowany profil'}: <b>${exEsc(plan.name || plan.id)}</b> od ${exEsc(exDay(plan.from))} do ${exEsc(exDay(plan.to))} (włącznie)${plan.status === 'active' ? '' : ' — włączy się sam pierwszego dnia'}. Po ostatnim dniu ustawienia wrócą do poprzednich.
+              ${admin ? `<div style="margin-top:6px;"><button type="button" class="btn" data-pf="plan-clear" style="padding:6px 12px;font-size:12px;" ${s.busy ? 'disabled' : ''}>${plan.status === 'active' ? 'Zakończ teraz' : 'Anuluj plan'}</button></div>` : ''}</div>`
+          : '';
         let banner = '';
         if (act) {
           const rs = (Array.isArray(act.restore) ? act.restore : []).map((r) => `<div style="color:var(--muted);">• ${exEsc(r.label)}: ${exEsc(r.now_text)} → ${exEsc(r.prev_text)}</div>`).join('');
@@ -719,6 +799,7 @@
         const chips = `<div style="display:flex;gap:8px;flex-wrap:wrap;">${profiles.map((p) => `<button type="button" class="btn" data-pf="pick" data-id="${exEsc(p.id)}" aria-pressed="${s.sel === p.id}"
             style="padding:10px 16px;flex-direction:row;gap:8px;${p.active ? 'outline:2px solid var(--green);' : (s.sel === p.id ? 'outline:2px solid var(--accent,#0a84ff);' : '')}"><span style="font-size:16px;">${exEsc(p.icon || '')}</span><span class="label">${exEsc(p.name)}${p.active ? ' ✓' : ''}</span></button>`).join('')}</div>`;
         let prev = '';
+        const todayIso = (() => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; })();
         const sel = profiles.find((p) => p.id === s.sel);
         if (sel) {
           const rows = (Array.isArray(sel.changes) ? sel.changes : []).map((c) => c.available
@@ -729,11 +810,30 @@
             <div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-size:12px;"><thead><tr style="color:var(--muted);text-align:right;"><th style="text-align:left;font-weight:600;">Ustawienie</th><th style="font-weight:600;">Teraz</th><th style="font-weight:600;">Po profilu</th></tr></thead><tbody>${rows}</tbody></table></div>
             ${sel.nothing_to_change ? '<div class="ex-note">Wszystko jest już ustawione tak jak w tym profilu — nic się nie zmieni.</div>' : ''}
             ${admin ? '' : '<div class="ex-note" style="color:var(--orange);">Zmiana profilu wymaga konta administratora Home Assistant.</div>'}
+            ${admin ? `<div data-role="profile-schedule" style="margin-top:12px;font-size:12px;"><div style="font-weight:600;margin-bottom:4px;">📅 Albo zaplanuj na daty (np. urlop)</div>
+              <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+                <label>od <input type="date" data-pf-in="from" value="${exEsc(s.dFrom)}" min="${exEsc(todayIso)}" style="padding:6px;border-radius:8px;"></label>
+                <label>do <input type="date" data-pf-in="to" value="${exEsc(s.dTo)}" min="${exEsc(s.dFrom || todayIso)}" style="padding:6px;border-radius:8px;"></label>
+                <button type="button" class="btn" data-pf="schedule" data-id="${exEsc(sel.id)}" style="padding:8px 14px;" ${s.busy || !s.dFrom || !s.dTo || s.dTo < s.dFrom ? 'disabled' : ''}>Zaplanuj</button></div>
+              <div style="color:var(--muted);margin-top:4px;">Włączy się sam pierwszego dnia, a po ostatnim dniu wróci do poprzednich ustawień (i do poprzedniego profilu, jeśli jakiś był).</div></div>` : ''}
             <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px;">
               <button type="button" class="btn" data-pf="apply" data-id="${exEsc(sel.id)}" style="padding:10px 16px;flex-direction:row;gap:8px;" ${s.busy || !admin ? 'disabled' : ''}><span>✅</span><span class="label">${s.busy ? 'Stosuję…' : `Zastosuj profil „${exEsc(sel.name)}”`}</span></button>
-              <button type="button" class="btn" data-pf="cancel" style="padding:10px 16px;flex-direction:row;gap:8px;"><span class="label">Anuluj</span></button></div></div>`;
+              <button type="button" class="btn" data-pf="cancel" style="padding:10px 16px;flex-direction:row;gap:8px;"><span class="label">Anuluj</span></button>
+              ${admin && sel.custom ? `<button type="button" class="btn" data-pf="delete" data-id="${exEsc(sel.id)}" style="padding:10px 16px;flex-direction:row;gap:8px;" ${s.busy ? 'disabled' : ''}><span>🗑</span><span class="label">Usuń ten profil</span></button>` : ''}</div></div>`;
         }
-        return `${msg}${banner}<div class="ex-note" style="margin:0 0 10px;font-size:12px;">Gotowe zestawy ustawień jednym kliknięciem. Najpierw zobaczysz, co dokładnie się zmieni; po zastosowaniu EMS zapamięta poprzednie wartości i możesz do nich wrócić.</div>${chips}${prev}
+        const nCustom = profiles.filter((p) => p.custom).length;
+        const limit = Number.isFinite(Number(s.data.custom_limit)) ? Number(s.data.custom_limit) : 8;
+        const icons = (Array.isArray(s.data.icons) ? s.data.icons : []).filter((x) => typeof x === 'string' && x.length <= 4);
+        const saveForm = admin
+          ? `<div data-role="profile-save" style="margin-top:14px;border-top:1px solid var(--line);padding-top:10px;font-size:12px;">
+              <div style="font-weight:600;margin-bottom:4px;">💾 Zapisz bieżące ustawienia jako własny profil</div>
+              <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+                <input type="text" data-pf-in="name" maxlength="24" placeholder="Nazwa, np. Weekend" value="${exEsc(s.name)}" style="padding:8px;border-radius:8px;min-width:160px;">
+                ${icons.length ? `<select data-pf-in="icon" style="padding:8px;border-radius:8px;">${icons.map((ic) => `<option value="${exEsc(ic)}" ${s.icon === ic ? 'selected' : ''}>${exEsc(ic)}</option>`).join('')}</select>` : ''}
+                <button type="button" class="btn" data-pf="save" style="padding:8px 14px;" ${s.busy ? 'disabled' : ''}>Zapisz</button></div>
+              <div style="color:var(--muted);margin-top:4px;">Zapamiętuję tylko zwykłe ustawienia (sprzedaż, ładowanie z sieci, rezerwa, ostrożność PV, progi SOC…) — bez godzin, prądów, mocy i zabezpieczeń. Ta sama nazwa nadpisuje profil. Własnych profili: ${nCustom} z ${limit}.</div></div>`
+          : '';
+        return `${msg}${planBanner}${banner}<div class="ex-note" style="margin:0 0 10px;font-size:12px;">Gotowe zestawy ustawień jednym kliknięciem. Najpierw zobaczysz, co dokładnie się zmieni; po zastosowaniu EMS zapamięta poprzednie wartości i możesz do nich wrócić.</div>${chips}${prev}${saveForm}
           <div class="ex-note">Profil zmienia tylko zwykłe ustawienia EMS (te same, które można zmienić ręcznie) — nie rusza godzin, prądów ani mocy falownika. Gdy ręcznie zmienisz którekolwiek ustawienie z profilu, profil uznaje się za zakończony.</div>`;
       },
     });

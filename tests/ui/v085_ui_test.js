@@ -21,6 +21,12 @@ const INS = {
     null,
   ],
   reviews_tally: { n: 3, counts: { 'trafny': 1, 'częściowo trafny': 1, 'chybiony': 1 }, top_culprit: 'pv', top_culprit_n: 2 },
+  arb_proof: [
+    { date: day(1), in: 3.4, out: 4.1, leak: 0, level: 'ok', text: 'z sieci nic nie sprzedano — zakaz dotrzymany' },
+    { date: day(2), in: 2.0, out: 3.0, leak: 1.8, level: 'bad', text: 'możliwe sprzedanie energii z sieci <img src=x onerror=window.__pwn3=1>' },
+    { date: day(3), in: 0, out: 0, leak: 0, level: 'idle', text: 'brak ładowania z sieci i sprzedaży z baterii' },
+    null, { date: 5 },
+  ],
   savings: {
     today: { days: 1, actual: 2.1, nobat: 5.4, simple: 3.9, vs_nobat: 3.3, vs_simple: 1.8 },
     last30: { days: 12, actual: 40.0, nobat: 95.5, simple: 70.2, vs_nobat: 55.5, vs_simple: 30.2 },
@@ -87,6 +93,10 @@ const ST = {
   ok(/prognoza PV zawyżona o 100%/.test(acc) && /Co zawiodło: Słońca było o 10,0 kWh mniej/.test(acc) && /Bilans dnia: \+4,20 zł/.test(acc) && /Zabezpieczenia zadziałały 2×/.test(acc), 'ocena planu: co zawiodło, pozycje i fakty dnia');
   ok(/Nic istotnego nie zawiodło/.test(acc) && /sprzedaż 0% planu/.test(acc) && /(67|100|25)\/100/.test(acc), 'ocena planu: dzień trafny i chybiony, wynik /100');
   ok(await e.q(() => !__el.shadowRoot.querySelector('#exAccBox img') && !window.__pwn2), 'ocena planu: treść zescape-owana');
+  // dowód braku arbitrażu
+  ok(/Dowód: nie sprzedajemy prądu z sieci/.test(acc) && await e.q(() => __el.shadowRoot.querySelectorAll('#exAccBox [data-role="arb-proof"] tbody tr').length === 3), 'arbitraż: tabela z 3 poprawnymi dobami (uszkodzone pominięte)');
+  ok(/3,4 kWh4,1 kWh0,0 kWh✔ z sieci nic nie sprzedano/.test(acc), 'arbitraż: liczby i werdykt „zakaz dotrzymany”');
+  ok(await e.q(() => __el.shadowRoot.querySelector('#exAccBox [data-role="arb-proof"] tr[data-level="bad"]').textContent.includes('1,8 kWh')) && await e.q(() => !__el.shadowRoot.querySelector('#exAccBox [data-role="arb-proof"] img') && !window.__pwn3), 'arbitraż: naruszenie widoczne, treść zescape-owana');
   const dd = (i) => day(i).slice(8) + '.' + day(i).slice(5, 7);
   ok(await e.q((exp) => Array.from(__el.shadowRoot.querySelectorAll('#exAccBox [data-role="review-day"] > summary > b')).map((b) => b.textContent).join(',') === exp, [dd(1), dd(2), dd(3)].join(',')), 'ocena planu: daty dd.mm');
   // brak ocen → komunikat zamiast pustego bloku
@@ -96,6 +106,12 @@ const ST = {
   await tab(e3, 'log'); await sleep(1200);
   ok(/pierwsza pojawi się po północy/.test(await sr(e3, '#exAccBox')) && !(await e3.q(() => __el.shadowRoot.querySelector('#exAccBox [data-role="review-day"]'))), 'brak ocen: komunikat o pierwszej ocenie po północy');
   ok(/18,5%/.test(await sr(e3, '#exAccBox')), 'brak ocen: reszta trafności nadal widoczna');
+  ok(/Dowód: nie sprzedajemy prądu z sieci/.test(await sr(e3, '#exAccBox')), 'arbitraż: tabela nie zależy od ocen planu');
+  const e4 = await openCard(b, {});
+  await seed(e4, { curve: c, report: REPORT(), health: HEALTH });
+  await e4.q((ins) => { const x = JSON.parse(JSON.stringify(ins)); delete x.arb_proof; window.__svc = { 'bms_komp_dec.insights_get': () => ({ response: x }) }; window.__el.hass = window.__mk(); }, INS);
+  await tab(e4, 'log'); await sleep(1200);
+  ok(/Dowód braku arbitrażu: od teraz EMS liczy/.test(await sr(e4, '#exAccBox')) && e4.errs.length === 0, 'arbitraż: brak danych → komunikat zamiast pustego bloku ' + JSON.stringify(e4.errs));
   ok(e3.errs.length === 0, 'brak błędów JS (brak ocen) ' + JSON.stringify(e3.errs));
   // błąd usługi
   const e2 = await openCard(b, {});

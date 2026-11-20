@@ -80,13 +80,19 @@ def _buy(rt, now: datetime) -> list[dict[str, Any]]:
 def _pv(rt, now: datetime) -> list[dict[str, Any]]:
     opt = rt.optimizer
     out = []
-    if now.hour >= PV_TODAY_FROM and opt._read_pv_hourly(0) is None:  # noqa: SLF001
-        out.append(_issue("pv_today", "warn", "Brak prognozy PV na dziś",
-                          "Plan liczy tak, jakby słońca nie było.",
-                          "Sprawdź integrację prognozy (Solcast / Forecast.Solar) i encje prognozy w konfiguracji EMS."))
-    if now.hour >= PV_TOMORROW_FROM and opt._read_pv_hourly(1) is None:  # noqa: SLF001
-        out.append(_issue("pv_tomorrow", "warn", "Brak prognozy PV na jutro", "Plan na jutro liczy tak, jakby słońca nie było.",
-                          "Sprawdź integrację prognozy (Solcast / Forecast.Solar)."))
+    for hour, off, iid, label, when in ((PV_TODAY_FROM, 0, "pv_today", "dziś", "Plan"), (PV_TOMORROW_FROM, 1, "pv_tomorrow", "jutro", "Plan na jutro")):
+        if now.hour < hour or opt._read_pv_hourly(off) is not None:  # noqa: SLF001
+            continue
+        fb = opt.pv_fallback() if hasattr(opt, "pv_fallback") else None
+        if fb is not None:
+            kwh = str(round(fb["kwh"], 1)).replace(".", ",")
+            out.append(_issue(iid, "info", f"Brak prognozy PV na {label} — plan używa szacunku",
+                              f"{when} liczy z typowego dnia z ostatnich {fb['days']} dni (×{str(fb['caution']).replace('.', ',')}), ok. {kwh} kWh.",
+                              "To tylko przybliżenie bez prognozy pogody. Sprawdź integrację prognozy (Solcast / Forecast.Solar) i encje prognozy w konfiguracji EMS."))
+        else:
+            out.append(_issue(iid, "warn", f"Brak prognozy PV na {label}", f"{when} liczy tak, jakby słońca nie było.",
+                              "Sprawdź integrację prognozy (Solcast / Forecast.Solar) i encje prognozy w konfiguracji EMS."
+                              if off == 0 else "Sprawdź integrację prognozy (Solcast / Forecast.Solar)."))
     return out
 
 
@@ -168,7 +174,20 @@ def _repairs(rt, now: datetime) -> list[dict[str, Any]]:
                    "Kopie oryginałów są w .storage (pliki …_backup). Nic więcej nie trzeba robić.")]
 
 
-_CHECKS = (_alarms, _write, _plan, _windows, _rce, _buy, _pv, _devices, _brand, _repairs)
+def _arbitrage(rt, now: datetime) -> list[dict[str, Any]]:
+    """Dowód zakazu arbitrażu: dziś lub wczoraj mogła pójść do sieci energia pobrana z sieci (ponad tolerancję blokady)."""
+    keys = {now.date().isoformat(), (now.date() - timedelta(days=1)).isoformat()}
+    bad = [r for r in rt.arb_proof(3) if r["date"] in keys and r["level"] == "bad"]
+    if not bad:
+        return []
+    r = bad[0]
+    return [_issue("arbitrage", "error", "Możliwe sprzedanie energii pobranej z sieci",
+                   f"{r['date']}: z sieci do baterii {r['in']:.1f} kWh, z baterii do sieci {r['out']:.1f} kWh, z sieci sprzedane do {r['leak']:.1f} kWh."
+                   .replace(".", ","),
+                   "Sprawdź dziennik decyzji (wpisy „ZABLOKOWANA”) i ustawienie „Blokada arbitrażu” — zakaz „ładuj z sieci → sprzedaj” ma być zawsze dotrzymany.")]
+
+
+_CHECKS = (_alarms, _write, _plan, _windows, _arbitrage, _rce, _buy, _pv, _devices, _brand, _repairs)
 
 
 def collect(rt, now: datetime | None = None) -> list[dict[str, Any]]:

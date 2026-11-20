@@ -9,6 +9,7 @@ ginąć wśród trzech dobrych): „trafny”, „częściowo trafny”, „chyb
 from __future__ import annotations
 
 import math
+import re
 from typing import Any
 
 KEEP_DAYS = 30
@@ -102,7 +103,44 @@ def _soc_item(plan: Any, actual: Any) -> dict[str, Any] | None:
             "weight": mae / SOC_WARN}
 
 
-def _sale_item(plan: Any, act: Any) -> dict[str, Any] | None:
+# Treści, którymi runtime zapisuje w dzienniku decyzji, że sprzedaż była zablokowana, zatrzymana albo nie wznowiona.
+SALE_WHY_RES = (re.compile(r"zakaz sprzedaży — (.+)$"), re.compile(r"ZABLOKOWANA: (.+)$"),
+                re.compile(r"Zatrzymuję sprzedaż: (.+)$"), re.compile(r"nie wznawiam sprzedaży: (.+)$"))
+WHY_MAX_LEN = 160
+
+
+def sale_reason(entries: Any, day: str, *, soc_max: Any = None, min_soc: Any = None) -> dict[str, Any] | None:
+    """Dlaczego sprzedaż z baterii nie poszła zgodnie z planem — konkretny powód z dziennika decyzji z tej doby
+    (najnowszy wpis wygrywa, `entries` to lista od najnowszych). Gdy dziennik milczy, a bateria przez całą dobę nie dobiła
+    do progu sprzedaży, podaje ten fakt. None, gdy nie ma żadnego powodu."""
+    n = 0
+    first: dict[str, Any] | None = None
+    if isinstance(entries, list):
+        for e in entries:
+            if not isinstance(e, dict) or e.get("kind") not in ("guard", "schedule", "price"):
+                continue
+            ts, msg = e.get("ts"), e.get("msg")
+            if not isinstance(ts, str) or not isinstance(msg, str) or not ts.startswith(day):
+                continue
+            for rx in SALE_WHY_RES:
+                m = rx.search(msg)
+                if m:
+                    n += 1
+                    if first is None:
+                        txt = m.group(1).strip().rstrip(".")
+                        first = {"text": txt[:WHY_MAX_LEN], "at": ts[11:16], "source": "log"}
+                    break
+    if first is not None:
+        first["n"] = n
+        return first
+    sm, ms = _n(soc_max), _n(min_soc)
+    if sm is not None and ms is not None and ms > 0 and sm < ms:
+        return {"text": f"bateria przez całą dobę nie dobiła do progu sprzedaży (najwyżej {sm:.0f}%, próg {ms:.0f}%)",
+                "at": None, "source": "soc", "n": 1}
+    return None
+
+
+def _sale_item(plan: Any, act: Any, why: Any = None) -> dict[str, Any] | None:
     if not isinstance(plan, dict):
         return None
     pk = _n(plan.get("kwh"))
@@ -112,23 +150,34 @@ def _sale_item(plan: Any, act: Any) -> dict[str, Any] | None:
     ratio = max(0.0, ak) / pk
     lvl = "ok" if ratio >= SALE_OK else ("warn" if ratio >= SALE_WARN else "bad")
     short = f"sprzedaż {ratio * 100:.0f}% planu"
-    effect = (f"W oknach sprzedaży wyeksportowano {_f(ak)} kWh zamiast planowanych {_f(pk)} kWh — bateria miała za mało energii, "
-              "okno było zablokowane albo cena była niższa niż zakładał plan.")
-    return {"id": "sale", "label": "Sprzedaż z baterii", "level": lvl, "plan": round(pk, 2), "actual": round(ak, 2), "unit": "kWh",
+    head = f"W oknach sprzedaży wyeksportowano {_f(ak)} kWh zamiast planowanych {_f(pk)} kWh"
+    cause = None
+    if isinstance(why, dict) and isinstance(why.get("text"), str) and why["text"]:
+        cause = why["text"]
+        at = f" o {why['at']}" if why.get("at") else ""
+        times = f" (łącznie {int(why['n'])}×)" if isinstance(why.get("n"), int) and why["n"] > 1 else ""
+        effect = f"{head}. Powód: {cause}{at}{times}."
+    else:
+        effect = f"{head} — bateria miała za mało energii, okno było zablokowane albo cena była niższa niż zakładał plan."
+    item = {"id": "sale", "label": "Sprzedaż z baterii", "level": lvl, "plan": round(pk, 2), "actual": round(ak, 2), "unit": "kWh",
             "err": round((ratio - 1.0) * 100.0, 1), "short": short, "text": effect if lvl != "ok" else "",
             "detail": f"plan ~{_f(pk)} kWh, wyeksportowano {_f(ak)} kWh",
             "weight": max(0.0, 1.0 - ratio) / SALE_WARN}
+    if cause and lvl != "ok":
+        item["why"] = cause
+        item["detail"] += f"; powód: {cause}"
+    return item
 
 
 # ------------------------------------------------------------------ ocena dnia
 def build(day: str, *, pv_fc: Any = None, pv_act: Any = None, pv_limited: Any = None, load_fc: Any = None, load_act: Any = None,
-          soc_plan: Any = None, soc_act: Any = None, sale_plan: Any = None, sale_act: Any = None, net: Any = None,
+          soc_plan: Any = None, soc_act: Any = None, sale_plan: Any = None, sale_act: Any = None, sale_why: Any = None, net: Any = None,
           guards: int = 0, autos: int = 0) -> dict[str, Any] | None:
     """Ocena jednej doby albo None, gdy nie ma z czym porównać (żadnej pary plan–wykonanie)."""
     items = [it for it in (_energy_item("pv", "Produkcja PV", pv_fc, pv_act, pv_limited),
                            _energy_item("load", "Zużycie domu", load_fc, load_act),
                            _soc_item(soc_plan, soc_act),
-                           _sale_item(sale_plan, sale_act)) if it]
+                           _sale_item(sale_plan, sale_act, sale_why)) if it]
     if not items:
         return None
     bad = sum(1 for i in items if i["level"] == "bad")
@@ -209,3 +258,39 @@ def tally(rows: list[dict[str, Any]]) -> dict[str, Any]:
             culprits[str(c["id"])] = culprits.get(str(c["id"]), 0) + 1
     top = max(culprits.items(), key=lambda kv: kv[1]) if culprits else None
     return {"n": len(rows), "counts": counts, "top_culprit": top[0] if top else None, "top_culprit_n": top[1] if top else 0}
+
+
+# ------------------------------------------------------------------ linia w raporcie tygodniowym
+CULPRIT_WORDS = {"pv": "prognoza PV", "load": "prognoza zużycia", "soc": "poziom baterii", "sale": "sprzedaż z baterii"}
+
+
+def _days_word(n: int) -> str:
+    return "1 dnia" if n == 1 else f"{n} dni"
+
+
+def week_line(reviews: Any, start: Any, end: Any) -> str | None:
+    """„Plan trafny w 5 z 7 ocenionych dni, najczęściej zawodziła prognoza PV” dla dób od `start` do `end` (włącznie, daty ISO
+    albo `date`). None, gdy w tym okresie nie ma żadnej oceny."""
+    if not isinstance(reviews, dict):
+        return None
+    s, e = str(start), str(end)
+    rows = [r for k, r in reviews.items() if isinstance(k, str) and s <= k <= e and valid(r)]
+    if not rows:
+        return None
+    t = tally(rows)
+    ok = t["counts"]["trafny"]
+    part = t["counts"]["częściowo trafny"]
+    bad = t["counts"]["chybiony"]
+    line = f"Plan trafny w {ok} z {_days_word(t['n'])}"
+    if part or bad:
+        extra = []
+        if part:
+            extra.append(f"częściowo w {part}")
+        if bad:
+            extra.append(f"chybiony w {bad}")
+        line += " (" + ", ".join(extra) + ")"
+    if t["top_culprit"] and (part or bad):
+        word = CULPRIT_WORDS.get(t["top_culprit"])
+        if word:
+            line += f", najczęściej zawodziła: {word}"
+    return line

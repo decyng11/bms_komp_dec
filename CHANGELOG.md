@@ -43,8 +43,39 @@
 - **Powrót jednym kliknięciem:** EMS zapamiętuje poprzednie wartości. Ustawienia, które po profilu zmienisz ręcznie, zostają, jak są. Zmiana profilu najpierw cofa poprzedni. Gdy ręcznie zmienisz ustawienie z profilu (albo tryb burzowy wygaśnie), profil uznaje się za zakończony, a powrót nadal jest możliwy.
 - Usługi: `profiles_get` (odczyt), `profile_apply` i `profile_revert` (administrator). Profil nie rusza godzin, prądów ani mocy falownika.
 
+### Profile: własne i z datami (urlop „od–do”)
+- **Własne profile:** w kafelku „🎛 Profile pracy” przycisk „Zapisz obecne ustawienia jako profil” (nazwa i ikona, do 8 własnych). Zapisuje zwykłe ustawienia EMS — nigdy godzin, prądów, mocy falownika ani **zabezpieczeń** (blokada arbitrażu, zakaz sprzedaży po imporcie, dzienny limit importu): tych profil nie ruszy, nawet gdyby ktoś je do niego wpisał. Własny profil można usunąć.
+- **Profil z kalendarza:** „od dnia – do dnia” przy dowolnym profilu (np. Urlop 3–10 maja). W dniu startu EMS włącza profil, po ostatnim dniu cofa go i **wraca do profilu, który działał wcześniej**. Po restarcie HA nadrabia spóźniony start; plan, który już minął, jest odrzucany z ostrzeżeniem. Powiadomienie „Profil z kalendarza: start i koniec” (domyślnie włączone, także na telefon).
+- Usługi (administrator): `profile_save`, `profile_delete`, `profile_schedule`, `profile_schedule_clear`.
+
+### Ocena planu: dokładny powód, trend, „dlaczego nie sprzedał”
+- **„Dlaczego nie sprzedał”:** gdy ocena wykazuje słabą sprzedaż, zamiast ogólnej listy możliwych przyczyn podaje tę, która naprawdę zadziałała — blokada po imporcie z sieci, blokada arbitrażu, SOC poniżej progu, cena poniżej marży albo wyłączone okno (z dziennika decyzji z tej doby).
+- **Linia tygodniowa w raporcie:** „plan trafny w 5 z 7 dni, najczęściej zawodziła prognoza PV” — trend zamiast pojedynczego dnia.
+- **Autokorekta ostrożności prognozy PV (propozycja):** gdy z ostatnich dób wynika, że prognoza PV jest stale zawyżona (albo wyraźnie zaniżona), w „Zysk i log → Trafność prognoz” pojawia się propozycja zmiany ostrożności („z 20% do 40%”). Nic nie zmienia się samo — zatwierdzasz jednym kliknięciem i jednym kliknięciem cofasz (cofnięcie odmawia, jeśli wartość zmieniłeś już ręcznie). Docelową ostrożność liczy z błędu prognozy, więc nie narasta w kółko; po zmianie ma 3 doby spokoju, „Nie teraz” ucisza na 7 dni, nie proponuje więcej niż 70%. Aktywny profil podąża za zmianą (nie kończy się „fałszywie”). Powiadomienie „Propozycja: ostrożność prognozy PV” (priorytet informacyjny, raz na tydzień).
+
+### Bezpieczeństwo: dowód zakazu arbitrażu
+- **Dzienny dowód „nie sprzedajemy prądu z sieci”** (`arbproof.py`, zakładka „Zysk i log”): dla każdej doby trzy liczby — z sieci do baterii, z baterii do sieci i ile z tego mogło pochodzić z sieci (górna granica; ma być 0). Tabela z ostatnich 7 dób; w raporcie tygodniowym jedna linia z werdyktem. Opiera się na istniejącym liczniku energii z sieci w baterii, nic nie zmienia w sterowaniu.
+
+### Prognoza PV: zapasowa, gdy brak Solcast / Forecast.Solar
+- **Zamiast „słońca nie będzie” — typowy dzień z ostatnich dób** (`pvfallback.py`): mediana godzinowa z do 5 ostatnich pełnych dób (co najmniej 2, nie starszych niż 10 dni) razy współczynnik ostrożności. Plan nie ładuje już z sieci „na zapas” tylko dlatego, że nie ma prognozy. Przełącznik „Zapasowa prognoza PV z ostatnich dni” (domyślnie włączony). Karta i lista „co dziś nie działa” oznaczają to wprost jako szacunek, nie prognozę.
+
+### Urządzenia: warunek uruchomienia i wykrywanie nocnego poboru
+- **Warunek uruchomienia urządzenia:** „działaj tylko, gdy encja X ma stan …” (np. auto podłączone, ktoś w domu, bojler poniżej progu). Pola `ctl_cond_eid` i `ctl_cond_states` (lista stanów po przecinku, domyślnie „on”). Gdy warunek nie jest spełniony, urządzenie się nie włącza, a karta pokazuje dlaczego; brak encji warunku traktowany jest jak niespełniony (bezpieczniej).
+- **Nocny pobór wyższy niż zwykle:** rano EMS porównuje średnią moc domu w godz. 1:00–5:00 z medianą ostatnich nocy (min. 4 noce historii; różnica musi być wyraźna procentowo i w watach — dom z 80 W zamiast 50 W nic nie zgłasza). Powiadomienie „Nocny pobór wyższy niż zwykle”, raz na dobę.
+
+### Bateria: „na ile godzin starczy” i plan na jutro
+- **Kafelek „Na ile godzin starczy baterii”** na głównym ekranie: energia nad progiem odcięcia falownika ÷ bieżący, wygładzony (5 min) pobór domu — szacunek na najgorszy przypadek, bez PV. Kolor: zielony / pomarańczowy / czerwony. Po zaniku sieci powiadomienie zawiera ten czas i wskazuje największe odbiorniki do wyłączenia.
+- **Powiadomienie „Plan na jutro”** (ok. 16:30, po opublikowaniu cen; raz na dobę; domyślnie tylko w skrzynce z dzwonkiem, bez telefonu): jedno–dwa zdania — kiedy ładowanie z sieci, kiedy sprzedaż z baterii (kWh i zysk), ile PV jest prognozowane. Gdy plan niczego nie przewiduje, mówi to wprost. Przy błędzie planu ponawia co 10 minut do 23:00.
+
+### Ceny zakupu na jutro: szacunek (tylko podgląd)
+- **Kolumna „Jutro szac.”:** przy taryfie dynamicznej, zanim operator opublikuje ceny na jutro (zwykle 12–14), karta pokazuje szacunek kształtu cen — mediana tej samej godziny z ostatnich dób (dni robocze i weekendy osobno, gdy jest ich dość; min. 3 doby), z tyldą „~” i podpisem „nie ceny z rynku”. **Planer go nie widzi** (osobny atrybut `prices_buy_tomorrow_est`, poza `buy_hourly_for`), a po publikacji prawdziwych cen szacunek znika.
+
+### Narzędzie poza integracją: zbiorczy status instalacji (`tools/fleet_status.py`)
+- Samodzielny skrypt (tylko biblioteka standardowa), uruchamiany u Ciebie, nie w Home Assistancie. Odpytuje kolejne instalacje (Twoją i znajomych, przez Tailscale lub sieć prywatną) o dwa czujniki — `sensor.bms_monitor_status` i `sensor.bms_forecast_accuracy` — i pokazuje na jednej liście lub stronie HTML: status 🟢🔵🟠🔴⚫, listę „co dziś nie działa”, alarmy i werdykt ostatniej oceny planu. Tylko zapytania GET.
+- Użycie: `python3 tools/fleet_status.py fleet.json [--html strona.html | --json]`; `fleet.json` to lista `{name, url, token}`. **Uwaga o tokenie:** długoterminowy token Home Assistanta nie jest „tylko do odczytu” — ma uprawnienia konta; dla znajomego załóż osobne konto bez uprawnień administratora, plik trzymaj z prawami `chmod 600` (skrypt ostrzega) i łącz się tylko przez sieć prywatną. Cudze dane trafiają do HTML przez escape, tokeny nie pojawiają się w żadnym komunikacie. Wymaga zgody znajomego i jego tokenu; nie zastępuje wstrzymanego planu „Instalacje” (Cloudflare) dla instalacji za routerem bez Tailscale.
+
 ### Testy
-- Nowe: `test_storeguard.py` (60), `test_devctl_price.py` (48), `test_issues.py` (33), `test_review.py` (79), `test_profiles.py` (79), `profiles_ui_test.js`; rozszerzone `v085_ui_test.js` (ocena planu), `extras2_test.js` (lista „co dziś nie działa”).
+- Nowe: `test_storeguard.py` (60), `test_devctl_price.py` (48), `test_issues.py` (33), `test_review.py` (79), `test_profiles.py` (79), `profiles_ui_test.js`; `test_review_why.py`, `test_arbproof.py`, `test_pvfallback.py`, `test_devctl_cond.py`, `test_nightdraw.py`, `test_autonomy.py`, `test_tomorrowplan.py` (35), `test_pvcaution.py` (79), `test_profiles_custom.py` (119), `test_buyestimate.py` (38), `test_fleet_status.py` (65), `pvfallback_ui_test.js`, `autonomy_ui_test.js`, `pvcaution_ui_test.js`, `profiles_custom_ui_test.js`, `buyestimate_ui_test.js`; rozszerzone `v085_ui_test.js` (ocena planu), `extras2_test.js` (lista „co dziś nie działa”).
 
 # EMS komp-dec — zmiany w 0.9.5.6 (z 0.9.5.5)
 

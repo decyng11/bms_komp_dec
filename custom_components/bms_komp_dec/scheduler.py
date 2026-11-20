@@ -29,6 +29,7 @@ from .helpers import find_eid, normalize_price, number_value, state_str, switch_
 from .tariff import G12wTariff, get_profile, is_g12w_peak
 from .inverter_floor import floor_profile
 from .pv_forecast import PvForecast, SOLCAST_DAY_ENTITIES
+from . import pvfallback as pvfb
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -123,29 +124,86 @@ class ScheduleOptimizer:
         raw = state_str(self.hass, find_eid(self.hass, "time", key))
         return raw[:5] if raw else "—"
 
-    def _read_pv_forecast_kwh(self, eid_key: str, default_eid: str) -> float | None:
-        """Suma prognozy PV na dziś / jutro w kWh (Solcast albo Forecast.Solar, z przeliczeniem jednostki)."""
+    def pv_fallback(self) -> dict[str, Any] | None:
+        """Zapasowa prognoza PV (typowy dzień z ostatnich dób × ostrożność) albo None: wyłączona, za mało historii albo brak Insights."""
+        if not switch_on(self.hass, "pv_fallback_forecast", True):
+            return None
+        ins = self._insights()
+        if ins is None or not hasattr(ins, "pv_history"):
+            return None
+        now = dt_util.now()
+        key = (now.date().isoformat(), int(now.timestamp() // 600))
+        cached = getattr(self, "_pvfb_cache", None)
+        if cached and cached[0] == key:
+            return cached[1]
+        try:
+            fb = pvfb.profile(ins.pv_history(now.date()), now.date())
+        except Exception as err:  # noqa: BLE001
+            _LOGGER.debug("EMS: zapasowa prognoza PV: %s", err)
+            fb = None
+        self._pvfb_cache = (key, fb)
+        return fb
+
+    def pv_fallback_used(self, offset: int = 0) -> bool:
+        """Czy plan na dzień +offset liczy z zapasowej prognozy (bo żadne źródło prognozy nie podało godzin tego dnia)."""
+        return self._read_pv_hourly(offset) is None and self.pv_fallback() is not None
+
+    def _read_pv_forecast_kwh(self, eid_key: str, default_eid: str, fallback: bool = False) -> float | None:
+        """Suma prognozy PV na dziś / jutro w kWh (Solcast albo Forecast.Solar, z przeliczeniem jednostki).
+
+        `fallback=True`: gdy nie ma żadnej prognozy, zwraca sumę zapasowej (średnia z ostatnich dni × ostrożność)."""
         eid = self.config.get(eid_key, default_eid)
         offset = 1 if eid_key == CONF_PV_FORECAST_TOMORROW else 0
-        return self.pv_fc.daily_kwh(eid, dt_util.now().date() + timedelta(days=offset))
+        val = self.pv_fc.daily_kwh(eid, dt_util.now().date() + timedelta(days=offset))
+        if val is None and fallback:
+            fb = self.pv_fallback()
+            if fb is not None and self._read_pv_hourly(offset) is None:
+                return float(fb["kwh"])
+        return val
 
-    def _read_pv_hourly(self, offset: int = 0) -> list[float | None] | None:
-        """Lista 24 prognoz PV (kWh/h) na dziś (offset=0) lub jutro (offset=1): Solcast albo Forecast.Solar."""
+    def _read_pv_hourly(self, offset: int = 0, fallback: bool = False) -> list[float | None] | None:
+        """Lista 24 prognoz PV (kWh/h) na dziś (offset=0) lub jutro (offset=1): Solcast albo Forecast.Solar.
+
+        `fallback=True`: gdy nie ma żadnej prognozy, typowy dzień z ostatnich dób × ostrożność (patrz pvfallback)."""
         if offset == 0:
             eid = self.config.get(CONF_PV_FORECAST_TODAY, DEFAULT_PV_FORECAST_TODAY)
         else:
             eid = self.config.get(CONF_PV_FORECAST_TOMORROW, DEFAULT_PV_FORECAST_TOMORROW)
-        return self.pv_fc.hourly(eid, dt_util.now().date() + timedelta(days=offset))[0]
+        got = self.pv_fc.hourly(eid, dt_util.now().date() + timedelta(days=offset))[0]
+        if got is None and fallback:
+            fb = self.pv_fallback()
+            if fb is not None:
+                return list(fb["hourly"])
+        return got
 
     def pv_card_payload_raw(self) -> dict[str, Any]:
-        """Prognoza PV bez korekty (do zapisu „prognoza vs wykonanie” i do oceny, czy korekta pomaga)."""
+        """Prognoza PV bez korekty (do zapisu „prognoza vs wykonanie” i do oceny, czy korekta pomaga) — zawsze tylko ze źródeł prognozy."""
         return self.pv_fc.card_payload(self.config.get(CONF_PV_FORECAST_TODAY, DEFAULT_PV_FORECAST_TODAY),
                                        self.config.get(CONF_PV_FORECAST_TOMORROW, DEFAULT_PV_FORECAST_TOMORROW))
+
+    def _pv_fallback_payload(self, out: dict[str, Any]) -> None:
+        """Dziś / jutro bez prognozy z żadnego źródła → w karcie zapasowy szacunek, jawnie oznaczony (`pv_fallback`)."""
+        fb = self.pv_fallback()
+        if fb is None:
+            return
+        offs = [i for i, k in ((0, "pv_hourly_today"), (1, "pv_hourly_tomorrow")) if not out.get(k)]
+        if not offs:
+            return
+        daily = out.get("pv_daily") or []
+        for i in offs:
+            out["pv_hourly_today" if i == 0 else "pv_hourly_tomorrow"] = [round(float(v), 3) for v in fb["hourly"]]
+            if i < len(daily) and daily[i].get("kwh") is None:
+                daily[i]["kwh"] = fb["kwh"]
+                daily[i]["est"] = True
+        out["pv_fallback"] = {"offsets": offs, "days": fb["days"], "caution": fb["caution"], "label": pvfb.label(fb)}
+        if len(offs) == 2 or not out.get("pv_forecast_source"):      # żadne źródło nie ma danych (nazwa źródła bywa tylko z nazwy encji)
+            out["pv_forecast_source"] = "zapasowa: " + pvfb.label(fb)
 
     def pv_card_payload(self) -> dict[str, Any]:
         """Prognoza PV dla karty: sumy dzienne na 7 dni po korekcie (z surową wartością, współczynnikiem i zakresem)."""
         out = self.pv_card_payload_raw()
         try:
+            self._pv_fallback_payload(out)
             self._pv_adjust_payload(out)
         except Exception as err:  # noqa: BLE001
             _LOGGER.debug("EMS: korekta prognozy PV dla karty: %s", err)
@@ -156,9 +214,10 @@ class ScheduleOptimizer:
         ins = self._insights()
         daily = out.get("pv_daily") or []
         hourly_raw = {0: out.get("pv_hourly_today"), 1: out.get("pv_hourly_tomorrow")}
+        fb_offs = set((out.get("pv_fallback") or {}).get("offsets") or [])      # zapasowa jest już z faktycznej produkcji — bez korekty
         for off, key in ((0, "pv_hourly_today_adj"), (1, "pv_hourly_tomorrow_adj")):
             raw = hourly_raw[off]
-            if raw and on and ins is not None and hasattr(ins, "pv_multipliers"):
+            if raw and on and ins is not None and hasattr(ins, "pv_multipliers") and off not in fb_offs:
                 m = ins.pv_multipliers(off, raw)["mult"]
                 out[key] = [None if v is None else round(float(v) * m[h], 3) for h, v in enumerate(raw)]
             else:
@@ -166,7 +225,7 @@ class ScheduleOptimizer:
         for i, row in enumerate(daily):
             raw_kwh = row.get("kwh")
             row["raw"] = raw_kwh
-            if raw_kwh is None or not on or ins is None or not hasattr(ins, "pv_horizon_factor"):
+            if raw_kwh is None or not on or ins is None or not hasattr(ins, "pv_horizon_factor") or i in fb_offs:
                 continue
             fac, n, _med = ins.pv_horizon_factor(i)
             adj = raw_kwh * fac
@@ -187,6 +246,12 @@ class ScheduleOptimizer:
             else:
                 row["lo"], row["hi"] = round(adj * (1 - spread), 2), round(adj * (1 + spread), 2)
                 row["range"] = "historia" if learned else "szac."
+
+    def _pv_fallback_label(self) -> str | None:
+        fb = self.pv_fallback()
+        if fb is None or not any(self.pv_fallback_used(i) for i in (0, 1)):
+            return None
+        return "zapasowa: " + pvfb.label(fb)
 
     def pv_source(self) -> str | None:
         return self.pv_fc.source(self.config.get(CONF_PV_FORECAST_TODAY, DEFAULT_PV_FORECAST_TODAY))
@@ -520,7 +585,7 @@ class ScheduleOptimizer:
 
         Solcast bywa niezerowy o zmierzchu/świcie; sterowanie nie może na tym planować.
         Bez danych słońca granice wynikają z godzin, w których prognoza jest dodatnia."""
-        pv = self._read_pv_hourly(offset)
+        pv = self._read_pv_hourly(offset, fallback=True)
         sun = self._sun_hours(dt_util.now().date() + timedelta(days=offset))
         if sun is None:
             act = [h for h in range(24) if pv and isinstance(pv[h], (int, float)) and pv[h] > 0.02]
@@ -528,7 +593,7 @@ class ScheduleOptimizer:
         if not pv:
             return None, sun
         rise, sset = sun
-        mult = self.pv_mults(offset, pv)
+        mult = [1.0] * 24 if self.pv_fallback_used(offset) else self.pv_mults(offset, pv)     # zapasowa jest już z faktycznej produkcji
         out: list[float | None] = []
         for h in range(24):
             v = pv[h]
@@ -633,8 +698,8 @@ class ScheduleOptimizer:
         return self._pv_day(0)[0]
 
     def pv_scale_next_day(self) -> float:
-        today = self._read_pv_forecast_kwh(CONF_PV_FORECAST_TODAY, DEFAULT_PV_FORECAST_TODAY)
-        tomorrow = self._read_pv_forecast_kwh(CONF_PV_FORECAST_TOMORROW, DEFAULT_PV_FORECAST_TOMORROW)
+        today = self._read_pv_forecast_kwh(CONF_PV_FORECAST_TODAY, DEFAULT_PV_FORECAST_TODAY, fallback=True)
+        tomorrow = self._read_pv_forecast_kwh(CONF_PV_FORECAST_TOMORROW, DEFAULT_PV_FORECAST_TOMORROW, fallback=True)
         if today and tomorrow and today > 0.5:
             return min(3.0, max(0.0, tomorrow / today))
         return 1.0
@@ -811,9 +876,9 @@ class ScheduleOptimizer:
             "pv": pv_days,
             "sun": sun_days,
             "pv_act": pv_act,
-            "pv_kwh": [None if v is None else v * pv_k for v in (
-                self._read_pv_forecast_kwh(CONF_PV_FORECAST_TODAY, DEFAULT_PV_FORECAST_TODAY),
-                self._read_pv_forecast_kwh(CONF_PV_FORECAST_TOMORROW, DEFAULT_PV_FORECAST_TOMORROW))],
+            "pv_kwh": [None if v is None else v * (1.0 if self.pv_fallback_used(i) else pv_k) for i, v in enumerate((
+                self._read_pv_forecast_kwh(CONF_PV_FORECAST_TODAY, DEFAULT_PV_FORECAST_TODAY, fallback=True),
+                self._read_pv_forecast_kwh(CONF_PV_FORECAST_TOMORROW, DEFAULT_PV_FORECAST_TOMORROW, fallback=True)))],
             "pv_factor": pv_k,
             "wear": self.wear_cost(),
             "load_tomorrow": load_tomorrow,
@@ -1056,7 +1121,8 @@ class ScheduleOptimizer:
             "pv_tomorrow_kwh": None if ctx["pv_kwh"][1] is None else round(float(ctx["pv_kwh"][1]), 1),
             "pv_hourly_today": pv0 is not None,
             "pv_hourly_tomorrow": ctx["pv"][1] is not None,
-            "pv_source": self.pv_source(),
+            "pv_source": self._pv_fallback_label() or self.pv_source(),
+            "pv_fallback": any(self.pv_fallback_used(i) for i in (0, 1)),
             "pv_factor": round(float(ctx.get("pv_factor", 1.0)), 3),
             "wear_cost": round(float(ctx.get("wear", 0.0)), 3),
             "sale_windows": [dict(w) for w in (ctx.get("sale_windows") or [])],

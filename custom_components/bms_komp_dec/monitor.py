@@ -17,6 +17,9 @@ from homeassistant.util import dt as dt_util
 from . import accuracy as acc
 from . import inverter_ctl as ictl
 from . import inbox
+from . import nightdraw as nightdraw_mod
+from . import autonomy as autonomy_mod
+from . import tomorrowplan as tomorrowplan_mod
 from . import notify_cfg as ncfg
 from .const import CONF_BATTERY_TEMPERATURE, CONF_GRID_POWER, CONF_GRID_VOLTAGE_L1
 from .helpers import number_value, switch_on
@@ -169,6 +172,7 @@ class Notifier:
 
 class Monitor:
     _rce_alarm = False
+    _pt_retry = 0.0
 
     def __init__(self, rt) -> None:
         self.rt = rt
@@ -184,7 +188,7 @@ class Monitor:
                           ("ładowanie z sieci stoi", self._grid_charge_stalled), 
                           ("pobór z sieci", self._high_import), ("ceny jutro", self._prices_tomorrow),
                           ("źródła danych", self._sources), ("zużycie", self._load_above),
-                          ("PV jutro", self._weak_pv), ("plan a próg", self._plan_floor), ("trafność prognoz", self._accuracy), ("zdrowie baterii", self._health),
+                          ("nocny pobór", self._night_draw), ("PV jutro", self._weak_pv), ("plan na jutro", self._plan_tomorrow), ("ostrożność PV", self._pv_caution), ("plan a próg", self._plan_floor), ("trafność prognoz", self._accuracy), ("zdrowie baterii", self._health),
                           ("podsumowania", self._summaries), ("autoodczyt", self._inbox_auto_read)):
             try:
                 await chk(now)
@@ -412,9 +416,15 @@ class Monitor:
                     top = ", ".join(f"{nm} {p / 1000:.1f} kW" for nm, p in self.rt.devices.top_now())
                 except Exception:  # noqa: BLE001
                     top = ""
+                try:
+                    au = self.rt.autonomy()
+                    top_l = self.rt.devices.top_now()
+                except Exception:  # noqa: BLE001
+                    au, top_l = None, []
+                left = (f" Bateria wystarczy na ok. {au['text']} (przy poborze {au['load_w']} W, bez PV)." + autonomy_mod.extend_hint(au, top_l)) if au else ""
                 await self.notifier.send("grid_outage", "⚡ EMS: zanik sieci",
                                          f"Napięcie sieci L1 {v:.0f} V — dom zasilany z baterii" + (f" (SOC {soc:.0f}%)." if soc is not None else ".")
-                                         + (f" Teraz najwięcej pobierają: {top}." if top else ""),
+                                         + left + (f" Teraz najwięcej pobierają: {top}." if top else ""),
                                          key="grid_down", level="error")
         elif v >= thr + 60.0 and st.get("since") is not None:
             was = st.get("notified")
@@ -553,6 +563,38 @@ class Monitor:
                                          f"Przy obecnym tempie dom zużyje dziś ok. {nc:.1f} kWh, a prognoza dnia to {fc:.1f} kWh "
                                          f"(+{(nc / fc - 1) * 100:.0f}%). Bateria może nie wystarczyć do rana.")
 
+    async def _night_draw(self, now: datetime) -> None:
+        """Rano (5:00–12:00, raz na dobę): średni pobór domu w nocy wyraźnie wyższy niż zwykle."""
+        loc = dt_util.as_local(now)
+        if not 5 <= loc.hour < 12 or not ncfg.kind(self.notifier.cfg(), "night_draw").get("on"):
+            return
+        day = loc.date().isoformat()
+        done = self.rt.state.setdefault("notify_once", {})
+        if done.get("night_draw") == day:
+            return
+        ins = self.rt.insights
+        res = nightdraw_mod.evaluate(ins.load_day(loc.date()), ins.load_history(loc.date()), loc.date(),
+                                     self._thr("night_draw") or nightdraw_mod.DEFAULT_RATIO)
+        if res is None:
+            if ins.load_day(loc.date())[4] is not None:        # godzina 4:00 zamknięta — ocena zrobiona, nie powtarzamy co minutę
+                self._once("night_draw", day)
+            return
+        self._once("night_draw", day)
+        # nocna praca urządzenia, które EMS sam włączył (np. auto w najtańszych godzinach), nie jest usterką
+        planned = 0.0
+        for d in self.rt.devices.devices:
+            rec = (self.rt.state.get("dev_ctl") or {}).get(d["id"]) or {}
+            if d.get("switch_eid") and d.get("ctl_mode", "off") != "off" and float(rec.get("on_s") or 0.0) > 600.0:
+                planned += float(d.get("ctl_power_w") or 0.0)
+        if planned and res["extra_w"] <= planned * 1.3:
+            self.rt.log.add("notify", f"Nocny pobór {res['avg_w']:.0f} W (zwykle {res['base_w']:.0f} W) — tłumaczą go urządzenia włączone przez EMS", "info")
+            return
+        try:
+            top = self.rt.devices.top_now()
+        except Exception:  # noqa: BLE001
+            top = []
+        await self.notifier.send("night_draw", "🌙 EMS: nocny pobór wyższy niż zwykle", nightdraw_mod.message(res, top), level="info")
+
     async def _accuracy(self, now: datetime) -> None:
         """Rano zapamiętuje prognozę dnia (zużycie, PV), wieczorem (od 23:00) porównuje ją z faktem i dopisuje wpis
         do historii trafności (pokazywanej na karcie). Raz na dobę, niezależnie od restartów w ciągu dnia."""
@@ -637,6 +679,55 @@ class Monitor:
             gc = " Plan nie przewiduje ładowania z sieci."
         await self.notifier.send("weak_pv", "☁️ EMS: słaba prognoza PV na jutro",
                                  f"Prognoza PV na jutro {pv:.1f} kWh (próg {thr:.1f} kWh).{gc}", level="info")
+
+    PLAN_TOMORROW_FROM = (16, 30)       # nie wcześniej niż o 16:30 (ceny RCE na jutro ukazują się po południu)
+    PLAN_TOMORROW_UNTIL_H = 23          # po 23:00 już nie wysyłamy (to nie jest „plan na jutro”, tylko spóźniona wiadomość)
+    PLAN_TOMORROW_RETRY_S = 600.0       # nieudane przeliczenie planu ponawiamy co 10 minut, nie co tick
+
+    async def _plan_tomorrow(self, now: datetime) -> None:
+        """Po opublikowaniu cen na jutro: jedno krótkie zdanie z planu (ładowanie, sprzedaż, zysk, PV). Raz na dobę;
+        plan jest przeliczany na świeżo, żeby zawierał ceny z jutra, a nie sprzed publikacji."""
+        loc = dt_util.as_local(now)
+        if (loc.hour, loc.minute) < self.PLAN_TOMORROW_FROM or loc.hour >= self.PLAN_TOMORROW_UNTIL_H:
+            return
+        if not ncfg.kind(self.notifier.cfg(), "plan_tomorrow").get("on"):
+            return
+        tomorrow = (loc + timedelta(days=1)).date()
+        key = tomorrow.isoformat()
+        if (self.rt.state.get("notify_once") or {}).get("plan_tomorrow") == key:
+            return
+        arr = (self.rt.optimizer._read_rce_arrays() or {}).get(key) or []  # noqa: SLF001
+        if sum(1 for v in arr if isinstance(v, (int, float))) < self._rce_hours(tomorrow):
+            return                                          # ceny jeszcze niepełne — spróbujemy przy następnym ticku
+        ts = now.timestamp()
+        if ts < self._pt_retry:
+            return
+        plan = await self.rt.refresh_plan(force=True)
+        if not plan or plan.get("error") or not plan.get("proposals"):
+            self._pt_retry = ts + self.PLAN_TOMORROW_RETRY_S
+            return
+        try:
+            pv = self.rt.optimizer._read_pv_forecast_kwh("pv_forecast_tomorrow", "")  # noqa: SLF001
+        except Exception:  # noqa: BLE001
+            pv = None
+        info = tomorrowplan_mod.summarize(plan.get("proposals"), pv)
+        self._once("plan_tomorrow", key)
+        await self.notifier.send("plan_tomorrow", f"🗓 EMS: plan na jutro ({tomorrow:%d.%m})", tomorrowplan_mod.message(info), level="info")
+
+    async def _pv_caution(self, now: datetime) -> None:
+        """Rano: jeśli oceny dobowe wskazują stale zawyżoną (albo zaniżoną) prognozę PV, powiadamia o propozycji zmiany ostrożności.
+        Raz na tydzień dla tej samej propozycji; zmiany i tak nie robi — zatwierdza ją użytkownik w panelu."""
+        loc = dt_util.as_local(now)
+        if loc.hour < 9 or not ncfg.kind(self.notifier.cfg(), "pv_caution").get("on"):
+            return
+        prop = self.rt.pv_caution().get("proposal")
+        if not prop:
+            return
+        iso = loc.isocalendar()
+        if not self._once("pv_caution", f"{iso[0]}-W{iso[1]:02d}:{prop['dir']}:{prop['to']:.0f}"):
+            return
+        await self.notifier.send("pv_caution", "☀️ EMS: propozycja zmiany ostrożności prognozy PV",
+                                 prop["text"] + " Zatwierdzisz to w panelu: Zysk i log → Trafność prognoz.", level="info")
 
     async def _health(self, now: datetime) -> None:
         if now.hour != 12:
