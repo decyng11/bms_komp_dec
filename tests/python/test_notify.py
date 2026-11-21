@@ -1,6 +1,6 @@
 """0.8.1: konfigurator powiadomień — włączanie, telefon / tylko HA, odstęp, cisza nocna, progi; nowe zdarzenia;
 podsumowania dnia / tygodnia / miesiąca; usługi."""
-import asyncio, sys, types
+import asyncio, re, sys, types
 from common import *   # noqa
 import common
 from custom_components.bms_komp_dec import notify_cfg as N, monitor as mon
@@ -185,11 +185,11 @@ async def main():
     dsum = pn(hass, "bms_summary_daily")
     check("dzienne: raz o 21:00", len(dsum) == 1, dsum)
     m = dsum[0][2]["message"] if dsum else ""
-    check("dzienne: bilans, energia, SOC, wykonane", "+1,00 zł" in m and "PV 20,0 kWh" in m and "min 21%, max 98%" in m and "Sprzedaż 6000W" in m, m)
+    check("dzienne: bilans, energia, SOC, wykonane", re.search(r"Bilans zł\s+│\s+\+1,00", m) and re.search(r"PV kWh\s+│\s+20,0", m) and "dziś" in m and "wczoraj" in m and "min 21%, max 98%" in m and "Sprzedaż 6000W" in m, m)
     wsum = pn(hass, "bms_summary_weekly")
     check("tygodniowe: w niedzielę po 20:00, raz", len(wsum) == 1, wsum)
     w = wsum[0][2]["message"] if wsum else ""
-    check("tygodniowe: sumy 7 dni i porównanie z poprzednim tygodniem", "02.11–08.11" in w and "+9,10 zł" in w and "Względem poprzedniego tygodnia: -4,90 zł" in w, w)
+    check("tygodniowe: sumy 7 dni i porównanie z poprzednim tygodniem", "02.11–08.11" in w and re.search(r"Razem\s+│\s+\+9,10", w) and "▲" in w and "▼" in w and "Względem poprzedniego tygodnia: -4,90 zł" in w, w)
     # 0.8.6: błąd w liczeniu treści nie gubi podsumowania (wiadomość i tak wychodzi, błąd w dzienniku)
     hass, c, opt, rt = env()
     setcfg(rt, {"summary_daily": {"on": True}}, {"daily": {"time": "21:00"}})

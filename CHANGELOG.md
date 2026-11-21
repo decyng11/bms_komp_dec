@@ -1,5 +1,24 @@
-# EMS komp-dec — w przygotowaniu (po 0.9.5.6)
+# EMS komp-dec 0.9.5.7
 
+## Podsumowania w formie tabeli
+- **Powiadomienia dzienne, tygodniowe i miesięczne to teraz zwarta tabela** zamiast kilku długich zdań: dzień „dziś / wczoraj”, tydzień jako siedem wierszy z najlepszym (▲) i najsłabszym (▼) dniem oraz wierszami „Razem” i „Poprz. tydz.”, miesiąc obok poprzedniego. Brak danych to „—”. Dodatkowe zdania (oszczędność, plan, zabezpieczenia) zostają pod tabelą. Nowy moduł `summtable.py`. Tabela to zwykły tekst wyrównany spacjami i „│”; na telefonie z czcionką o zmiennej szerokości kolumny mogą się lekko rozjechać.
+
+## Rachunek i cel (karta: Zysk i log → „💰 Rachunek i cel”)
+- **Prognoza bilansu z siecią na koniec miesiąca** z przedziałem, liczona ze średniej z ostatnich dób księgi zysków (potrzebne co najmniej 3 pełne doby).
+- **Cel miesięczny** (encja `number.bms_monthly_goal_pln`, 0 = wyłączony): pasek postępu i powiadomienie `bill_goal`, gdy tempo wskazuje przekroczenie albo jesteś blisko (raz w tygodniu, dopóki stan się nie zmieni). To szacunek z bilansu z siecią, bez opłat stałych.
+- **Rozbicie rachunku** bieżącego miesiąca (zakup, sprzedaż, oszczędność) oraz **skarbonka**: ile już zaoszczędziłeś, jaki to procent nakładu i kiedy przy obecnym tempie się zwróci (nakład z „Symulacji rocznej”).
+
+## Narzędzia (karta: Zysk i log → „🧰 Narzędzia”)
+- **Co EMS zrobił za Ciebie:** miesięczne liczniki (zabezpieczenia, korekty planu, sprzedaże i inne) zliczane na bieżąco z dziennika decyzji, więc nie giną po 300 wpisach. Nowy `deeds.py`.
+- **Porady do ustawień** (`adviser.py`): rezerwa baterii, której przez 14 dób nigdy nie użyto; pojemność w ustawieniach wyraźnie różna od wyliczonej z cykli; cena baterii równa 0 (plan nie wlicza zużycia cykli). Tylko sugestie, niczego nie zmieniają.
+- **Test zaniku sieci** (usługa `grid_outage_test`, tylko odczyt): ile godzin bateria utrzyma dom przy obecnym poborze, bez największego odbiornika, tylko z podstawą domu i przy pełnej baterii. Niczego nie odcina.
+- **Ocena opłacalności rozbudowy** (usługa `expand_estimate`): zysk roczny i zwrot z dołożenia baterii albo paneli, z Twoich danych z ostatnich dób (domyślnie 60) i średnich cen zakupu i sprzedaży. Wynik orientacyjny, sezon wpływa na rezultat.
+- **Kalendarz drogich dni** (30 dób, średnia cena zakupu; czerwone ≥ 125% mediany, zielone ≤ 80%) i **mapa cieplna cen** (14 dób × 24 godziny).
+- **Pierwszy słoneczny dzień:** powiadomienie `sunny_day` wieczorem, gdy po kilku pochmurnych dobach prognoza PV na jutro jest wyraźnie wysoka. Raz na dobę, w skrzynce (priorytet 3).
+- Nowe stany: `deeds` w zapisie stanu (zabezpieczone przez `state_guard`).
+- Testy: `test_summtable.py`, `test_billing.py`, `test_tools_pure.py`, `test_tools_runtime.py`, `bill_ui_test.js`, `tools_ui_test.js`.
+
+## Wcześniej w tym wydaniu (po 0.9.5.6)
 ## Utwardzenie po audycie (ataki, awarie, złe zapisy)
 - **Usługi zapisujące wymagają administratora.** `apply_schedule_times` (zapis godzin sterujących falownikiem), `auto_apply_now`, `undo_auto_apply`, `test_schedule` i odrzucanie propozycji (`inbox_action` z akcją `reject`) odrzucają zwykłych użytkowników HA. Automatyzacje i skrypty działają jak dotąd. Odczyty, wymuszenie planu na zakładce Zysk i oznaczanie powiadomień jako przeczytanych zostają dla wszystkich.
 - **Uszkodzony zapis stanu nie zatrzymuje już startu i nie wyłącza funkcji po cichu.** Nowy `state_guard`: przy wczytaniu znane pola o złym typie wracają do wartości domyślnych, a wpis w dzienniku („Naprawiono uszkodzony zapis stanu”) wymienia pola. Wcześniej śmieci w `battery_sign_votes` przerywały start integracji, a zły typ w innych polach powodował wyjątek w każdym ticku (m.in. harmonogram i nadpisania przestawały działać). Test na 600 uszkodzonych wariantach zapisu: 0 awarii startu i 0 błędów ticka (przedtem 50 awarii startu i dziesiątki błędów).

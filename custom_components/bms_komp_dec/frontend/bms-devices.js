@@ -593,6 +593,6 @@
     });
   };
   install.contract = 1;
-  install.version = '0.9.5.6';
+  install.version = '0.9.5.7';
   window.__bmsDevicesInstall = install;
 })();

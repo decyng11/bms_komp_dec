@@ -1,6 +1,6 @@
 """Constants for EMS komp-dec integration."""
 DOMAIN = "bms_komp_dec"
-VERSION = "0.9.5.6"
+VERSION = "0.9.5.7"
 
 # Mapowanie encji źródłowych
 CONF_PV_POWER = "pv_power"
@@ -257,6 +257,7 @@ NUMBERS = [
     ("grid_charge_power_kw", "Moc ładowania baterii z sieci (0 = nie zmieniaj)", 0, 30, 0.1, "kW"),
     ("grid_import_limit_kw", "Limit poboru z sieci — ochrona przyłącza (0 = wyłączony)", 0, 60, 0.1, "kW"),
     ("device_shed_soc", "Oszczędzanie energii: wyłączaj urządzenia poniżej SOC (0 = wyłączone)", 0, 100, 1, "%"),
+    ("monthly_goal_pln", "Cel miesięczny: najwyżej tyle wydam na prąd (0 = bez celu)", 0, 100000, 10, "PLN"),
 ]
 
 NUMBER_DEFAULTS = {
@@ -286,6 +287,7 @@ NUMBER_DEFAULTS = {
     "battery_charge_sign": 0,
     "storm_mode_hours": 24,
     "vacation_load_w": 250,
+    "monthly_goal_pln": 0,
     "battery_price_pln": 0,
     "battery_cycles": 6000,
 }

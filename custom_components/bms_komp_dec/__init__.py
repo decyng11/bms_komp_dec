@@ -43,6 +43,7 @@ _SERVICES = (
     "notify_settings_get", "notify_settings_set", "notify_test", "inbox_action", "devices_get", "devices_set", "devices_discover", "insights_get", "self_test", "diagnostic_report",
     "override_set", "override_clear", "analysis_get", "analysis_set", "control_test", "settings_log_get",
     "profiles_get", "profile_apply", "profile_revert", "profile_save", "profile_delete", "profile_schedule", "profile_schedule_clear", "pv_caution_apply", "pv_caution_revert", "pv_caution_dismiss",
+    "grid_outage_test", "expand_estimate",
 )
 _SUGGEST_HOUR = 16   # RCE na jutro jest publikowane po południu — wcześniej propozycja bazowała na starych danych
 
@@ -330,6 +331,14 @@ def _register_services(hass: HomeAssistant) -> None:
         year, month = _year_month(call.data.get("year"), call.data.get("month"))
         return rt.monthly_report(year, month)
 
+    async def handle_outage_test(call):
+        rt = _need_runtime(hass)
+        return rt.grid_outage_test()
+
+    async def handle_expand(call):
+        rt = _need_runtime(hass)
+        return rt.expand_estimate({k: call.data.get(k) for k in ("batt_kwh", "batt_cost_per_kwh", "pv_kwp", "pv_now_kwp", "pv_cost_per_kwp", "days")})
+
     async def handle_plan(call):
         rt = _need_runtime(hass)
         plan = await rt.refresh_plan(force=_as_bool(call.data.get("force")) is True)   # zakładka Zysk woła to dla każdego widza
@@ -433,7 +442,7 @@ def _register_services(hass: HomeAssistant) -> None:
         reviews = rt.day_reviews(14)
         return {"savings": rt.insights.savings(), "accuracy": rt.insights.accuracy(lf),
                 "reviews": reviews, "reviews_tally": tally(reviews), "arb_proof": rt.arb_proof(14),
-                "pv_caution": rt.pv_caution(),
+                "pv_caution": rt.pv_caution(), "bill": rt.bill(), "deeds": rt.deeds_summary(), "advice": rt.advice(), "price_views": rt.price_views(),
                 "pv_correction_on": switch_on(hass, "pv_forecast_correction", True),
                 "wear_cost": round(float(rt.optimizer.wear_cost()), 4) if hasattr(rt.optimizer, "wear_cost") else 0.0}
 
@@ -631,6 +640,8 @@ def _register_services(hass: HomeAssistant) -> None:
         ("watch_clear", handle_watch_clear, SupportsResponse.OPTIONAL),
         ("health_check", handle_health, SupportsResponse.ONLY),
         ("monthly_report", handle_report, SupportsResponse.ONLY),
+        ("grid_outage_test", handle_outage_test, SupportsResponse.ONLY),
+        ("expand_estimate", handle_expand, SupportsResponse.ONLY),
         ("get_plan", handle_plan, SupportsResponse.ONLY),
         ("diag_store_get_all", handle_diag_get_all, SupportsResponse.ONLY),
         ("diag_store_set", handle_diag_set, SupportsResponse.OPTIONAL),

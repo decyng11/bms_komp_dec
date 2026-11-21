@@ -38,6 +38,12 @@ from . import profiles as prof_mod
 from . import arbproof as arb_mod
 from . import autonomy as auto_mod
 from . import pvcaution as pvc_mod
+from . import summtable as summtable_mod
+from . import billing as bill_mod
+from . import deeds as deeds_mod
+from . import outage as outage_mod
+from . import adviser as adviser_mod
+from . import expand as expand_mod
 
 ISSUES_EVERY_S = 55          # lista „co dziś nie działa” liczy się co tyle sekund
 from .holidays_pl import holiday_name, is_holiday
@@ -188,8 +194,10 @@ class BmsRuntime:
             "overrides": [],                   # ręczne nadpisania planu (overrides.py)
             "analysis_cfg": {},                # ceny alternatyw i nakłady do analiz (analysis.py)
             "control_test": None,              # wynik ostatniego testu sterowania falownikiem
+            "deeds": {},                       # „co EMS zrobił za Ciebie”: liczniki miesięczne (deeds.py)
         }
         self._sign = SignLearner()
+        self.log.on_entry = self._count_deed
 
     # ------------------------------------------------------------ lifecycle
     async def async_load(self) -> None:
@@ -2101,6 +2109,132 @@ class BmsRuntime:
     def plan(self) -> dict[str, Any] | None:
         return self._plan
 
+    # --------------------------------------------------------- „co EMS zrobił”, porady, test zaniku sieci, rozbudowa
+    def _count_deed(self, entry: dict[str, Any]) -> None:
+        cat = deeds_mod.classify(entry)
+        if cat is None:
+            return
+        self.state["deeds"] = deeds_mod.bump(self.state.get("deeds"), dt_util.now().strftime("%Y-%m"), cat)
+        self._save_state()
+
+    def deeds_summary(self) -> dict[str, Any]:
+        return deeds_mod.summary(self.state.get("deeds"), dt_util.now().strftime("%Y-%m"))
+
+    def advice(self) -> list[dict[str, str]]:
+        """Porady konfiguracji (adviser.py) z ustawień i ostatnich 14 dób; błąd jednego źródła nie blokuje reszty."""
+        facts: dict[str, Any] = {}
+        today = dt_util.now().date()
+        try:
+            facts["reserve_pct"] = number_value(self.hass, "reserve_floor_soc", 15.0)
+        except Exception:  # noqa: BLE001
+            pass
+        try:
+            socs = [b[10] for i in range(1, 15) for b in self.insights._buckets((today - timedelta(days=i)).isoformat()) if b is not None and isinstance(b[10], (int, float))]  # noqa: SLF001
+            days = {(today - timedelta(days=i)).isoformat() for i in range(1, 15)
+                    if any(b is not None and isinstance(b[10], (int, float)) for b in self.insights._buckets((today - timedelta(days=i)).isoformat()))}  # noqa: SLF001
+            if socs:
+                facts["soc_min"], facts["soc_days"] = min(socs), len(days)
+        except Exception:  # noqa: BLE001
+            pass
+        try:
+            cap = float(self.optimizer.config.get(CONF_BATTERY_CAPACITY_KWH, DEFAULT_BATTERY_CAPACITY_KWH))
+            s = self.stats.summary(cap)
+            facts["cap_conf"], facts["cap_est"], facts["cap_samples"] = s.get("capacity_configured_kwh"), s.get("capacity_est_kwh"), s.get("capacity_samples")
+        except Exception:  # noqa: BLE001
+            pass
+        try:
+            facts["battery_price"] = number_value(self.hass, "battery_price_pln", 0.0)
+            facts["sell_windows_on"] = switch_on(self.hass, "bateria_sprzedaz_1", False) or switch_on(self.hass, "bateria_sprzedaz_2", False)
+        except Exception:  # noqa: BLE001
+            pass
+        return adviser_mod.advise(facts)
+
+    def price_views(self) -> dict[str, Any]:
+        """Kalendarz drogich dni (30 dób, średnia cena zakupu) i mapa cieplna cen (14 dób × 24 h) z zapisanych cen; brak cen → puste."""
+        today = dt_util.now().date()
+        hist = self.insights.buy_history(today, 30)
+        rows = []
+        for d in sorted(hist):
+            vals = [v for v in hist[d] if isinstance(v, (int, float))]
+            if len(vals) >= 12:
+                rows.append({"date": d, "avg": round(sum(vals) / len(vals), 3), "max": round(max(vals), 3)})
+        avgs = sorted(r["avg"] for r in rows)
+        med = avgs[len(avgs) // 2] if avgs else None
+        for r in rows:
+            r["level"] = "high" if med and r["avg"] >= 1.25 * med else ("low" if med and r["avg"] <= 0.8 * med else "mid")
+        heat = [{"date": d, "h": [None if not isinstance(v, (int, float)) else round(v, 3) for v in hist[d]]} for d in sorted(hist)[-14:] if len(hist[d]) == 24]
+        return {"calendar": rows, "median": med, "heat": heat}
+
+    def grid_outage_test(self) -> dict[str, Any]:
+        """Symulacja zaniku sieci: warianty czasu pracy z baterii przy obecnym stanie. Nic nie odcina ani nie zmienia."""
+        au = self.autonomy()
+        if au is None:
+            return {"ok": False, "error": "Brak danych do oszacowania (poziom baterii albo pobór domu)."}
+        try:
+            top = self.devices.top_now()
+        except Exception:  # noqa: BLE001
+            top = []
+        cap = float(self.optimizer.config.get(CONF_BATTERY_CAPACITY_KWH, DEFAULT_BATTERY_CAPACITY_KWH))
+        return {"ok": True, "soc": au["soc"], "floor": au["floor"], "load_w": au["load_w"], "usable_kwh": au["usable_kwh"],
+                "scenarios": outage_mod.scenarios(au["soc"], au["floor"], cap, au["load_w"], top),
+                "note": "Szacunek bez produkcji PV, przy stałym poborze. Nic nie zostało odcięte."}
+
+    def expand_estimate(self, data: dict[str, Any]) -> dict[str, Any]:
+        """Ocena rozbudowy z własnych danych z ostatnich dób (domyślnie 60). Parametry: batt_kwh, batt_cost_per_kwh, pv_kwp, pv_now_kwp, pv_cost_per_kwp, days."""
+        n = int(min(365, max(14, expand_mod._num(data.get("days")) or 60)))     # noqa: SLF001
+        today = dt_util.now().date()
+        keys = [(today - timedelta(days=i)).isoformat() for i in range(1, n + 1)]
+        rows = [{"pv": (self.stats.days.get(k) or {}).get("pv"), "exp": (self.stats.days.get(k) or {}).get("exp")} for k in keys if k in self.stats.days]
+        lds = [self.ledger.days[k] for k in keys if k in self.ledger.days]
+        imp, cost = sum(v["import_kwh"] for v in lds), sum(v["cost"] for v in lds)
+        exp_, rev = sum(v["export_kwh"] for v in lds), sum(v["revenue"] for v in lds)
+        out: dict[str, Any] = {"ok": True, "days": len(rows), "battery": None, "pv": None, "avg_buy": None, "avg_sell": None}
+        if imp <= 0 or exp_ <= 0 or len(rows) < expand_mod.MIN_DAYS:
+            return {**out, "ok": False, "error": f"Za mało danych: potrzeba co najmniej {expand_mod.MIN_DAYS} dób z zakupem i sprzedażą energii (jest {len(rows)})."}
+        buy, sell = cost / imp, rev / exp_
+        out["avg_buy"], out["avg_sell"] = round(buy, 3), round(sell, 3)
+        cap = float(self.optimizer.config.get(CONF_BATTERY_CAPACITY_KWH, DEFAULT_BATTERY_CAPACITY_KWH))
+        bp, cyc = number_value(self.hass, "battery_price_pln", 0.0), number_value(self.hass, "battery_cycles", 6000.0)
+        wear = (bp / (cyc * cap)) if bp > 0 and cyc > 0 and cap > 0 else 0.0
+        if data.get("batt_kwh") not in (None, ""):
+            out["battery"] = expand_mod.battery(rows, data.get("batt_kwh"), data.get("batt_cost_per_kwh"), buy, sell, wear)
+        if data.get("pv_kwp") not in (None, ""):
+            out["pv"] = expand_mod.pv(rows, data.get("pv_kwp"), data.get("pv_now_kwp"), data.get("pv_cost_per_kwp"), buy, sell)
+        if out["battery"] is None and out["pv"] is None:
+            out["ok"] = False
+            out["error"] = "Podaj parametry rozbudowy (bateria: kWh i zł/kWh; panele: kWp, obecna moc i zł/kWp)."
+        out["note"] = "Szacunek rzędu wielkości z danych z ostatnich dób (sezon wpływa na wynik), bez dotacji, podatków i zmian cen."
+        return out
+
+    # --------------------------------------------------------- rachunek: prognoza, cel, rozbicie, skarbonka
+    def bill(self) -> dict[str, Any]:
+        """Prognoza bilansu do końca miesiąca, cel miesięczny, rozbicie bieżącego miesiąca i „skarbonka”. Każda część osobno odporna na błąd."""
+        now = dt_util.now()
+        today = now.date()
+        out: dict[str, Any] = {"forecast": None, "goal": None, "goal_value": 0.0, "breakdown": [], "month_title": None, "piggy": None}
+        try:
+            nets = {k: self.ledger.net(v) for k, v in self.ledger.days.items()}
+            fc = bill_mod.forecast(nets, today, (now.hour * 60 + now.minute) / 1440.0)
+            out["forecast"] = fc
+            out["goal_value"] = number_value(self.hass, "monthly_goal_pln", 0.0)
+            out["goal"] = bill_mod.goal_status(fc, out["goal_value"])
+        except Exception as err:  # noqa: BLE001
+            _LOGGER.debug("EMS: prognoza rachunku: %s", err)
+        try:
+            rep = self.monthly_report()
+            out["breakdown"] = bill_mod.breakdown(rep)
+            out["month_title"] = rep.get("title")
+        except Exception as err:  # noqa: BLE001
+            _LOGGER.debug("EMS: rozbicie rachunku: %s", err)
+        try:
+            tot = self.insights.savings(today)["total"]
+            cfg = analysis_mod.clean_cfg(self.state.get("analysis_cfg"))
+            invest = (cfg.get("invest_pv") or 0.0) + (cfg.get("invest_batt") or 0.0)
+            out["piggy"] = bill_mod.piggy(tot["vs_nobat"], invest or None, tot["days"], today)
+        except Exception as err:  # noqa: BLE001
+            _LOGGER.debug("EMS: skarbonka: %s", err)
+        return out
+
     # --------------------------------------------------------- raport miesięczny
     def monthly_report(self, year: int | None = None, month: int | None = None) -> dict[str, Any]:
         today = dt_util.now().date()
@@ -2134,15 +2268,13 @@ class BmsRuntime:
         self._save_state()
         if rep["days_with_data"] <= 0:
             return
-        text = report_mod.report_text(rep)
         pm = (prev.replace(day=1) - timedelta(days=1))
+        prev_rep = None
         try:
             prev_rep = self.monthly_report(pm.year, pm.month)
-            cmp = report_mod.compare_line(rep.get("net"), prev_rep.get("net") if prev_rep.get("days_with_data") else None, "poprzedniego miesiąca")
-            if cmp:
-                text += "\n" + cmp
         except Exception:  # noqa: BLE001
-            pass
+            prev_rep = None
+        text = report_mod.report_table_text(rep, prev_rep)
         await self.monitor.notifier.send(
             "summary_monthly", f"📊 EMS: raport za {rep['title']}", text,
             key=f"report:{tag}", level="info")
@@ -2154,12 +2286,13 @@ class BmsRuntime:
             start = day - timedelta(days=6)
             t = report_mod.period_totals(self.ledger, self.stats, start, day)
             p = report_mod.period_totals(self.ledger, self.stats, start - timedelta(days=7), start - timedelta(days=1))
-            lines = [f"Tydzień {start:%d.%m}–{day:%d.%m} (dni z danymi: {t['days']})"] + report_mod.totals_lines(t)
+            lines = [f"Tydzień {start:%d.%m}–{day:%d.%m} (dni z danymi: {t['days']})"]
+            lines += summtable_mod.week_lines(
+                summtable_mod.week_days(lambda a, b: report_mod.period_totals(self.ledger, self.stats, a, b), start, day),
+                p["net"] if p["days"] else None)
             cmp = report_mod.compare_line(t["net"], p["net"] if p["days"] else None, "poprzedniego tygodnia")
             if cmp:
                 lines.append(cmp)
-            if t.get("best"):
-                lines.append(f"Najlepszy dzień: {t['best'][0]} ({t['best'][1]:+.2f} zł), najsłabszy: {t['worst'][0]} ({t['worst'][1]:+.2f} zł)".replace(".", ","))
             try:
                 lines.extend(money_mod.lines(self.ledger, self.stats, day, "week", start))
             except Exception:  # noqa: BLE001
@@ -2185,7 +2318,7 @@ class BmsRuntime:
                 pass
             return "\n".join(lines)
         t = report_mod.period_totals(self.ledger, self.stats, day, day)
-        lines = report_mod.totals_lines(t)
+        lines = summtable_mod.day_lines(t, report_mod.period_totals(self.ledger, self.stats, day - timedelta(days=1), day - timedelta(days=1)))
         try:
             lines.extend(money_mod.lines(self.ledger, self.stats, day, "day"))
         except Exception:  # noqa: BLE001

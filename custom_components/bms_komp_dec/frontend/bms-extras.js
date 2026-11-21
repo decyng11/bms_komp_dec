@@ -520,17 +520,24 @@
         [sb, ab].forEach((box) => {
           if (!box || box.dataset.exBound) return;
           box.dataset.exBound = '1';
+          box.addEventListener('input', (ev) => {
+            const i = ev.target && ev.target.dataset && ev.target.dataset.exf ? ev.target : null;
+            if (!i) return;
+            const t = s.tools || (s.tools = { out: null, exp: null, busy: '', err: '', form: {} });
+            t.form[i.dataset.exf] = i.value;
+          });
           box.addEventListener('click', (ev) => {
             const b = ev.target && ev.target.closest ? ev.target.closest('[data-exi]') : null;
             if (!b) return;
             if (b.dataset.exi === 'period') { s.period = b.dataset.p; this._exInsights(); }
             else if (b.dataset.exi === 'reload') { s.at = 0; this._exInsights(); }
+            else if (b.dataset.exi === 'outage' || b.dataset.exi === 'expand') this._exToolsAct(b.dataset.exi);
             else if (b.dataset.exi === 'cau-apply') this._exCautionAct('pv_caution_apply');
             else if (b.dataset.exi === 'cau-revert') this._exCautionAct('pv_caution_revert');
             else if (b.dataset.exi === 'cau-dismiss') this._exCautionAct('pv_caution_dismiss');
           });
         });
-        const key = JSON.stringify([s.at, s.err, s.period, !!s.data, TC('text'), s.cbusy, s.cmsg, this._dgIsAdmin(), JSON.stringify((s.data && s.data.pv_caution) || null)]);
+        const key = JSON.stringify([s.at, s.err, s.period, !!s.data, TC('text'), s.cbusy, s.cmsg, this._dgIsAdmin(), JSON.stringify((s.data && s.data.pv_caution) || null), JSON.stringify((s.data && s.data.bill) || null), JSON.stringify(s.tools ? [s.tools.out, s.tools.exp, s.tools.busy, s.tools.err] : null), JSON.stringify((s.data && [s.data.deeds, s.data.advice, s.data.price_views]) || null)]);
         if (sb && sb.dataset.exKey !== key) { sb.dataset.exKey = key; sb.innerHTML = this._exSavHtml(); }
         if (ab && ab.dataset.exKey !== key) { ab.dataset.exKey = key; ab.innerHTML = this._exAccHtml(); }
       },
@@ -549,6 +556,100 @@
         this._exInsights();
       },
       // Autokorekta ostrożności prognozy PV: propozycja z ocen dobowych (zatwierdza admin), cofnięcie ostatniej zmiany
+      // „💰 Rachunek i cel”: prognoza bilansu do końca miesiąca, cel miesięczny, rozbicie miesiąca, skarbonka (dane z insights_get.bill)
+      _exBillHtml(s) {
+        const b = s.data && s.data.bill && typeof s.data.bill === 'object' ? s.data.bill : null;
+        if (!b) return '';
+        const n = (v) => (typeof v === 'number' && isFinite(v)) ? v : null;
+        const zl = (v, sign) => { const x = n(v); return x === null ? '—' : `${sign && x >= 0 ? '+' : ''}${exFmt(x, 2)} zł`; };
+        const bar = (pct, col) => { const w = Math.max(0, Math.min(100, n(pct) === null ? 0 : n(pct))); return `<div style="height:8px;border-radius:4px;background:var(--border,rgba(128,128,128,.25));overflow:hidden;margin:4px 0;"><div data-role="bar" style="height:100%;width:${w}%;background:${col};"></div></div>`; };
+        const parts = [];
+        const g = b.goal && typeof b.goal === 'object' ? b.goal : null;
+        const col = !g ? '' : (g.status === 'ok' ? 'var(--green)' : (g.status === 'warn' ? 'var(--orange)' : 'var(--red)'));
+        if (g) {
+          parts.push(`<div data-role="bill-goal" data-status="${exEsc(g.status || '')}" style="margin-bottom:8px;"><div style="font-size:12px;">🎯 <b>Cel miesięczny:</b> ${exEsc(g.text || '')}</div>${bar(g.pct, col)}<div style="font-size:11px;color:var(--muted);">Wydano ${zl(g.spent)} z ${zl(g.goal)} · prognoza ${zl(g.projected_spent)} (${exFmt(g.pct, 0)}% celu)</div></div>`);
+        } else {
+          parts.push(`<div data-role="bill-goal" class="ex-note" style="margin-bottom:8px;">🎯 Cel miesięczny: ustaw w encji <code>number.bms_monthly_goal_pln</code> kwotę, ponad którą nie chcesz wydać na prąd w miesiącu — EMS pokaże postęp i ostrzeże, gdy tempo wskaże przekroczenie.</div>`);
+        }
+        const f = b.forecast && typeof b.forecast === 'object' ? b.forecast : null;
+        if (f) {
+          parts.push(`<div data-role="bill-forecast" style="font-size:12px;margin-bottom:8px;">📈 <b>Bilans z siecią na koniec miesiąca:</b> ${zl(f.projected, true)} <span style="color:var(--muted);">(przedział ${zl(f.low, true)} … ${zl(f.high, true)}; na razie ${zl(f.mtd, true)}, średnio ${zl(f.avg_day, true)} na dobę z ${exFmt(f.days_used, 0)} dób)</span></div>`);
+        } else {
+          parts.push(`<div data-role="bill-forecast" class="ex-note" style="margin-bottom:8px;">📈 Prognoza rachunku pojawi się po 3 pełnych dobach z księgi zysków.</div>`);
+        }
+        const br = Array.isArray(b.breakdown) ? b.breakdown.filter((r) => r && typeof r === 'object' && typeof r.k === 'string') : [];
+        if (br.length) {
+          parts.push(`<div data-role="bill-breakdown" style="margin-bottom:8px;"><div style="font-size:12px;font-weight:600;margin-bottom:2px;">🧾 ${exEsc(b.month_title || 'Ten miesiąc')} — z czego wychodzi rachunek</div><table style="width:100%;border-collapse:collapse;font-size:12px;">${br.map((r) => `<tr><td style="color:var(--muted);padding:2px 0;">${exEsc(r.k)}</td><td style="text-align:right;">${exEsc(r.v || '')}</td></tr>`).join('')}</table><div style="font-size:11px;color:var(--muted);">Szacunek z księgi zysków — bez opłat stałych i dystrybucyjnych.</div></div>`);
+        }
+        const pg = b.piggy && typeof b.piggy === 'object' ? b.piggy : null;
+        if (pg && n(pg.saved) !== null) {
+          const pct = n(pg.pct);
+          let when = '';
+          if (pg.payback_date === 'zwrócone') when = 'Instalacja już się zwróciła.';
+          else if (typeof pg.payback_date === 'string' && n(pg.years_left) !== null) when = `Przy obecnym tempie zwrot ok. ${exEsc(pg.payback_date)} (za ${exFmt(pg.years_left, 1)} lat).`;
+          else if (pct !== null) when = 'Data zwrotu pojawi się po 14 dobach z dodatnią oszczędnością.';
+          const inv = n(pg.invest) !== null ? ` z nakładu ${zl(pg.invest)}` : ' (podaj nakład w „Symulacja roczna i zwrot z inwestycji”, żeby zobaczyć procent zwrotu)';
+          parts.push(`<div data-role="bill-piggy" style="margin-bottom:12px;"><div style="font-size:12px;">🐷 <b>Skarbonka:</b> zaoszczędzono ${zl(pg.saved)}${inv} (${exFmt(pg.per_day, 2)} zł na dobę, ${exFmt(pg.days, 0)} dób)</div>${pct !== null ? bar(pct, 'var(--accent,#0a84ff)') : ''}${when ? `<div style="font-size:11px;color:var(--muted);">${when}</div>` : ''}</div>`);
+        }
+        return `<div data-role="bill" style="margin-bottom:14px;"><div style="font-size:12px;font-weight:600;margin-bottom:6px;">💰 Rachunek i cel</div>${parts.join('')}</div>`;
+      },
+      // „🧰 Narzędzia”: porady, „co EMS zrobił”, test zaniku sieci, ocena rozbudowy, kalendarz drogich dni, mapa cieplna cen
+      _exToolsHtml(s) {
+        const d = s.data && typeof s.data === 'object' ? s.data : null;
+        if (!d) return '';
+        const n = (v) => (typeof v === 'number' && isFinite(v)) ? v : null;
+        const t = s.tools || (s.tools = { out: null, exp: null, busy: '', err: '', form: {} });
+        const parts = [];
+        const de = d.deeds && typeof d.deeds === 'object' ? d.deeds : null;
+        if (de && typeof de.text === 'string' && de.text) parts.push(`<div data-role="deeds" style="font-size:12px;margin-bottom:8px;">🤖 <b>Co EMS zrobił za Ciebie:</b> ${exEsc(de.text)}</div>`);
+        const ad = (Array.isArray(d.advice) ? d.advice : []).filter((a) => a && typeof a === 'object' && typeof a.title === 'string');
+        if (ad.length) parts.push(`<div data-role="advice" style="margin-bottom:8px;"><div style="font-size:12px;font-weight:600;margin-bottom:2px;">🧭 Porady do ustawień</div>${ad.map((a) => `<div data-role="advice-item" style="font-size:12px;border-top:1px solid var(--border,rgba(128,128,128,.25));padding:4px 0;"><b>${exEsc(a.title)}</b><div style="color:var(--muted);">${exEsc(a.text || '')}</div></div>`).join('')}</div>`);
+        const pv = d.price_views && typeof d.price_views === 'object' ? d.price_views : null;
+        const cal = pv && Array.isArray(pv.calendar) ? pv.calendar.filter((r) => r && typeof r.date === 'string' && n(r.avg) !== null) : [];
+        if (cal.length >= 5) {
+          const colr = (l) => l === 'high' ? 'var(--red)' : (l === 'low' ? 'var(--green)' : 'var(--border,rgba(128,128,128,.35))');
+          parts.push(`<div data-role="price-calendar" style="margin-bottom:8px;"><div style="font-size:12px;font-weight:600;margin-bottom:4px;">📅 Kalendarz drogich dni (średnia cena zakupu)</div><div style="display:flex;flex-wrap:wrap;gap:3px;">${cal.map((r) => `<div data-level="${exEsc(r.level || '')}" title="${exEsc(r.date)}: ${exFmt(r.avg, 2)} zł/kWh" style="width:34px;padding:3px 0;border-radius:6px;text-align:center;font-size:10px;color:${r.level === 'mid' ? 'inherit' : '#fff'};background:${colr(r.level)};">${exEsc(r.date.slice(8, 10))}<br>${exFmt(r.avg, 2)}</div>`).join('')}</div><div style="font-size:11px;color:var(--muted);margin-top:2px;">Czerwone: ≥ 125% mediany (${n(pv.median) !== null ? exFmt(pv.median, 2) : '—'} zł/kWh), zielone: ≤ 80%.</div></div>`);
+        }
+        const heat = pv && Array.isArray(pv.heat) ? pv.heat.filter((r) => r && typeof r.date === 'string' && Array.isArray(r.h) && r.h.length === 24) : [];
+        const hv = heat.flatMap((r) => r.h.filter((v) => n(v) !== null));
+        if (heat.length >= 3 && hv.length) {
+          const lo = Math.min(...hv), hi = Math.max(...hv);
+          const cell = (v) => { if (n(v) === null) return '<td></td>'; const k = hi > lo ? (v - lo) / (hi - lo) : 0; return `<td title="${exFmt(v, 2)} zł/kWh" style="background:rgba(${Math.round(60 + 195 * k)},${Math.round(180 - 120 * k)},80,.85);width:12px;height:12px;"></td>`; };
+          parts.push(`<div data-role="price-heat" style="margin-bottom:8px;overflow-x:auto;"><div style="font-size:12px;font-weight:600;margin-bottom:4px;">🌡️ Mapa cieplna cen (doby × godziny)</div><table style="border-collapse:separate;border-spacing:1px;font-size:9px;">${heat.map((r) => `<tr><td style="padding-right:4px;color:var(--muted);">${exEsc(r.date.slice(5))}</td>${r.h.map(cell).join('')}</tr>`).join('')}</table><div style="font-size:11px;color:var(--muted);">Od lewej godzina 0 do 23; zielone — tanio, czerwone — drogo (od ${exFmt(lo, 2)} do ${exFmt(hi, 2)} zł/kWh).</div></div>`);
+        }
+        const dis = t.busy ? 'disabled' : '';
+        const o = t.out && typeof t.out === 'object' ? t.out : null;
+        let outHtml = '';
+        if (o) outHtml = o.ok ? `<div data-role="outage-result" style="font-size:12px;margin-top:4px;">Start: ${exFmt(o.soc, 0)}% (próg ${exFmt(o.floor, 0)}%), pobór ${exFmt(o.load_w, 0)} W<table style="width:100%;border-collapse:collapse;">${(Array.isArray(o.scenarios) ? o.scenarios : []).map((x) => `<tr><td style="padding:2px 0;color:var(--muted);">${exEsc(x && x.label)}</td><td style="text-align:right;font-weight:600;">${exEsc(x && x.text)}</td></tr>`).join('')}</table><div style="font-size:11px;color:var(--muted);">${exEsc(o.note || '')}</div></div>` : `<div data-role="outage-result" class="ex-note">${exEsc(o.error || 'Brak wyniku.')}</div>`;
+        parts.push(`<div data-role="outage" style="margin-bottom:8px;"><div style="font-size:12px;font-weight:600;margin-bottom:4px;">🔌 Test zaniku sieci</div><button class="btn" data-exi="outage" ${dis} style="padding:6px 14px;font-size:12px;">Sprawdź, jak długo wytrzyma dom</button>${outHtml}</div>`);
+        const f = t.form || {};
+        const inp = (k, label, ph) => `<label style="font-size:11px;color:var(--muted);display:inline-block;margin:0 8px 4px 0;">${label}<br><input data-exf="${k}" type="number" inputmode="decimal" value="${exEsc(f[k] == null ? '' : f[k])}" placeholder="${ph}" style="width:90px;padding:4px;"></label>`;
+        const e = t.exp && typeof t.exp === 'object' ? t.exp : null;
+        let eHtml = '';
+        if (e) {
+          const row = (r, name) => r && typeof r === 'object' ? `<tr data-role="expand-${name}"><td style="color:var(--muted);">${name === 'bat' ? 'Bateria' : 'Panele'}</td><td style="text-align:right;">koszt ${exFmt(r.cost, 0)} zł</td><td style="text-align:right;">zysk ${exFmt(r.annual, 0)} zł/rok</td><td style="text-align:right;font-weight:600;">${r.payback_years == null ? 'brak zwrotu' : 'zwrot ' + exFmt(r.payback_years, 1) + ' lat'}</td></tr>${r.note ? `<tr><td colspan="4" style="font-size:11px;color:var(--muted);">${exEsc(r.note)}</td></tr>` : ''}` : '';
+          eHtml = e.ok ? `<div data-role="expand-result" style="font-size:12px;"><table style="width:100%;border-collapse:collapse;">${row(e.battery, 'bat')}${row(e.pv, 'pv')}</table><div style="font-size:11px;color:var(--muted);">Średnio kupujesz po ${exFmt(e.avg_buy, 2)} zł/kWh, sprzedajesz po ${exFmt(e.avg_sell, 2)} zł/kWh (z ${exFmt(e.days, 0)} dób). ${exEsc(e.note || '')}</div></div>` : `<div data-role="expand-result" class="ex-note">${exEsc(e.error || 'Brak wyniku.')}</div>`;
+        }
+        parts.push(`<div data-role="expand" style="margin-bottom:12px;"><div style="font-size:12px;font-weight:600;margin-bottom:4px;">📐 Czy opłaca się rozbudowa?</div>${inp('batt_kwh', 'Bateria [kWh]', '5')}${inp('batt_cost_per_kwh', 'zł/kWh', '2000')}${inp('pv_kwp', 'Panele [kWp]', '3')}${inp('pv_now_kwp', 'Obecnie [kWp]', '6')}${inp('pv_cost_per_kwp', 'zł/kWp', '4000')}<br><button class="btn" data-exi="expand" ${dis} style="padding:6px 14px;font-size:12px;">Oszacuj</button>${eHtml}</div>`);
+        if (t.err) parts.push(`<div class="ex-chip bad" data-role="tools-err" style="display:block;border-radius:12px;padding:8px 12px;margin-bottom:8px;">Nie udało się: ${exEsc(t.err)}</div>`);
+        return `<div data-role="tools" style="margin-bottom:14px;"><div style="font-size:12px;font-weight:600;margin-bottom:6px;">🧰 Narzędzia</div>${parts.join('')}</div>`;
+      },
+      async _exToolsAct(kind) {
+        const s = this._exS().ins;
+        const t = s.tools || (s.tools = { out: null, exp: null, busy: '', err: '', form: {} });
+        if (t.busy) return;
+        t.busy = kind; t.err = ''; this._exInsights();
+        try {
+          if (kind === 'outage') t.out = exResp(await exCall(this, 'grid_outage_test', {})) || null;
+          else {
+            const data = {};
+            Object.keys(t.form || {}).forEach((k) => { const v = parseFloat(String(t.form[k]).replace(',', '.')); if (isFinite(v)) data[k] = v; });
+            t.exp = exResp(await exCall(this, 'expand_estimate', data)) || null;
+          }
+        } catch (e) { t.err = exErr(e); }
+        t.busy = '';
+        this._exInsights();
+      },
       _exCautionHtml(s) {
         const pc = s.data && s.data.pv_caution && typeof s.data.pv_caution === 'object' ? s.data.pv_caution : null;
         if (!pc) return '';
@@ -687,7 +788,7 @@
               <div style="font-size:12px;color:var(--muted);margin-bottom:6px;">Zakaz „ładuj z sieci → sprzedaj”: kolumna „z sieci sprzedane” ma być 0. To górna granica — liczymy, że do sieci schodzi najpierw energia, którą bateria wcześniej pobrała z sieci.</div>
               <div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-size:12px;"><thead><tr style="text-align:left;color:var(--muted);"><th>Dzień</th><th style="text-align:right;">Z sieci do baterii</th><th style="text-align:right;">Z baterii do sieci</th><th style="text-align:right;">Z sieci sprzedane</th><th>Wynik</th></tr></thead><tbody>${apRows}</tbody></table></div></div>`
           : `<div class="ex-note" data-role="arb-proof">🔒 Dowód braku arbitrażu: od teraz EMS liczy każdej doby, ile energii poszło z sieci do baterii, ile z baterii do sieci i ile z tego mogło pochodzić z sieci (ma być 0). Pierwszy wiersz pojawi się, gdy bateria zacznie się ładować z sieci albo oddawać energię do sieci.</div>`;
-        return `${this._exCautionHtml(s)}${reviewHtml}${arbHtml}<div class="ex-tiles">${tiles.join('')}</div>${hzTable}${hzTune}${charts}
+        return `${this._exCautionHtml(s)}${this._exBillHtml(s)}${this._exToolsHtml(s)}${reviewHtml}${arbHtml}<div class="ex-tiles">${tiles.join('')}</div>${hzTable}${hzTune}${charts}
           <div class="ex-note">Błąd to średnia różnica prognozy i wykonania w procentach (dni z co najmniej 0,5 kWh), z ostatnich 30 dni. Prognoza PV jest zapisywana rano (od 6:00) dla każdego z 7 dni do przodu, prognoza zużycia — dzień wcześniej.
             Korekta PV jest liczona osobno dla każdego dnia do przodu (mediana wykonania do prognozy z 30 dni, w granicach 0,5–1,4), uwzględnia stały wzorzec godzinowy i poprawia dzisiejszy dzień na podstawie godzin, które już minęły.
             Dni, w których bateria była pełna i falownik ucinał produkcję, nie uczą modelu. „Błąd po korekcie” liczony jest z prognoz faktycznie wydanych po korekcie, więc pokazuje, czy korekta pomaga. Zakres to typowy błąd tego dnia.</div>`;
@@ -1237,6 +1338,6 @@
 
   };
   install.contract = 1;
-  install.version = '0.9.5.6';
+  install.version = '0.9.5.7';
   window.__bmsExtrasInstall = install;
 })();

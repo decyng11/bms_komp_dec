@@ -14,7 +14,7 @@ FLAT_DICTS = ("price_reaction", "notified", "alarms_active", "soc_day", "soc_pre
               "grid_batt", "live_apply")
 # słowniki o dowolnej zawartości
 DICTS = ("accuracy_fc", "last_applied", "notify_cfg", "grid_target_plan", "auto_skip", "sale_plan", "sale_actual", "sale_power_plan", "dev_ctl",
-         "plan_sig", "dev_done", "rejected_props", "analysis_cfg", "zeroed", "day_reviews", "arb_proof", "pv_caution")
+         "plan_sig", "dev_done", "rejected_props", "analysis_cfg", "zeroed", "day_reviews", "arb_proof", "pv_caution", "deeds")
 LISTS = ("accuracy", "watches", "overrides", "auto_enabled", "auto_disabled", "auto_hist", "inbox", "settings_log")
 FLOATS = ("today_charge", "today_pv", "yesterday_charge", "yesterday_pv")
 INTS = ("inbox_seq", "settings_log_seq")

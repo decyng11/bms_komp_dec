@@ -86,7 +86,7 @@ async def notify_part():
     p = push(hass)
     check("podsumowanie dnia: trafiło na telefon przy domyślnej konfiguracji", len(p) == 1 and "podsumowanie dnia" in p[0][2]["title"], [x[2].get("title") for x in p])
     msg = p[0][2]["message"] if p else ""
-    check("podsumowanie dnia: bilans, oszczędność, skąd energia, taryfa", "Bilans z siecią" in msg and "Bez PV i baterii" in msg and "Skąd energia" in msg and "drogie godziny" in msg, msg)
+    check("podsumowanie dnia: bilans, oszczędność, skąd energia, taryfa", "Bilans zł" in msg and "Bez PV i baterii" in msg and "Skąd energia" in msg and "drogie godziny" in msg, msg)
     # po wyłączeniu: komunikat w dzienniku zamiast ciszy
     hass, c, opt, rt = mkenv()
     rt.state["notify_cfg"] = __import__("custom_components.bms_komp_dec.notify_cfg", fromlist=["x"]).effective({"kinds": {"summary_daily": {"on": False}}})

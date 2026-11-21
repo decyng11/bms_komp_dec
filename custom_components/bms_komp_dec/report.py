@@ -92,6 +92,22 @@ def report_text(rep: dict[str, Any]) -> str:
     return "\n".join(lines)
 
 
+def report_table_text(rep: dict[str, Any], prev: dict[str, Any] | None = None) -> str:
+    """Raport miesięczny do powiadomienia jako tabela: miesiąc obok poprzedniego, pod nią krótkie uwagi."""
+    from . import summtable
+    lines = [f"Raport EMS — {rep['title']}"] + summtable.month_lines(rep, prev)
+    cmp = compare_line(rep.get("net"), prev.get("net") if isinstance(prev, dict) and prev.get("days_with_data") else None, "poprzedniego miesiąca")
+    if cmp:
+        lines.append(cmp)
+    if rep.get("saving_estimate") is not None:
+        lines.append("* oszczędność: szacunek względem braku PV i baterii (orientacyjnie)")
+    if rep.get("best_day"):
+        lines.append(f"Najlepszy dzień: {rep['best_day']['date']} ({rep['best_day']['net']:+.2f} zł)".replace(".", ","))
+    if rep.get("days_with_data", 0) < rep.get("days_in_month", 0) - 1:
+        lines.append(f"Uwaga: dane z {rep['days_with_data']} z {rep['days_in_month']} dni.")
+    return "\n".join(lines)
+
+
 def period_totals(ledger, stats, start: date, end: date) -> dict[str, Any]:
     """Sumy za dni [start, end] (włącznie): bilans, energia z/do sieci, PV, dom, bateria; najlepszy i najgorszy dzień."""
     keys = []

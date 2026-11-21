@@ -43,6 +43,8 @@ CATALOG: dict[str, tuple] = {
     "rce_high": ("Ceny i plan", "Wysoka cena sprzedaży jutro", "Jutro cena RCE przekracza próg; podaje godzinę i plan sprzedaży.", True, True, 1440, False,
                  ("próg", "zł/kWh", 1.0, 0.1, 5.0, 0.05)),
     "plan_tomorrow": ("Ceny i plan", "Plan na jutro", "Po opublikowaniu cen na jutro (ok. 16:30): kiedy ładowanie z sieci, kiedy sprzedaż z baterii, ile na tym zarobisz i ile PV jest prognozowane — jedno krótkie zdanie, raz na dobę. Domyślnie tylko w skrzynce (dzwonek).", True, False, 1440, False, None),
+    "sunny_day": ("Ceny i plan", "Pierwszy słoneczny dzień", "Po kilku pochmurnych dniach z rzędu wieczorem informuje, że jutro ma być słonecznie (prognoza PV wyraźnie powyżej zwykłego poziomu). Najwyżej raz na dobę.", True, False, 1440, True, None),
+    "bill_goal": ("Ceny i plan", "Cel miesięczny: ostrzeżenie", "Ustawiłeś cel miesięczny (najwyżej tyle wydam na prąd) i przy obecnym tempie go przekroczysz albo już przekroczyłeś. Raz w tygodniu, dopóki sytuacja się nie zmieni. Tylko szacunek z bilansu z siecią — bez opłat stałych.", True, True, 10080, False, None),
     "pv_caution": ("Ceny i plan", "Propozycja: ostrożność prognozy PV", "Z ocen dobowych wynika, że prognoza PV bywa stale zawyżona (albo zaniżona) — EMS proponuje zmianę ostrożności planu. Nic nie zmienia sam; zatwierdzasz jednym kliknięciem (Zysk i log → Trafność prognoz). Najwyżej raz w tygodniu.", True, False, 10080, False, None),
     "buy_prices_missing": ("Ceny i plan", "Brak cen zakupu (taryfa dynamiczna)", "Taryfa dynamiczna, a encja zakupu nie podaje cen godzinowych na dziś.", True, True, 1440, False, None),
     "pv_forecast_missing": ("Ceny i plan", "Brak prognozy PV", "Po 18:00 brak godzinowej prognozy PV na jutro (Solcast / Forecast.Solar).", True, True, 1440, False, None),
@@ -90,7 +92,7 @@ PRIORITY: dict[str, int] = {
     "morning_guard": 1, "grid_charge_target": 1,
     "rce_missing": 2, "data_repair": 2, "buy_prices_missing": 2, "pv_forecast_missing": 2, "plan_error": 2, "auto_apply": 2, "storm": 2, "battery_health": 2,
     "device_anomaly": 2, "device_shed": 2, "profile_plan": 2, "night_draw": 2, "weak_pv": 2, "rce_negative": 2, "summary_daily": 2, "summary_weekly": 2, "summary_monthly": 2,
-    "rce_high": 3, "plan_tomorrow": 3, "pv_caution": 3, "load_above": 3, "high_import": 3, "battery_full": 3, "proposal": 3, "schedule_skipped": 3, "sale": 3, "grid_charge": 3,
+    "bill_goal": 2, "sunny_day": 3, "rce_high": 3, "plan_tomorrow": 3, "pv_caution": 3, "load_above": 3, "high_import": 3, "battery_full": 3, "proposal": 3, "schedule_skipped": 3, "sale": 3, "grid_charge": 3,
     "price_reaction": 3, "device_cycle": 3, "device_hint": 3, "device_plan": 3, "devices_unknown": 3,
 }
 PRIO_LABELS = {1: "krytyczne", 2: "ważne", 3: "info"}

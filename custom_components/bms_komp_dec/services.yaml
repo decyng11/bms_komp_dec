@@ -422,3 +422,63 @@ profile_schedule:
 profile_schedule_clear:
   name: Anuluj plan profilu
   description: Anuluje zaplanowany profil; trwający plan kończy od razu i przywraca poprzednie ustawienia (administrator).
+
+grid_outage_test:
+  name: Test zaniku sieci
+  description: Symuluje zanik sieci i zwraca, ile godzin bateria utrzyma dom w kilku wariantach (obecny pobór, bez największego odbiornika, tylko podstawa domu, pełna bateria). Niczego nie odcina ani nie zmienia.
+
+expand_estimate:
+  name: Ocena opłacalności rozbudowy
+  description: Szacuje roczny zysk i zwrot z dołożenia baterii albo paneli, na podstawie własnych danych z ostatnich dób. Wynik orientacyjny.
+  fields:
+    batt_kwh:
+      name: Dodatkowa bateria [kWh]
+      required: false
+      selector:
+        number:
+          min: 0.5
+          max: 1000
+          step: 0.5
+          mode: box
+    batt_cost_per_kwh:
+      name: Cena baterii [zł/kWh]
+      required: false
+      selector:
+        number:
+          min: 0
+          max: 100000
+          mode: box
+    pv_kwp:
+      name: Dodatkowe panele [kWp]
+      required: false
+      selector:
+        number:
+          min: 0.1
+          max: 1000
+          step: 0.1
+          mode: box
+    pv_now_kwp:
+      name: Obecna moc paneli [kWp]
+      required: false
+      selector:
+        number:
+          min: 0.1
+          max: 1000
+          step: 0.1
+          mode: box
+    pv_cost_per_kwp:
+      name: Cena paneli [zł/kWp]
+      required: false
+      selector:
+        number:
+          min: 0
+          max: 100000
+          mode: box
+    days:
+      name: Z ilu ostatnich dób (domyślnie 60)
+      required: false
+      selector:
+        number:
+          min: 14
+          max: 365
+          mode: box

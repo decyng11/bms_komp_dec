@@ -20,6 +20,7 @@ from . import inbox
 from . import nightdraw as nightdraw_mod
 from . import autonomy as autonomy_mod
 from . import tomorrowplan as tomorrowplan_mod
+from . import sunny as sunny_mod
 from . import notify_cfg as ncfg
 from .const import CONF_BATTERY_TEMPERATURE, CONF_GRID_POWER, CONF_GRID_VOLTAGE_L1
 from .helpers import number_value, switch_on
@@ -188,7 +189,7 @@ class Monitor:
                           ("ładowanie z sieci stoi", self._grid_charge_stalled), 
                           ("pobór z sieci", self._high_import), ("ceny jutro", self._prices_tomorrow),
                           ("źródła danych", self._sources), ("zużycie", self._load_above),
-                          ("nocny pobór", self._night_draw), ("PV jutro", self._weak_pv), ("plan na jutro", self._plan_tomorrow), ("ostrożność PV", self._pv_caution), ("plan a próg", self._plan_floor), ("trafność prognoz", self._accuracy), ("zdrowie baterii", self._health),
+                          ("nocny pobór", self._night_draw), ("PV jutro", self._weak_pv), ("plan na jutro", self._plan_tomorrow), ("ostrożność PV", self._pv_caution), ("cel miesięczny", self._bill_goal), ("słoneczny dzień", self._sunny_day), ("plan a próg", self._plan_floor), ("trafność prognoz", self._accuracy), ("zdrowie baterii", self._health),
                           ("podsumowania", self._summaries), ("autoodczyt", self._inbox_auto_read)):
             try:
                 await chk(now)
@@ -728,6 +729,33 @@ class Monitor:
             return
         await self.notifier.send("pv_caution", "☀️ EMS: propozycja zmiany ostrożności prognozy PV",
                                  prop["text"] + " Zatwierdzisz to w panelu: Zysk i log → Trafność prognoz.", level="info")
+
+    async def _bill_goal(self, now: datetime) -> None:
+        """Rano: gdy ustawiono cel miesięczny i prognoza go przekracza (albo jest blisko), jedno ostrzeżenie na miesiąc i stan celu."""
+        loc = dt_util.as_local(now)
+        if loc.hour < 9 or not ncfg.kind(self.notifier.cfg(), "bill_goal").get("on"):
+            return
+        g = (self.rt.bill() or {}).get("goal")
+        if not g or g.get("status") == "ok":
+            return
+        if not self._once("bill_goal", f"{loc:%Y-%m}:{g['status']}"):
+            return
+        await self.notifier.send("bill_goal", "💸 EMS: cel miesięczny", g["text"] + " Szacunek z bilansu z siecią, bez opłat stałych.", level="info")
+
+    async def _sunny_day(self, now: datetime) -> None:
+        """Wieczorem, po kilku pochmurnych dobach: jutro ma być słonecznie (sunny.py). Raz na dobę."""
+        loc = dt_util.as_local(now)
+        if loc.hour < 17 or not ncfg.kind(self.notifier.cfg(), "sunny_day").get("on"):
+            return
+        try:
+            daily = {k: v.get("pv") for k, v in self.rt.insights.counters.items() if isinstance(v, dict)}
+            fc = self.rt.optimizer._read_pv_forecast_kwh("pv_forecast_tomorrow", "")  # noqa: SLF001
+        except Exception:  # noqa: BLE001
+            return
+        res = sunny_mod.evaluate(daily, fc, loc.date())
+        if not res or not self._once("sunny_day", loc.date().isoformat()):
+            return
+        await self.notifier.send("sunny_day", "☀️ EMS: jutro słonecznie", res["text"], level="info")
 
     async def _health(self, now: datetime) -> None:
         if now.hour != 12:

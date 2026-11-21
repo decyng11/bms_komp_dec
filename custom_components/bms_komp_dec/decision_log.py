@@ -28,6 +28,7 @@ class DecisionLog:
         self.entries: deque[dict[str, Any]] = deque(maxlen=MAX_ENTRIES)
         self.integrity = SG.Integrity(STORAGE_KEY, "dziennik decyzji")
         self._listeners: list[Callable[[], None]] = []
+        self.on_entry: Callable[[dict[str, Any]], None] | None = None    # każdy nowy wpis (np. licznik „co EMS zrobił”)
 
     async def async_load(self) -> None:
         try:
@@ -77,6 +78,11 @@ class DecisionLog:
         for cb in list(self._listeners):
             try:
                 cb()
+            except Exception:  # noqa: BLE001
+                pass
+        if self.on_entry is not None:
+            try:
+                self.on_entry(entry)
             except Exception:  # noqa: BLE001
                 pass
 
