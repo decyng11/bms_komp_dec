@@ -1025,7 +1025,10 @@ class LoadForecaster:
                 mad = statistics.median([abs(v - med) for v in vals])
                 if mad > 0:
                     threshold = MAD_K * 1.4826 * mad
-                    cleaned = {d: v for d, v in typed.items() if abs(v - med) <= threshold}
+                    # Asymetrycznie: dni niskie (niepełne dane, wyjazd) odrzucamy przy 3 MAD, a wysokie dopiero przy 2× większym
+                    # progu — zużycie jest skośne w prawo (gotowanie, gości, pompa), a odrzucanie wysokich weekendów
+                    # systematycznie zaniżało prognozę dni wolnych. Prawdziwe skoki licznika wycina już wykrywanie podejrzanych dni.
+                    cleaned = {d: v for d, v in typed.items() if -threshold <= (v - med) <= 2.0 * threshold}
                     if len(cleaned) >= MIN_TYPED_HISTORY:
                         typed = cleaned
             except statistics.StatisticsError:

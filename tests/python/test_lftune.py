@@ -57,6 +57,17 @@ def main():
     check("skok weekendów: korekta dla dni wolnych przekracza dawny sufit 1,25", 1.25 < f_off <= 1.5, f_off)
     check("skok weekendów: dni robocze bez zmiany (≈1)", abs(lf._bias_factor(today + timedelta(days=1), False) - 1.0) < 0.1, lf._bias_factor(today + timedelta(days=1), False))
     check("sufit korekty zaniżania to 1,5", lfm.BIAS_MAX_UNDER == 1.5)
+    # --- wysokie weekendy nie są odrzucane jako „odstające” (skośność w prawo): prognoza niedzieli nie jest zaniżona
+    hi = []
+    for i in range(60):
+        d = today - timedelta(days=60 - i)
+        if d.weekday() < 5:
+            hi.append(10.0 + 0.2 * math.sin(i * 2.3))
+        else:
+            hi.append((15.0 if i >= 46 else 12.0) + 0.5 * math.sin(i * 1.9))        # dwa ostatnie weekendy wyraźnie wyższe
+    lf = mk(hi, today); lf.params = dict(lfm.DEFAULT_PARAMS, wd_w=0.0)
+    p_sun = lf._model_core(date(2026, 11, 15), today)
+    check("wysokie weekendy zostają w modelu: prognoza niedzieli ≥ 14", p_sun >= 14.0, p_sun)
     # --- za mało historii
     lf = mk([10.0] * 12, today); lf._autotune(today)
     check("za mało dni: bez zmiany parametrów", lf.params == lfm.DEFAULT_PARAMS and lf.tune.get("n") == 0, lf.tune)
