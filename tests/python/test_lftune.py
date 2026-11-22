@@ -31,6 +31,21 @@ def main():
     p_new = lf.predict(today + timedelta(days=1), today)
     lfd = mk(vals, today); p_def = lfd.predict(today + timedelta(days=1), today)
     check("prognoza po strojeniu bliższa nowego poziomu (16) niż standardowa", abs(p_new - 16) <= abs(p_def - 16) + 1e-9 and p_new != p_def, (p_new, p_def))
+    # --- rosnące zużycie (zimno) i weekendy 1,4× wyższe: baza weekendowa z dawnych weekendów się spóźnia, świeży poziom ją goni
+    vals = []
+    for i in range(60):
+        d = today - timedelta(days=60 - i)
+        vals.append((7.0 + 0.12 * i) * (1.4 if d.weekday() >= 5 else 1.0))
+    lf = mk(vals, today); sun = date(2026, 11, 15)          # niedziela
+    truth = (7.0 + 0.12 * (60 + (sun - today).days - 1)) * 1.4
+    lf.params = dict(lfm.DEFAULT_PARAMS, lvl_w=0.0); p0 = lf._model_core(sun, today)
+    lf.params = dict(lfm.DEFAULT_PARAMS, lvl_w=1.0); p1 = lf._model_core(sun, today)
+    check("trend: model „świeży poziom” bliżej prawdy dla weekendu niż standardowy", abs(p1 - truth) < abs(p0 - truth), (round(p0, 2), round(p1, 2), round(truth, 2)))
+    check("trend: standardowy zaniża weekend o ≥10%", p0 < 0.9 * truth, (p0, truth))
+    lf = mk(vals, today); lf._autotune(today)
+    check("trend: samostrojenie wybiera wariant ze świeżym poziomem", "świeży poziom" in str(lf.tune.get("variant")) and lf.params.get("lvl_w", 0) > 0, lf.tune)
+    lf = mk([10.0 + 0.8 * math.sin(i * 1.7) for i in range(50)], today); lf._autotune(today)
+    check("stabilne dane: lvl_w zostaje 0", lf.params.get("lvl_w", 0) == 0, lf.tune)
     # --- za mało historii
     lf = mk([10.0] * 12, today); lf._autotune(today)
     check("za mało dni: bez zmiany parametrów", lf.params == lfm.DEFAULT_PARAMS and lf.tune.get("n") == 0, lf.tune)

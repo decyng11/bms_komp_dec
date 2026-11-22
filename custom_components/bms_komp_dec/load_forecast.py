@@ -65,8 +65,12 @@ TUNE_EVAL_DAYS = 30            # ile ostatnich dni ocenia wariant
 TUNE_MIN_EVAL = 10             # tyle dni oceny trzeba, by w ogóle zmieniać parametry
 TUNE_MIN_GAIN = 0.03           # wariant musi dać o ≥3% mniejszy średni błąd niż domyślny
 DEFAULT_PARAMS = {"alpha": EWMA_ALPHA, "alpha_fast": EWMA_ALPHA_FAST, "wd_w": 0.7, "temp_scale": 1.0,
-                  "bias_gain": BIAS_GAIN, "bias_max": BIAS_MAX - 1.0, "bias_days": BIAS_DAYS}
-TUNE_CORE = [(a, wd, ts) for a in (0.3, 0.5) for wd in (0.7, 0.4, 0.0) for ts in (1.0, 1.5)]
+                  "bias_gain": BIAS_GAIN, "bias_max": BIAS_MAX - 1.0, "bias_days": BIAS_DAYS, "lvl_w": 0.0}
+# Czwarty element: waga modelu „poziom × indeks typu dnia” (0 = wyłączony). Zimą weekendowa baza z kilku ostatnich
+# weekendów jest sprzed 2–4 tygodni i spóźnia się za trendem; ten model bierze świeży poziom z ostatnich 7 dni dowolnego typu.
+TUNE_CORE = [(a, wd, ts, 0.0) for a in (0.3, 0.5) for wd in (0.7, 0.4, 0.0) for ts in (1.0, 1.5)] + \
+    [(a, wd, 1.0, lv) for a in (0.3, 0.5) for wd in (0.7, 0.0) for lv in (0.5, 1.0)]
+LEVEL_DAYS = 7
 TUNE_BIAS = [(0.5, 0.25, 14), (0.8, 0.4, 14), (0.8, 0.4, 7), (1.0, 0.5, 7), (0.0, 0.0, 14)]
 HDD_BASE = 18.0
 CDD_BASE = 24.0
@@ -284,8 +288,8 @@ class LoadForecaster:
         saved = self.params
         out: list[tuple[tuple, float, float, int]] = []
         try:
-            for a, wd, ts in TUNE_CORE:
-                self.params = dict(saved, alpha=a, wd_w=wd, temp_scale=ts)
+            for a, wd, ts, lv in TUNE_CORE:
+                self.params = dict(saved, alpha=a, wd_w=wd, temp_scale=ts, lvl_w=lv)
                 core: dict[date, float] = {}
                 for d in series:
                     v = self._model_core(d, d)
@@ -306,15 +310,17 @@ class LoadForecaster:
                         errs.append(err)
                         hits += 1 if err <= 0.2 * valid[d] else 0
                     if len(errs) >= TUNE_MIN_EVAL:
-                        out.append(((a, wd, ts, g, mx, nb), _mean(errs), hits / len(errs), len(errs)))
+                        out.append(((a, wd, ts, g, mx, nb, lv), _mean(errs), hits / len(errs), len(errs)))
         finally:
             self.params = saved
         return out or None
 
     @staticmethod
     def _variant_label(v: tuple) -> str:
-        a, wd, ts, g, mx, nb = v
+        a, wd, ts, g, mx, nb, lv = v
         parts = []
+        if lv > 0:
+            parts.append("świeży poziom z ostatnich 7 dni" if lv >= 1 else "częściowo świeży poziom z ostatnich 7 dni")
         if (g, mx, nb) != (0.5, 0.25, 14):
             parts.append("bez korekty błędu" if g <= 0 else f"szybsza korekta błędu ({nb} dni, waga {g:g}, do ±{mx * 100:.0f}%)")
         if a != 0.3:
@@ -330,14 +336,14 @@ class LoadForecaster:
         if not res:
             self.tune = {"at": today.isoformat(), "n": 0, "note": "za mało dni historii (min. 10 dni oceny)"}
             return
-        dv = (0.3, 0.7, 1.0, 0.5, 0.25, 14)
+        dv = (0.3, 0.7, 1.0, 0.5, 0.25, 14, 0.0)
         default = next((r for r in res if r[0] == dv), None)
         best = min(res, key=lambda r: r[1])
         if default is None:
             return
         use = best if (default[1] - best[1]) >= TUNE_MIN_GAIN * default[1] and best[1] < default[1] else default
         v = use[0]
-        self.params = dict(DEFAULT_PARAMS, alpha=v[0], wd_w=v[1], temp_scale=v[2], bias_gain=v[3], bias_max=v[4], bias_days=v[5])
+        self.params = dict(DEFAULT_PARAMS, alpha=v[0], wd_w=v[1], temp_scale=v[2], bias_gain=v[3], bias_max=v[4], bias_days=v[5], lvl_w=v[6])
         self.tune = {"at": today.isoformat(), "n": use[3], "tried": len(res), "variant": self._variant_label(v),
                      "mae": round(use[1], 2), "mae_default": round(default[1], 2),
                      "hit": round(use[2] * 100), "hit_default": round(default[2] * 100)}
@@ -1057,7 +1063,35 @@ class LoadForecaster:
         ref = list(ordered[:7]) + [d for d in same if d not in ordered[:7]]
         result = self._apply_temperature_correction(target, result, ref)
         result = self._apply_seasonal_correction(target, result, ref)
+        lv = float(self.params.get("lvl_w", 0.0))
+        if lv > 0:
+            lvl = self._level_result(target, hist)
+            if lvl is not None:
+                result = (1.0 - lv) * result + lv * lvl
         return result
+
+    def _level_result(self, target: date, hist: dict[date, float]) -> float | None:
+        """Model „poziom × indeks typu dnia”: indeks = średnia dni tego typu / średnia wszystkich dni (okno historii), poziom =
+        średnia z ostatnich LEVEL_DAYS dni po zdjęciu indeksu typu. Weekend dostaje więc tak samo świeży poziom jak dzień roboczy."""
+        def off(d: date) -> bool:
+            return self._is_off_day(d)
+        offs = [v for d, v in hist.items() if off(d)]
+        works = [v for d, v in hist.items() if not off(d)]
+        if len(offs) < 3 or len(works) < 3:
+            return None
+        m_all = _mean(list(hist.values()))
+        if m_all <= 0:
+            return None
+        idx = {True: _mean(offs) / m_all, False: _mean(works) / m_all}
+        if min(idx.values()) <= 0:
+            return None
+        recent = sorted(hist, reverse=True)[:LEVEL_DAYS]
+        if len(recent) < 4:
+            return None
+        level = _mean([hist[d] / idx[off(d)] for d in recent])
+        res = level * idx[self._is_off_day(target) or self._is_special_holiday(target)]
+        res = self._apply_temperature_correction(target, res, recent)
+        return self._apply_seasonal_correction(target, res, recent)
 
     def _bias_factor(self, today: date, off: bool | None = None) -> float:
         """Samokorekta: mediana (rzeczywiste / model liczony wstecz) z ostatnich dni, z wagą i sufitem z parametrów
