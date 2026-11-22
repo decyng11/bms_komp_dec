@@ -46,7 +46,7 @@ PV_CORR_LO, PV_CORR_HI = 0.7, 1.2
 PV_HORIZONS = 7
 PV_MODEL_DAYS = 30            # ile ostatnich dni uczy model
 PV_MODEL_MIN_DAYS = 5
-PV_MODEL_LO, PV_MODEL_HI = 0.5, 1.4
+PV_MODEL_LO, PV_MODEL_HI = 0.25, 1.4     # dolny sufit 0,25: w listopadzie prognoza bywa 2–4× za wysoka, a sufit 0,5 zostawiał ją zawyżoną
 PV_SHAPE_LO, PV_SHAPE_HI = 0.6, 1.5
 PV_LIVE_LO, PV_LIVE_HI = 0.5, 1.6
 PV_LIMIT_SOC = 97.0           # bateria pełna i brak eksportu → PV było ucięte, „wykonanie” nie mówi nic o prognozie
@@ -500,14 +500,26 @@ class Insights:
             return sum(r * x for r, x in zip(rs, w)) / sum(w)
         return _median(rs)
 
-    def _pv_factor_from(self, pairs: list[tuple[float, float]], mode: str) -> tuple[float, float] | None:
+    def _pv_factor_from(self, pairs: list[tuple[float, float]], mode: str, prior: float = 1.0) -> tuple[float, float] | None:
         if len(pairs) < PV_MODEL_MIN_DAYS:
             return None
         med = self._pv_ratio(pairs, mode)
         if med is None:
             return None
         w = min(1.0, len(pairs) / 10.0)
-        return min(PV_MODEL_HI, max(PV_MODEL_LO, 1.0 + (med - 1.0) * w)), med
+        if med > prior and w < 1.0:
+            w *= 0.6          # krótki szereg podnoszący prognozę ponad ogólny błąd: ostrożniej (zawyżone PV kosztuje więcej niż zaniżone)
+        return min(PV_MODEL_HI, max(PV_MODEL_LO, prior + (med - prior) * w)), med
+
+    def _pv_pooled_prior(self, today: date) -> float:
+        """Typowy stosunek wykonanie/prognoza ze WSZYSTKICH horyzontów razem. Krótkie szeregi dalszych dni (5–9 par) są szumem, więc
+        zamiast ciągnąć je ku 1,0 ciągniemy ku temu, jak prognoza myli się w ogóle (np. ×0,6 jesienią); mało par → 1,0."""
+        rs = []
+        for hh in range(PV_HORIZONS):
+            rs += [a / f_ for f_, a in self._pv_pairs(hh, today) if f_ > 0]
+        if len(rs) < 2 * PV_MODEL_MIN_DAYS:
+            return 1.0
+        return min(PV_MODEL_HI, max(PV_MODEL_LO, _median(rs)))
 
     def pv_tuning(self, h: int, today: date) -> dict[str, Any]:
         """Wybór okna uczenia (7 / 14 / 30 dni) i sposobu liczenia (mediana / ważona wiekiem) dla horyzontu h na podstawie
@@ -547,13 +559,14 @@ class Insights:
         Okno i sposób liczenia wybiera samostrojenie (pv_tuning)."""
         today = today or dt_util.now().date()
         h = max(0, min(PV_HORIZONS - 1, int(h)))
+        prior = self._pv_pooled_prior(today)
         for hh in range(h, -1, -1):
             tun = self.pv_tuning(hh, today)
             pairs = [(f_, a_) for age, f_, a_ in self._pv_pairs_dated(hh, today) if age <= tun["window"]]
-            r = self._pv_factor_from(pairs, tun["mode"])
+            r = self._pv_factor_from(pairs, tun["mode"], prior)
             if r is None and tun["window"] != 30:
                 pairs = self._pv_pairs(hh, today)
-                r = self._pv_factor_from(pairs, "median")
+                r = self._pv_factor_from(pairs, "median", prior)
             if r is not None:
                 return round(r[0], 3), len(pairs), round(r[1], 3)
         return 1.0, 0, None

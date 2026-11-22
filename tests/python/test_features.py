@@ -259,6 +259,9 @@ async def main():
     r2 = analysis.tariff_compare(bk, {"dyn_markup": 0.5}, today)
     dyn = [x for x in r2["rows"] if x["key"] == "dyn"]
     check("taryfy: dynamiczna = (RCE 0,4 + narzut 0,5) × import", dyn and abs(dyn[0]["cost"] - 36.0) < 0.01, r2["rows"])
+    check("taryfy: „drogie godziny” = import × średnia 6 najdroższych (1,1)", abs(act["top"]["cost"] - 44.0) < 0.01 and act["top"]["diff"] > 0, act.get("top"))
+    check("taryfy: „tanie godziny” = import × średnia 6 najtańszych", abs(act["low"]["cost"] - 40 * (2 * 0.7 + 4 * 1.1) / 6) < 0.02, act.get("low"))
+    check("taryfy: scenariusze „gdyby” nie wchodzą do najlepszej taryfy", r["best"] not in ("top", "low"), r["best"])
     r3 = analysis.tariff_compare({}, {"g11": 0.9}, today)
     check("taryfy: brak danych — bez błędu", r3["days"] == 0 and r3["rows"][0]["cost"] == 0.0)
     check("taryfy: błędne ustawienia odrzucone", analysis.clean_cfg({"g11": "abc", "zone": {"peak": 1, "off": 1, "windows": "xx"}, "invest_pv": -5}) == {})

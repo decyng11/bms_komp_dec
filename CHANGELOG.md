@@ -18,6 +18,17 @@
 ## Prognoza zużycia: zaniżanie nie jest już „zamrożone” sufitem korekty
 - Samokorekta (mediana rzeczywiste/model z ostatnich dni danego typu) miała sufit ±25%, więc gdy każdy z ostatnich dni wolnych (albo roboczych) wychodził wyraźnie wyżej niż model, prognoza i tak zostawała zaniżona o kilkadziesiąt procent. Teraz, gdy model **stale zaniża** (co najmniej 3 dni danego typu, każdy ≥5% powyżej modelu), sufit korekty w górę wynosi +50% (`BIAS_MAX_UNDER`); zawyżanie i niestałe błędy zostają przy dawnym ±25%. Test w `test_lftune.py`.
 
+## Prognoza PV: korekta nie jest już zamrożona na ×0,5, a dalekie dni nie uciekają w górę
+- Z dwóch instalacji (karta „Trafność prognoz”): prognoza PV zawyżona o 43–70%, a korekta miała dolny sufit ×0,5, więc przy faktycznym stosunku ok. ×0,3 zostawała 2× za wysoka („jutro: ×0,50, błąd po korekcie 234%”). Dolny sufit to teraz ×0,25.
+- Współczynniki dalszych dni (po 5–9 par) były szumem: ×1,27–×1,40 dla +4/+5 dni przy ogólnym zawyżeniu, przez co „błąd po korekcie” był gorszy niż surowy. Krótkie szeregi (<10 par) ciągną teraz ku ogólnemu błędowi prognozy ze wszystkich horyzontów razem (mediana), a nie ku 1,0, a podnoszenie prognozy ponad ten poziom ma 60% wagi (zawyżone PV kosztuje więcej niż zaniżone). Testy w `test_pvmodel.py`.
+
+## Porównanie taryf: widoczne w panelu i ze scenariuszami „drogie / tanie godziny”
+W „Zysk i log” pojawiła się tabela: ile zapłaciłbyś za ten sam pobór z sieci (co do godziny) przy taryfie G11, strefowej i dynamicznej (RCE + narzut), w przeliczeniu na miesiąc, z różnicą względem obecnej taryfy. Obok są pola na stawki do porównania (wcześniej liczyło się to tylko w backendzie, bez miejsca na wpisanie stawek). Dwa nowe wiersze „gdyby”: cały pobór w 6 najdroższych i w 6 najtańszych godzinach doby. Pokazują, ile kosztuje samo przesunięcie poboru w czasie. Nie są taryfą do wyboru, więc nie trafiają do „najlepszej”.
+
+## Podpowiedzi z danymi na każdym wykresie
+- Jeden wspólny dymek dla wszystkich wykresów w karcie: na komputerze po najechaniu myszą, na telefonie po dotknięciu (natywne `title` nie działa na telefonie i pojawia się z opóźnieniem). Nie dotyka przycisków, pól i zakładek.
+- Cztery wykresy narysowane na canvasie nie miały żadnych podpowiedzi: zużycie domu (wczoraj/dziś/jutro z zakresem), prognoza 7 dni, profil godzinowy (prognoza i rzeczywiste, w Wh) i produkcja PV 24 h (wykonanie i prognoza). Teraz pokazują dane per słupek. Testy: `tip_ui_test.js`, `tip_canvas_test.js`.
+
 ## Prognoza zużycia: wysokie weekendy i święta nie są wycinane jako „odstające”
 - Przyczyna weekendów prognozowanych na ~7 kWh przy rzeczywistych ~13 (karta Plan: „dni wolne: błąd 49%, zaniżone o 45%”): filtr odstających (MAD) porównywał dni z medianą z 60 dni. Po skoku zużycia (zimno) świeże, prawdziwe weekendy były „daleko od mediany” i wypadały z bazy, a zostawały stare, niskie. Teraz filtr odrzuca wyłącznie dni niskie (niepełne dane, wyjazd); wysokich nie wycina, bo prawdziwe skoki licznika wyłapuje wykrywanie podejrzanych dni. Test w `test_lftune.py` odtwarza dane z karty (weekendy 7,5 → 13 kWh): stary filtr dawał 7,8 kWh, nowy ≥11.
 

@@ -1282,7 +1282,9 @@
           const val = (id) => { const e = this._el(id); const v = e ? String(e.value).trim().replace(',', '.') : ''; return v === '' ? null : v; };
           const num = (id) => { const v = val(id); return v === null ? null : Number(v); };
           try {
-            const d = { invest_pv: num('pxIp'), invest_batt: num('pxIb') };
+            const d = { invest_pv: num('pxIp'), invest_batt: num('pxIb'), g11: num('pxTg'), dyn_markup: num('pxTd') };
+            const zp = num('pxTzp'), zo = num('pxTzo'), zw = val('pxTzw');
+            d.zone = zp !== null && zo !== null ? { peak: zp, off: zo, windows: zw || '6-13,15-22' } : null;
             b.disabled = true;
             await exCall(this, 'analysis_set', d);
             this._showToast('✅ Zapisano');
@@ -1311,9 +1313,21 @@
         if (!an.data) return an.err ? `<div class="chart-empty" style="color:var(--red);">Nie udało się wczytać: ${exEsc(an.err)}</div>` : '<div class="chart-empty">Ładowanie…</div>';
         const sim = an.data.sim, cfg = an.data.cfg || {};
         const inp = (id, v, ph) => `<input type="text" inputmode="decimal" id="${id}" value="${v == null ? '' : exEsc(String(v))}" placeholder="${ph}" style="width:110px" />`;
+        const zc = cfg.zone || {};
         const form = '<div class="px-row"><div class="nm">Nakłady (do liczenia zwrotu)<small>instalacja PV i bateria, zł</small></div>' + inp('pxIp', cfg.invest_pv, 'PV zł') + inp('pxIb', cfg.invest_batt, 'bateria zł')
+          + '<button class="btn" data-px-an="invest" style="padding:7px 14px;">Zapisz</button></div>'
+          + '<div class="px-row"><div class="nm">Porównanie taryf<small>stawki do porównania, zł/kWh (puste = pomiń)</small></div>' + inp('pxTg', cfg.g11, 'G11 zł/kWh') + inp('pxTd', cfg.dyn_markup, 'narzut dynamicznej')
+          + inp('pxTzp', zc.peak, 'strefa: szczyt') + inp('pxTzo', zc.off, 'strefa: poza') + inp('pxTzw', zc.windows, 'okna np. 6-13,15-22')
           + '<button class="btn" data-px-an="invest" style="padding:7px 14px;">Zapisz</button></div>';
-        if (!sim) return '<div class="chart-empty">Za mało pełnych dób z danymi godzinowymi (potrzeba co najmniej 3) — symulacja pojawi się po kilku dniach pracy.</div>' + form;
+        const tc = an.data.tariff, tcRows = tc && Array.isArray(tc.rows) ? tc.rows : [];
+        const tcol = (v) => { const n = exNum(v); return n === null ? '' : (n < -0.005 ? 'color:var(--green);' : (n > 0.005 ? 'color:var(--red);' : '')); };
+        const tcSign = (v) => { const n = exNum(v); return n === null ? '—' : (n > 0 ? '+' : '') + exFmt(n, 2) + ' zł'; };
+        const tariffBox = tcRows.length > 1 && tc.days > 0
+          ? `<div class="px-tbl-wrap"><table class="px-tbl sim"><thead><tr><th style="text-align:left;">Ile zapłaciłbyś za ten sam pobór z sieci (${exEsc(String(tc.days))} dób, ${exFmt(tc.import_kwh, 1)} kWh)</th><th>Na miesiąc</th><th>Różnica</th></tr></thead><tbody>`
+            + tcRows.map(r => `<tr class="${tc.best === r.key ? 'px-best' : ''}"><td style="text-align:left;">${exEsc(r.name)}${r.what_if ? ' <small>(scenariusz, nie taryfa)</small>' : ''}</td><td>${exFmt(r.per_month, 2)} zł</td><td style="${tcol(r.diff_month)}">${r.key === 'actual' ? '—' : tcSign(r.diff_month)}</td></tr>`).join('')
+            + `</tbody></table></div><div class="px-note">${exEsc(tc.note || '')} Wiersze „6 najdroższych / najtańszych godzin” pokazują, ile kosztuje samo przesunięcie poboru w czasie.</div>`
+          : '';
+        if (!sim) return tariffBox + '<div class="chart-empty">Za mało pełnych dób z danymi godzinowymi (potrzeba co najmniej 3) — symulacja pojawi się po kilku dniach pracy.</div>' + form;
         const rows = (sim.scenarios || []).map(s => `<tr class="${s.key === 'ems' ? 'px-best' : ''}"><td style="text-align:left;">${exEsc(s.name)}</td><td>${pxZl0(s.period)}</td><td>${pxZl0(s.year)}</td></tr>`).join('');
         const sv = sim.savings_year || {}, pb = sim.payback || {};
         const yrs = (v) => exFmt(v, 1) + ' lat';
@@ -1327,7 +1341,7 @@
           ? `⚠ „Samo PV” wychodzi drożej niż „Bez PV”, bo w danych są godziny z ujemną ceną (${exEsc(String(neg.sell_h))} h sprzedaży, ${exEsc(String(neg.buy_h))} h zakupu) — to nie błąd obliczeń, ale wynik roczny jest przez to mało wiarygodny.`
           : (neg ? `⚠ „Samo PV” wychodzi drożej niż „Bez PV”, a w ostatnich ${exEsc(String(neg.days))} dobach nie widzę godzin z ujemną ceną — więc to najpewniej błędne ceny w danych (np. zły sensor ceny zakupu/sprzedaży albo stare doby). Sprawdź ceny w zakładce „Ceny”. Wynik roczny jest niewiarygodny.`
                  : '⚠ „Samo PV” wychodzi drożej niż „Bez PV” — to możliwe tylko przy ujemnych cenach albo błędnych cenach w danych. Wynik roczny jest niewiarygodny.'));
-        return `<div class="px-tbl-wrap"><table class="px-tbl sim"><thead><tr><th style="text-align:left;">Scenariusz</th><th>${exEsc(String(sim.days))} dób</th><th>Rocznie</th></tr></thead><tbody>${rows}</tbody></table></div>`
+        return tariffBox + `<div class="px-tbl-wrap"><table class="px-tbl sim"><thead><tr><th style="text-align:left;">Scenariusz</th><th>${exEsc(String(sim.days))} dób</th><th>Rocznie</th></tr></thead><tbody>${rows}</tbody></table></div>`
           + `<div class="ex-sum" style="margin-top:10px;">${sav('☀️', 'PV', sv.pv, ' / rok')}${sav('🔋', 'bateria', sv.battery, ' / rok')}${sav('🤖', 'EMS', sv.ems, ' / rok')}<span class="ex-chip">razem ≈ ${pxZl0(sv.total)} / rok</span></div>`
           + (pvWorseTxt ? `<div class="ex-sum"><span class="ex-chip warn" style="white-space:normal;">${pvWorseTxt}</span></div>` : '') + negBox
           + (Object.keys(pb).length ? `<div class="ex-sum"><span class="ex-chip">${pb.pv_years != null ? '⏱ zwrot PV: ' + yrs(pb.pv_years) : ''}</span><span class="ex-chip">${pb.battery_years != null ? '⏱ zwrot baterii (z EMS): ' + yrs(pb.battery_years) : ''}</span><span class="ex-chip">${pb.total_years != null ? '⏱ całość: ' + yrs(pb.total_years) : ''}</span></div>` : '')

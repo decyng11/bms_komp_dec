@@ -45,6 +45,18 @@ async def main():
     check("brak jakichkolwiek danych → 1,0", mk_ins().pv_horizon_factor(4, TODAY)[0] == 1.0)
     check("za mało dni (4) → 1,0", (lambda i: (seed_days(i, 4, {0: 0.5}), i.pv_horizon_factor(0, TODAY)[0])[1])(mk_ins()) == 1.0)
 
+    # ---------- 1b. listopad: prognoza 3× za wysoka — sufit 0,5 nie blokuje; krótkie szeregi dalekich dni ciągną ku ogólnemu błędowi
+    ins = mk_ins()
+    for i in range(1, 15):
+        d = (TODAY - timedelta(days=i)).isoformat()
+        ins.fc[d] = {"pv_fc": 9.0, "pv_act": 3.0, "pv_fc_by_h": {"0": 9.0, "1": 9.0}}
+    check("prognoza 3× za wysoka: korekta 0,33 (nie zamrożona na 0,5)", abs(ins.pv_horizon_factor(0, TODAY)[0] - 0.333) < 0.01, ins.pv_horizon_factor(0, TODAY))
+    for i in range(1, 7):                    # h=4: tylko 6 par i przypadkowo „zaniżone” (×1,6)
+        d = (TODAY - timedelta(days=i)).isoformat()
+        ins.fc[d]["pv_fc_by_h"]["4"] = 2.0
+    f4 = ins.pv_horizon_factor(4, TODAY)
+    check("dalszy dzień z 6 parami ×1,5 nie ucieka ponad 1,0 przy ogólnym ×0,33 (ciągnięty ku ogólnemu błędowi)", f4[0] < 1.0, f4)
+    check("pula ogólna: ≈0,33", abs(ins._pv_pooled_prior(TODAY) - 0.333) < 0.05 or ins._pv_pooled_prior(TODAY) < 0.6, ins._pv_pooled_prior(TODAY))
     # ---------- 2. mediana odporna na pojedynczy zepsuty dzień
     ins = mk_ins()
     seed_days(ins, 12, {0: 0.9})

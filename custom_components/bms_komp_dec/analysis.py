@@ -54,7 +54,7 @@ def tariff_compare(buckets_by_day: dict[str, list], cfg: dict, today: date, days
     keys = [k for k in keys if k in buckets_by_day and any(x is not None for x in buckets_by_day[k])]
     n_days = len(keys)
     imp_total = actual = 0.0
-    alt = {"g11": 0.0, "zone": 0.0, "dyn": 0.0}
+    alt = {"g11": 0.0, "zone": 0.0, "dyn": 0.0, "top": 0.0, "low": 0.0}
     zprof = None
     z = cfg.get("zone")
     if z:
@@ -62,6 +62,11 @@ def tariff_compare(buckets_by_day: dict[str, list], cfg: dict, today: date, days
     dyn_ok = dyn_n = 0
     for k in keys:
         d = date.fromisoformat(k)
+        prices = sorted(p for p in (_f(b[_BUY_S] / b[_BUY_T]) if b is not None and b[_BUY_T] else None
+                                    for b in buckets_by_day[k]) if p is not None)
+        n6 = min(6, len(prices))
+        top_p = sum(prices[-n6:]) / n6 if n6 else None
+        low_p = sum(prices[:n6]) / n6 if n6 else None
         for h, b in enumerate(buckets_by_day[k]):
             if b is None or b[_IMP] <= 0:
                 continue
@@ -71,6 +76,8 @@ def tariff_compare(buckets_by_day: dict[str, list], cfg: dict, today: date, days
                 continue
             imp_total += imp
             actual += imp * buy
+            alt["top"] += imp * (top_p if top_p is not None else buy)
+            alt["low"] += imp * (low_p if low_p is not None else buy)
             if "g11" in cfg:
                 alt["g11"] += imp * cfg["g11"]
             if zprof is not None:
@@ -94,10 +101,15 @@ def tariff_compare(buckets_by_day: dict[str, list], cfg: dict, today: date, days
     if "dyn_markup" in cfg and dyn_n and dyn_ok / dyn_n >= 0.8:
         rows.append({"key": "dyn", "name": f"Dynamiczna: giełda (RCE) + {cfg['dyn_markup']:.2f} zł/kWh", "cost": round(alt["dyn"], 2),
                      "diff": round(alt["dyn"] - actual, 2)})
+    best = min(rows, key=lambda r: r["cost"]) if len(rows) > 1 else None
+    if imp_total > 0:   # scenariusze „co by było, gdyby” — nie są taryfą do wyboru, więc poza `best`
+        rows.append({"key": "top", "name": "Gdyby cały pobór wypadał w 6 najdroższych godzinach doby",
+                     "cost": round(alt["top"], 2), "diff": round(alt["top"] - actual, 2), "what_if": True})
+        rows.append({"key": "low", "name": "Gdyby cały pobór wypadał w 6 najtańszych godzinach doby",
+                     "cost": round(alt["low"], 2), "diff": round(alt["low"] - actual, 2), "what_if": True})
     for r in rows:
         r["per_month"] = round(r["cost"] * scale, 2)
         r["diff_month"] = round(r["diff"] * scale, 2)
-    best = min(rows, key=lambda r: r["cost"]) if len(rows) > 1 else None
     return {"days": n_days, "import_kwh": round(imp_total, 1), "rows": rows,
             "best": best["key"] if best and best["key"] != "actual" else None, "cfg": cfg,
             "note": "Szacunek: ten sam pobór z sieci co do godziny; bez opłat stałych i bez zmiany zachowania EMS przy innej taryfie."}

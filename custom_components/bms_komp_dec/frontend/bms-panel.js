@@ -1059,6 +1059,7 @@
           return;
         }
         this._startFlowLoop();
+        this._safe(() => this._tipInit());
         this._fetchWeatherForecast();
         setTimeout(() => this._fetchHistory24h(), 1500);
       }
@@ -1085,6 +1086,66 @@
     _dayDiff(keyA, keyB) {
       const a = new Date(keyA + 'T12:00:00'), b = new Date(keyB + 'T12:00:00');
       return Math.round((a - b) / 86400000);
+    }
+    // Wspólny dymek z danymi dla wykresów: czyta atrybut title / data-tip albo dziecko <title> elementu SVG, pokazuje go po najechaniu
+    // myszą, a na ekranie dotykowym po dotknięciu (natywne podpowiedzi przeglądarki nie działają na telefonie i pojawiają się z opóźnieniem).
+    // Elementy interaktywne (przyciski, pola, linki) zostawiamy w spokoju.
+    _tipInit() {
+      const root = this.shadowRoot; if (!root || this._tipBound) return;
+      this._tipBound = true;
+      const st = document.createElement('style');
+      st.textContent = '.bms-tip { position:fixed; z-index:99999; max-width:min(280px, 86vw); padding:6px 10px; border-radius:10px; font-size:12px; line-height:1.4; white-space:pre-line; '
+        + 'pointer-events:none; background:var(--card, #1c1c1e); color:var(--text, #fff); border:1px solid var(--line, rgba(255,255,255,.18)); box-shadow:0 6px 20px rgba(0,0,0,.35); display:none; }';
+      root.appendChild(st);
+      const tip = document.createElement('div'); tip.className = 'bms-tip'; tip.setAttribute('role', 'tooltip'); root.appendChild(tip);
+      let hideT = null;
+      const INTER = 'button, a, input, select, textarea, summary, label, [role="button"], [data-act], [data-dv], [data-tab]';
+      const textOf = (el) => {
+        if (!el || el.nodeType !== 1) return '';
+        let tx = el.getAttribute('data-tip');
+        if (!tx && el.hasAttribute('title')) { tx = el.getAttribute('title'); el.setAttribute('data-tip', tx); el.removeAttribute('title'); }
+        if (!tx) {
+          const tt = Array.from(el.children).find((c) => c.tagName && c.tagName.toLowerCase() === 'title');
+          if (tt) { tx = tt.textContent; el.setAttribute('data-tip', tx); tt.remove(); }
+        }
+        return (tx || '').trim();
+      };
+      const find = (target, ev) => {
+        if (target && target.tagName === 'CANVAS' && Array.isArray(target._tipR) && ev) {          // własne wykresy na canvasie: obszary zapisane przy rysowaniu
+          const r = target.getBoundingClientRect(); const px = ev.clientX - r.left, py = ev.clientY - r.top;
+          const hit = target._tipR.find((q) => px >= q.x && px <= q.x + q.w && py >= q.y && py <= q.y + q.h);
+          return hit ? hit.text : '';
+        }
+        for (let el = target; el && el !== root && el.nodeType === 1; el = el.parentNode || el.host) {
+          if (el.matches && el.matches(INTER)) return null;
+          const tx = textOf(el);
+          if (tx) return tx;
+        }
+        return '';
+      };
+      const place = (x, y) => {
+        tip.style.left = '0px'; tip.style.top = '0px';
+        const r = tip.getBoundingClientRect(); const vw = window.innerWidth, vh = window.innerHeight;
+        let l = x + 14, tp = y + 16;
+        if (l + r.width > vw - 6) l = Math.max(6, x - r.width - 14);
+        if (tp + r.height > vh - 6) tp = Math.max(6, y - r.height - 14);
+        tip.style.left = l + 'px'; tip.style.top = tp + 'px';
+      };
+      const show = (tx, x, y) => { clearTimeout(hideT); if (tip.textContent !== tx) tip.textContent = tx; tip.style.display = 'block'; place(x, y); };
+      const hide = () => { clearTimeout(hideT); tip.style.display = 'none'; };
+      const onMove = (e) => {
+        if (e.pointerType === 'touch') return;
+        const tx = find(e.target, e);
+        if (tx) show(tx, e.clientX, e.clientY); else hide();
+      };
+      root.addEventListener('pointermove', onMove);
+      this.addEventListener('pointerleave', hide);
+      root.addEventListener('pointerdown', (e) => {
+        if (e.pointerType !== 'touch') { hide(); return; }
+        const tx = find(e.target, e);
+        if (tx) { show(tx, e.clientX, e.clientY); hideT = setTimeout(hide, 4000); } else hide();
+      });
+      window.addEventListener('scroll', hide, { passive: true, capture: true });
     }
     disconnectedCallback() { this._stopFlowLoop(); }
 
@@ -1644,9 +1705,19 @@
       const barW = Math.min(slotW * 0.3, 64);
       const gap = 8;
       const baseY = padT + plotH;
+      const tipR = canvas._tipR = [];
 
       days.forEach((d, i) => {
         const cx = padL + (i + 0.5) * slotW;
+        {
+          const f1 = (v) => (typeof v === 'number' ? v.toFixed(1).replace('.', ',') + ' kWh' : '—');
+          const lines = [`${d.label || ''}${d.date ? ' ' + d.date.slice(8, 10) + '.' + d.date.slice(5, 7) : ''}`];
+          if (typeof d.actual === 'number') lines.push('Rzeczywiste: ' + f1(d.actual));
+          if (typeof d.forecast === 'number') lines.push('Prognoza: ' + f1(d.forecast));
+          if (typeof d.nowcast === 'number' && Math.abs(d.nowcast - (d.forecast || 0)) >= 0.05) lines.push('Tempo dnia (szacunek na koniec doby): ' + f1(d.nowcast));
+          if (d.label === 'Jutro' && confidence && typeof confidence.low === 'number') lines.push('Zakres: ' + f1(confidence.low) + ' – ' + f1(confidence.high));
+          tipR.push({ x: padL + i * slotW, y: padT, w: slotW, h: plotH + padB, text: lines.join('\n') });
+        }
         const hasActual = typeof d.actual === 'number';
         const hasForecast = typeof d.forecast === 'number';
         const isTomorrow = d.label === 'Jutro';
@@ -1833,11 +1904,16 @@
       const barW = Math.min(slotW * 0.6, 48);
       const baseY = padT + plotH;
       const tomorrow = this._tomorrowKey();
+      const tipR = canvas._tipR = [];
 
       forecast7d.forEach((d, i) => {
         const cx = padL + (i + 0.5) * slotW;
         const dateStr = d.date || '';
         const isTomorrow = dateStr === tomorrow;
+        if (dateStr) {
+          const wdn = new Date(dateStr + 'T12:00:00').toLocaleDateString('pl-PL', { weekday: 'long' });
+          tipR.push({ x: padL + i * slotW, y: padT, w: slotW, h: plotH + padB, text: `${wdn} ${dateStr.slice(8, 10)}.${dateStr.slice(5, 7)}\nPrognoza: ${typeof d.forecast === 'number' ? d.forecast.toFixed(1).replace('.', ',') + ' kWh' : '—'}` });
+        }
 
         if (typeof d.forecast === 'number' && d.forecast > 0) {
           const bh = Math.max(3, (d.forecast / maxV) * plotH);
@@ -2002,6 +2078,14 @@
       const plotH = h - padT - padB;
       const baseY = padT + plotH;
       const groupW = plotW / 24;
+      const tipR = canvas._tipR = [];
+      for (let i = 0; i < 24; i++) {
+        const fmt = (v) => (typeof v === 'number' ? String(Math.round(v * 1000)) + ' Wh' : '—');
+        const hh = (n) => String(n % 24).padStart(2, '0');
+        const lines = [`${hh(i)}:00–${hh(i + 1)}:00`, 'Prognoza: ' + fmt(tomorrow[i])];
+        if (today && today[i] !== null && today[i] !== undefined) lines.push('Rzeczywiste: ' + fmt(today[i]));
+        tipR.push({ x: padL + i * groupW, y: 0, w: groupW, h: h, text: lines.join('\n') });
+      }
 
       const nums = tomorrow.concat(today || []).filter(v => v !== null);
       if (!nums.length || plotW <= 0 || plotH <= 0) return;
@@ -2275,6 +2359,13 @@
       }
 
       const groupW = plotW / 24;
+      const tipR = canvas._tipR = [];
+      for (let i = 0; i < 24; i++) {
+        const fmt = (v) => (typeof v === 'number' ? v.toFixed(2).replace('.', ',') + ' kWh' : '—');
+        const hh = (n) => String(n % 24).padStart(2, '0');
+        const lines = [`${hh(i)}:00–${hh(i + 1)}:00`, 'Wykonanie: ' + fmt(actual ? actual[i] : null), 'Prognoza: ' + fmt(forecast ? forecast[i] : null)];
+        tipR.push({ x: padL + i * groupW, y: 0, w: groupW, h: h, text: lines.join('\n') });
+      }
       const barW = Math.max(4, groupW * 0.4);
       const nowH = new Date().getHours();
       const baseY = padT + plotH;
