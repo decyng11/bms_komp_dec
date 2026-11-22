@@ -18,8 +18,8 @@
 ## Prognoza zużycia: zaniżanie nie jest już „zamrożone” sufitem korekty
 - Samokorekta (mediana rzeczywiste/model z ostatnich dni danego typu) miała sufit ±25%, więc gdy każdy z ostatnich dni wolnych (albo roboczych) wychodził wyraźnie wyżej niż model, prognoza i tak zostawała zaniżona o kilkadziesiąt procent. Teraz, gdy model **stale zaniża** (co najmniej 3 dni danego typu, każdy ≥5% powyżej modelu), sufit korekty w górę wynosi +50% (`BIAS_MAX_UNDER`); zawyżanie i niestałe błędy zostają przy dawnym ±25%. Test w `test_lftune.py`.
 
-## Prognoza zużycia: wysokie weekendy nie są wycinane jako „odstające”
-- Filtr odstających (MAD) odrzucał dni daleko od mediany po obu stronach jednakowo. Zużycie domu jest skośne w prawo (gotowanie, goście, pompa ciepła), więc wysokie weekendy i święta były wycinane z bazy, a niskie zostawały — stąd systematyczne zaniżanie dni wolnych. Teraz niskie dni (niepełne dane, wyjazd) odpadają przy 3 MAD jak dotąd, a wysokie dopiero przy dwa razy większym progu; prawdziwe skoki licznika nadal wycina wykrywanie podejrzanych dni. Test w `test_lftune.py` (stary filtr dawał 12,2 kWh, nowy ≥14).
+## Prognoza zużycia: wysokie weekendy i święta nie są wycinane jako „odstające”
+- Przyczyna weekendów prognozowanych na ~7 kWh przy rzeczywistych ~13 (karta Plan: „dni wolne: błąd 49%, zaniżone o 45%”): filtr odstających (MAD) porównywał dni z medianą z 60 dni. Po skoku zużycia (zimno) świeże, prawdziwe weekendy były „daleko od mediany” i wypadały z bazy, a zostawały stare, niskie. Teraz filtr odrzuca wyłącznie dni niskie (niepełne dane, wyjazd); wysokich nie wycina, bo prawdziwe skoki licznika wyłapuje wykrywanie podejrzanych dni. Test w `test_lftune.py` odtwarza dane z karty (weekendy 7,5 → 13 kWh): stary filtr dawał 7,8 kWh, nowy ≥11.
 
 ## Ochrona przyłącza: koniec przeskoków prądu 153 ↔ 154 A
 - Sufit mocy ładowania z sieci (kW → A przez napięcie baterii) ma teraz martwą strefę (większa z wartości: 2 A albo 2,5% sufitu), więc wahania napięcia o ułamki wolta nie przestawiają prądu co kilkanaście minut. Duże odchylenia nadal są korygowane, a limit poboru z sieci działa jak wcześniej. Test w `test_gridlimit.py`.

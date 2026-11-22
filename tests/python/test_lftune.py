@@ -68,6 +68,19 @@ def main():
     lf = mk(hi, today); lf.params = dict(lfm.DEFAULT_PARAMS, wd_w=0.0)
     p_sun = lf._model_core(date(2026, 11, 15), today)
     check("wysokie weekendy zostają w modelu: prognoza niedzieli ≥ 14", p_sun >= 14.0, p_sun)
+    # --- dane z karty użytkownika: weekendy ~7,5 kWh do końca października, od 1.11 ~13 kWh — prognoza nie zostaje przy ~7
+    t2 = date(2026, 11, 22); at(2026, 11, 22, 8, 0)
+    seq = []
+    for i in range(60):
+        d = t2 - timedelta(days=60 - i)
+        if d.weekday() < 5:
+            seq.append(10.0 + 0.4 * math.sin(i * 2.3))
+        else:
+            seq.append((13.0 if d >= date(2026, 11, 1) else 7.5) + 0.5 * math.sin(i * 1.9) + (0.02 if d.weekday() == 6 else 0))
+    lf = mk(seq, t2); lf.params = dict(lfm.DEFAULT_PARAMS)
+    p_sat = lf._model_core(date(2026, 11, 28), t2)
+    check("weekend po skoku z ~7,5 do ~13: model ≥ 11 (nie ~7)", p_sat >= 11.0, p_sat)
+    at(2026, 11, 9, 8, 0)
     # --- za mało historii
     lf = mk([10.0] * 12, today); lf._autotune(today)
     check("za mało dni: bez zmiany parametrów", lf.params == lfm.DEFAULT_PARAMS and lf.tune.get("n") == 0, lf.tune)
