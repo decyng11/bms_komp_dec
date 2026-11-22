@@ -55,7 +55,7 @@
 
     Object.assign(BmsPanel.prototype, {
       _dvS() {
-        if (!this._dv) this._dv = { data: null, loading: false, err: '', range: '7d', sel: 'all', edit: null, msg: '', stats: {}, statsKey: '', fetchedAt: 0 };
+        if (!this._dv) this._dv = { data: null, loading: false, err: '', range: '7d', sel: 'all', edit: null, msg: '', stats: {}, statsKey: '', fetchedAt: 0, fl: { data: null, edit: null, msg: '', open: {} } };
         return this._dv;
       },
       _dvAdmin() { const u = this._hass && this._hass.user; return !!(u && u.is_admin); },
@@ -89,6 +89,7 @@
           s.data = dvResp(await dvCall(this, 'devices_get', { history: true })) || {};
           s.fetchedAt = Date.now();
           await this._dvLoadStats();
+          await this._flLoad();
         } catch (e) { s.err = dvErr(e); }
         s.loading = false; this._dvRender();
       },
@@ -294,11 +295,11 @@
         if (!d.switch_eid || !d.ctl_mode || d.ctl_mode === 'off') return '';
         const s = this._dvS(); const c = (s.data && s.data.control) || {}; const st = (c.devices || {})[d.id] || {};
         const sw = this._hass.states[d.switch_eid]; const on = sw && sw.state === 'on';
-        const mode = ({ pv: 'nadwyżka PV', cheap: d.ctl_split ? 'najtańsze godziny (z przerwami)' : 'najtańsze godziny', neg: 'ujemna cena zakupu' })[d.ctl_mode] || 'najtańsze godziny';
+        const mode = ({ pv: 'nadwyżka PV', cheap: d.ctl_split ? 'najtańsze godziny (z przerwami)' : 'najtańsze godziny', neg: 'ujemna cena zakupu', now: 'natychmiast' })[d.ctl_mode] || 'najtańsze godziny';
         let txt, cls = '';
         if (!c.enabled) { txt = `🎛 ${mode} · sterowanie wyłączone`; cls = 'opacity:.7;'; }
         else if (st.manual) txt = '✋ przełączone ręcznie — EMS nie steruje do jutra';
-        else txt = `🎛 ${mode} · ${on ? 'wł.' : 'wył.'}${st.reason ? ' · ' + st.reason : ''}${st.cond && st.cond.ok === true ? ' · warunek spełniony' : ''}`;
+        else txt = `🎛 ${mode} · ${on ? 'wł.' : 'wył.'}${st.reason ? ' · ' + st.reason : ''}${st.cond && st.cond.ok === true ? ' · warunek spełniony' : ''}${st.sess ? ` · sesja ${dvFmt(st.sess.kwh, 1)} kWh, ok. ${dvZl(st.sess.cost)}` : ''}${st.amps ? ` · ${dvFmt(st.amps, 0)} A` : ''}${st.temp != null ? ` · CWU ${dvFmt(st.temp, 0)} °C` : ''}`;
         return `<div class="s" style="margin-top:4px;${cls}">${dvEsc(txt)}</div>`;
       },
       _dvCtlBar() {
@@ -315,6 +316,7 @@
         const root = this._el('devRoot'); if (!root) return;
         const s = this._dvS();
         if (s.edit) { root.innerHTML = this._dvEditor(); return; }
+        if (s.fl.edit) { root.innerHTML = this._flEditor(); return; }
         if (s.disc) { root.innerHTML = this._dvDiscView(); return; }
         if (s.loading && !s.data) { root.innerHTML = '<div class="chart-empty">Wczytuję urządzenia…</div>'; return; }
         if (s.err && !s.data) { root.innerHTML = `<div class="chart-empty" style="color:var(--red);">Nie udało się wczytać urządzeń: ${dvEsc(s.err)}<br><button class="dv-btn sec" data-dv="reload" style="margin-top:10px;">Spróbuj ponownie</button><div class="dv-note">Wymaga integracji 0.8.1 lub nowszej.</div></div>`; return; }
@@ -324,7 +326,7 @@
           <span class="dv-note" style="margin:0;">${dvEsc(s.msg || '')}</span></div>`;
         if (!devs.length) {
           root.innerHTML = `<div class="section"><div class="section-title">🔌 Urządzenia</div><div class="chart-card full" style="padding:14px 16px;">${head}
-            <div class="chart-empty">Nie dodano jeszcze żadnego urządzenia.${admin ? ' Kliknij „Wyszukaj urządzenia”, żeby znaleźć liczniki kWh w Home Assistant, albo „Dodaj urządzenie” i wskaż encję ręcznie.' : ' Urządzenia może dodać administrator.'}</div></div></div>`;
+            <div class="chart-empty">Nie dodano jeszcze żadnego urządzenia.${admin ? ' Kliknij „Wyszukaj urządzenia”, żeby znaleźć liczniki kWh w Home Assistant, albo „Dodaj urządzenie” i wskaż encję ręcznie.' : ' Urządzenia może dodać administrator.'}</div></div></div>` + this._flHtml();
           return;
         }
         const rooms = Array.from(new Set(devs.map((d) => d.room).filter(Boolean)));
@@ -343,7 +345,7 @@
           <div class="section"><div class="section-title">📅 Porównanie miesięcy</div><div class="chart-card full" style="padding:14px 16px;">${this._dvCompare()}</div></div>
           ${rooms.length ? `<div class="section"><div class="section-title">🏠 Pomieszczenia (zakres)</div><div class="chart-card full" style="padding:14px 16px;">${this._dvRooms()}</div></div>` : ''}
           <div class="section"><div class="section-title">🕒 Kiedy pracuje</div><div class="chart-card full" style="padding:14px 16px;">${this._dvHeat()}</div></div>
-          <div class="section"><div class="section-title">💡 Plan i podpowiedzi</div><div class="chart-card full" style="padding:14px 16px;">${this._dvInfo()}</div></div>`;
+          <div class="section"><div class="section-title">💡 Plan i podpowiedzi</div><div class="chart-card full" style="padding:14px 16px;">${this._dvInfo()}</div></div>` + this._flHtml();
       },
       // ------------------------------------------------------------ edytor
       _dvEditor() {
@@ -358,6 +360,31 @@
         const catSel = `<select data-dvf="category">${groups.map((g) => `<optgroup label="${dvEsc(g)}">${cats.filter((c) => c.group === g).map((c) => `<option value="${dvEsc(c.key)}" ${e.category === c.key ? 'selected' : ''}>${dvEsc(c.icon)} ${dvEsc(c.name)}</option>`).join('')}</optgroup>`).join('')}</select>`;
         const chk = (k, l) => `<label class="chk"><input type="checkbox" data-dvf="${k}" ${e[k] ? 'checked' : ''}/> ${l}</label>`;
         const num = (k, l, step) => `<label>${l}<input type="number" step="${step}" data-dvf="${k}" value="${dvEsc(e[k])}"/></label>`;
+        const nums = Object.keys(this._hass.states).filter((x) => /^number\./.test(x) && !/^number\.bms_/.test(x)).sort().slice(0, 300);
+        const temps = ents.filter((x) => ['°c', 'c'].includes(unitOf(x))).sort();
+        const txt = (k, l, ph, list, id) => `<label>${l}<input type="text" ${list ? `list="${id}"` : ''} data-dvf="${k}" placeholder="${ph}" value="${dvEsc(e[k] || '')}"/>${list ? `<datalist id="${id}">${list.map((x) => `<option value="${dvEsc(x)}">`).join('')}</datalist>` : ''}</label>`;
+        const isEv = e.category === 'ev'; const isDhw = ['boiler', 'heat_pump_dhw'].includes(e.category);
+        const evBlock = !isEv ? '' : `<div class="section-title" style="margin:16px 0 8px;">🚗 Ładowarka EV</div>
+          <div class="dv-form" data-role="ev-form">
+            ${num('ev_target_kwh', 'Cel sesji (kWh, 0 = bez celu)', 0.5)}${num('ev_target_pct', 'Cel: poziom naładowania auta (%, 0 = bez celu)', 1)}
+            ${txt('ev_soc_eid', 'Encja poziomu naładowania auta (opcjonalnie)', 'sensor.auto_bateria', null, '')}${num('ev_car_kwh', 'Pojemność baterii auta (kWh, do liczenia godzin do celu)', 1)}
+            ${txt('ev_current_eid', 'Encja prądu ładowania (number, opcjonalnie)', 'number.wallbox_prad', nums, 'dvNum')}${num('ev_min_a', 'Prąd minimalny (A)', 1)}
+            ${num('ev_max_a', 'Prąd maksymalny (A)', 1)}<label>Liczba faz<select data-dvf="ev_phases"><option value="1" ${Number(e.ev_phases) !== 3 ? 'selected' : ''}>1 faza</option><option value="3" ${Number(e.ev_phases) === 3 ? 'selected' : ''}>3 fazy</option></select></label>
+            ${num('ev_volts', 'Napięcie fazy (V)', 1)}${num('ev_grid_limit_w', 'Limit poboru z sieci razem z autem (W, 0 = bez limitu)', 100)}
+            ${num('ev_soc_floor', 'Tryby „natychmiast” i „najtańsze”: nie ładuj, gdy bateria domu poniżej (%, 0 = wyłączone)', 1)}<div></div>
+          </div>
+          <div class="dv-note">Auto bez regulacji prądu tylko włącza i wyłącza. Z encją prądu EMS reguluje go płynnie za nadwyżką PV (tryb „przy nadwyżce PV”) albo ustawia maksimum, zawsze pod limitem poboru z sieci. Sesja kończy się po odłączeniu auta (warunek) albo po 10 minutach bez poboru; koszt sesji to szacunek (cena zakupu × energia).</div>`;
+        const dhwBlock = !isDhw ? '' : `<div class="section-title" style="margin:16px 0 8px;">🚿 CWU (bojler, pompa ciepła)</div>
+          <div class="dv-form" data-role="dhw-form">
+            ${txt('dhw_temp_eid', 'Czujnik temperatury CWU (°C, opcjonalnie)', 'sensor.cwu_temperatura', temps, 'dvTemp')}${num('dhw_max_c', 'Limit bezpieczeństwa (°C, 0 = wyłączony)', 1)}
+            ${num('dhw_boost_c', 'Temperatura zadana „na zapas” (°C, 0 = bez)', 1)}${num('dhw_comfort_c', 'Minimum komfortu (°C, 0 = wyłączone)', 1)}
+            ${num('dhw_comfort_h', 'Komfort: do godziny (0–23)', 1)}<div></div>
+            ${chk('dhw_leg', 'Antylegionella raz w tygodniu')}${num('dhw_leg_c', 'Antylegionella: temperatura (°C)', 1)}
+            <label>Antylegionella: dzień<select data-dvf="dhw_leg_dow">${['poniedziałek', 'wtorek', 'środa', 'czwartek', 'piątek', 'sobota', 'niedziela'].map((n, i) => `<option value="${i}" ${Number(e.dhw_leg_dow == null ? 6 : e.dhw_leg_dow) === i ? 'selected' : ''}>${n}</option>`).join('')}</select></label><div></div>
+            ${txt('dhw_setpoint_eid', 'Pompa ciepła: encja temperatury zadanej (number, opcjonalnie)', 'number.pc_cwu_zadana', nums, 'dvNum2')}${num('dhw_sp_hi', 'Zadana podczas grzania na zapas (°C)', 1)}
+            ${num('dhw_sp_lo', 'Zadana poza grzaniem (°C)', 1)}<div></div>
+          </div>
+          <div class="dv-note">Bez czujnika wybierz tryb „w najtańszych godzinach planu” i podaj, ile godzin dziennie ma pracować. Z czujnikiem: powyżej limitu bezpieczeństwa EMS nigdy nie grzeje (także gdy czujnik milczy), po osiągnięciu zadanej wyłącza tryby oszczędne, a komfort i antylegionella grzeją mimo cen. Antylegionella wybiera najtańsze godziny w dniu cyklu i domyka po 21:00.</div>`;
         return `<div class="section"><div class="section-title">${e._new ? '➕ Nowe urządzenie' : '✏️ Edycja urządzenia'}</div><div class="chart-card full" style="padding:14px 16px;">
           <div class="dv-form">
             <label>Nazwa<input type="text" maxlength="40" data-dvf="name" value="${dvEsc(e.name)}"/></label>
@@ -388,7 +415,8 @@
               <option value="off" ${!e.ctl_mode || e.ctl_mode === 'off' ? 'selected' : ''}>nie steruj</option>
               <option value="pv" ${e.ctl_mode === 'pv' ? 'selected' : ''}>przy nadwyżce PV</option>
               <option value="cheap" ${e.ctl_mode === 'cheap' ? 'selected' : ''}>w najtańszych godzinach planu</option>
-              <option value="neg" ${e.ctl_mode === 'neg' ? 'selected' : ''}>przy ujemnej cenie zakupu</option></select></label>
+              <option value="neg" ${e.ctl_mode === 'neg' ? 'selected' : ''}>przy ujemnej cenie zakupu</option>
+              <option value="now" ${e.ctl_mode === 'now' ? 'selected' : ''}>natychmiast (gdy warunek spełniony)</option></select></label>
             ${num('ctl_power_w', 'Moc urządzenia (W) — tyle nadwyżki potrzeba', 10)}${num('ctl_soc', 'Nadwyżka PV: włączaj od SOC (%)', 1)}
             ${num('ctl_hours', 'Najtańsze godziny: ile godzin pracy', 0.5)}${num('ctl_max_h', 'Limit pracy na dobę (h, 0 = bez limitu)', 0.5)}
             ${num('ctl_ready_h', 'Najtańsze godziny: gotowe do godziny (1–23, 0 = bez terminu)', 1)}${chk('ctl_split', 'Najtańsze godziny mogą być rozdzielone (auto, bojler — nie tylko jeden blok)')}
@@ -400,6 +428,7 @@
           <div class="dv-note">Warunek: EMS włączy urządzenie tylko wtedy, gdy wskazana encja ma jeden z dozwolonych stanów (np. <code>binary_sensor.auto_podlaczone</code> = <code>on</code>). Gdy warunek przestanie być spełniony albo encja będzie niedostępna, EMS nie włącza urządzenia, a włączone przez siebie wyłącza od razu. Zostaw puste, jeśli warunku nie potrzebujesz.</div>
           <div class="dv-note">Ujemna cena: gdy sprzedawca płaci za pobór (cena zakupu poniżej progu, domyślnie 0), EMS włącza urządzenie po 5 minutach stałej ceny i wyłącza je, gdy cena wróci. Wymaga ceny zakupu z godzinowej taryfy (np. Pstryk).
             Termin „gotowe do godziny”: np. auto naładowane na 7:00 — EMS wybiera najtańsze godziny tak, żeby skończyć przed tą porą, i nie przestawia ich w trakcie.</div>
+          ${evBlock}${dhwBlock}
           <div class="dv-note">EMS włącza i wyłącza przełącznik tylko przy włączonym „Sterowaniu urządzeniami” (przełącznik nad listą urządzeń). Zmienia stan najwyżej co 10 minut, a warunek musi trwać 5 minut.
             Wyłącza tylko to, co sam włączył; gdy przełączysz urządzenie ręcznie, EMS nie steruje nim do końca dnia. Przy zaniku sieci niczego nie włącza.
             Oszczędzanie energii: gdy SOC spadnie poniżej progu z EMS → „Oszczędzanie energii”, EMS wyłącza urządzenia z przełącznikiem (poza oznaczonymi „nie dotyczy”) i włącza je po odbiciu SOC o 5 pkt.</div>
@@ -411,13 +440,88 @@
         return Object.assign({}, base || {}, { category: cat, icon: c.icon, name: (base && base.name && !base._autoName) ? base.name : c.name, _autoName: !(base && base.name && !base._autoName) }, c.default || {},
           { notify_cycle: !!(c.default || {}).cycles, notify_anomaly: true, notify_hint: !!(c.default || {}).flexible });
       },
+
+      // ------------------------------------------------------------ flota (etap 1: tylko odczyt)
+      async _flLoad() {
+        const s = this._dvS();
+        try { const r = dvResp(await dvCall(this, 'fleet_get', {})); s.fl.data = r && r.totals && r.limits && Array.isArray(r.clusters) ? r : null; } catch (e) { s.fl.data = null; }
+      },
+      _flHtml() {
+        const s = this._dvS(); const f = s.fl.data; const admin = this._dvAdmin();
+        const cfgN = f && f.totals ? f.totals.inverters + f.totals.batteries : 0;
+        if (!f || (!cfgN && !admin)) return '';
+        const tot = f.totals || {};
+        const tile = (l, v) => `<div class="dv-tile" style="cursor:default;"><div class="n">${dvEsc(l)}</div><div class="p">${dvEsc(v)}</div></div>`;
+        const head = `<div class="dv-bar">${admin ? '<button class="dv-btn sec" data-dv="fl-edit">⚙ Skonfiguruj flotę</button>' : ''}<span class="dv-note" style="margin:0;">${dvEsc(s.fl.msg || '')}</span></div>`;
+        if (!cfgN) {
+          return `<div class="section"><div class="section-title">🏭 Flota</div><div class="chart-card full" style="padding:14px 16px;">${head}<div class="chart-empty">Nie skonfigurowano floty. Dodaj klastry, falowniki i baterie (do ${f.limits.inverters} falowników i ${f.limits.batteries} baterii) — etap 1 tylko pokazuje odczyty i alarmy, niczego nie zapisuje do falowników.</div></div></div>`;
+        }
+        const tiles = `<div class="dv-grid">${tile('Klastry', tot.clusters)}${tile('Falowniki', tot.inverters)}${tile('Baterie', tot.batteries)}${tile('PV razem', dvFmt(tot.pv_kw, 1, ' kW'))}${tile('Pojemność', dvFmt(tot.capacity_kwh, 1, ' kWh'))}${tile('SOC (wg pojemności)', tot.soc == null ? '—' : dvFmt(tot.soc, 0, ' %'))}${tile('Rozrzut SOC klastrów', tot.soc_spread == null ? '—' : dvFmt(tot.soc_spread, 0, ' pkt'))}</div>`;
+        const issues = (f.issues || []).length ? `<div class="dv-note" style="color:var(--amber, #d98a00);">${f.issues.map((x) => '⚠ ' + dvEsc(x.text)).join('<br>')}</div>` : '';
+        const cl = (f.clusters || []).map((c) => {
+          const open = !!s.fl.open[c.id];
+          const inv = (c.inverters || []).map((i) => `<div class="dv-note" style="margin:2px 0;">⚡ ${dvEsc(i.name)} <small>(${dvEsc(i.role)})</small>: ${i.power_kw == null ? '—' : dvFmt(i.power_kw, 2, ' kW')}${i.temp_c == null ? '' : ', ' + dvFmt(i.temp_c, 0, ' °C')}${i.mode ? ', tryb ' + dvEsc(i.mode) : ''}${i.online === false ? ' — brak odpowiedzi' : ''}${i.mismatch ? ' ⚠' : ''}</div>`).join('');
+          const bat = (c.batteries || []).map((b) => `<div class="dv-note" style="margin:2px 0;">🔋 ${dvEsc(b.name)} <small>(${dvEsc(b.type)}, ${dvFmt(b.capacity_kwh, 1, ' kWh')})</small>: ${b.soc == null ? '—' : dvFmt(b.soc, 0, ' %')}${b.power_kw == null ? '' : ', ' + dvFmt(b.power_kw, 2, ' kW')}${b.temp_c == null ? '' : ', ' + dvFmt(b.temp_c, 0, ' °C')}${b.outlier != null ? ' ⚠ odstaje' : ''}</div>`).join('');
+          return `<div style="border:1px solid var(--line);border-radius:10px;padding:8px 12px;margin:6px 0;"><div style="cursor:pointer;" data-dv="fl-toggle" data-id="${dvEsc(c.id)}">${open ? '▾' : '▸'} <b>${dvEsc(c.name)}</b> ${c.status === 'warn' ? '⚠' : '✓'} — PV ${c.pv_kw == null ? '—' : dvFmt(c.pv_kw, 1, ' kW')}, SOC ${c.soc == null ? '—' : dvFmt(c.soc, 0, ' %')}, ${dvFmt(c.capacity_kwh, 1, ' kWh')}</div>${open ? inv + bat : ''}</div>`;
+        }).join('');
+        return `<div class="section"><div class="section-title">🏭 Flota</div><div class="chart-card full" style="padding:14px 16px;">${head}${tiles}${issues}${cl}</div></div>`;
+      },
+      _flClick(a, t) {
+        const s = this._dvS(); const fl = s.fl; const f = fl.data;
+        if (a === 'fl-toggle') { fl.open[t.dataset.id] = !fl.open[t.dataset.id]; this._dvRender(); return; }
+        if (a === 'fl-edit') { const c = JSON.parse(JSON.stringify((f && f.config) || { clusters: [], inverters: [], batteries: [] })); if (!c.clusters.length) c.clusters.push({ id: 'k1', name: 'Klaster 1' }); fl.edit = c; this._dvRender(); return; }
+        if (a === 'fl-cancel') { fl.edit = null; this._dvRender(); return; }
+        if (!fl.edit) return;
+        this._flCollect();
+        const lim = (f && f.limits) || { inverters: 10, batteries: 30, clusters: 10 }; const e = fl.edit;
+        const nextId = (arr, p) => { let n = arr.length + 1; while (arr.some((x) => x.id === p + n)) n++; return p + n; };
+        if (a === 'fl-add-cl' && e.clusters.length < lim.clusters) e.clusters.push({ id: nextId(e.clusters, 'k'), name: 'Klaster ' + (e.clusters.length + 1) });
+        else if (a === 'fl-add-inv' && e.inverters.length < lim.inverters) e.inverters.push({ id: nextId(e.inverters, 'f'), name: 'Falownik ' + (e.inverters.length + 1), cluster: e.clusters[0] ? e.clusters[0].id : '', role: 'single', pv_eid: '', power_eid: '', temp_eid: '', mode_eid: '' });
+        else if (a === 'fl-add-bat' && e.batteries.length < lim.batteries) e.batteries.push({ id: nextId(e.batteries, 'b'), name: 'Bateria ' + (e.batteries.length + 1), cluster: e.clusters[0] ? e.clusters[0].id : '', capacity_kwh: 5, type: 'LV', soc_eid: '', power_eid: '', temp_eid: '' });
+        else if (a === 'fl-del') { const k = t.dataset.k; const i = +t.dataset.i; if (e[k]) e[k].splice(i, 1); }
+        else if (a === 'fl-save') { this._flSave(); return; }
+        this._dvRender();
+      },
+      _flCollect() {
+        const root = this._el('devRoot'); const e = this._dvS().fl.edit; if (!root || !e) return;
+        root.querySelectorAll('[data-flf]').forEach((n) => {
+          const [k, i, f] = n.dataset.flf.split('.'); const it = e[k] && e[k][+i]; if (!it) return;
+          it[f] = f === 'capacity_kwh' ? (parseFloat(String(n.value).replace(',', '.')) || 0) : n.value;
+        });
+      },
+      async _flSave() {
+        const s = this._dvS();
+        try {
+          s.fl.data = dvResp(await dvCall(this, 'fleet_set', { fleet: s.fl.edit })) || s.fl.data;
+          s.fl.edit = null; s.fl.msg = 'Zapisano konfigurację floty.';
+        } catch (e) { s.fl.msg = 'Błąd zapisu: ' + dvErr(e); }
+        this._dvRender();
+      },
+      _flEditor() {
+        const e = this._dvS().fl.edit; const lim = (this._dvS().fl.data || {}).limits || { inverters: 10, batteries: 30, clusters: 10 };
+        const inp = (k, i, f, v, w, ph) => `<input data-flf="${k}.${i}.${f}" value="${dvEsc(v == null ? '' : v)}" placeholder="${dvEsc(ph || '')}" style="width:${w || 150}px;background:var(--surface);color:var(--text);border:1px solid var(--line);border-radius:8px;padding:4px 6px;">`;
+        const clSel = (k, i, v) => `<select data-flf="${k}.${i}.cluster" style="background:var(--surface);color:var(--text);border:1px solid var(--line);border-radius:8px;padding:4px 6px;">${e.clusters.map((c) => `<option value="${dvEsc(c.id)}" ${c.id === v ? 'selected' : ''}>${dvEsc(c.name)}</option>`).join('')}</select>`;
+        const sel = (k, i, f, v, opts) => `<select data-flf="${k}.${i}.${f}" style="background:var(--surface);color:var(--text);border:1px solid var(--line);border-radius:8px;padding:4px 6px;">${opts.map((o) => `<option ${o === v ? 'selected' : ''}>${o}</option>`).join('')}</select>`;
+        const del = (k, i) => `<button class="dv-btn sec" data-dv="fl-del" data-k="${k}" data-i="${i}">🗑</button>`;
+        const row = (x) => `<div style="margin:4px 0;display:flex;flex-wrap:wrap;gap:6px;align-items:center;">${x}</div>`;
+        const cls = e.clusters.map((c, i) => row(`🗂 ${inp('clusters', i, 'name', c.name, 160)}${e.clusters.length > 1 ? del('clusters', i) : ''}`)).join('');
+        const invs = e.inverters.map((x, i) => row(`⚡ ${inp('inverters', i, 'name', x.name, 130)}${clSel('inverters', i, x.cluster)}${sel('inverters', i, 'role', x.role, ['single', 'master', 'slave'])}${inp('inverters', i, 'pv_eid', x.pv_eid, 170, 'sensor.pv_moc')}${inp('inverters', i, 'power_eid', x.power_eid, 170, 'sensor.moc')}${inp('inverters', i, 'temp_eid', x.temp_eid, 170, 'sensor.temp')}${inp('inverters', i, 'mode_eid', x.mode_eid, 170, 'select.tryb')}${del('inverters', i)}`)).join('');
+        const bats = e.batteries.map((x, i) => row(`🔋 ${inp('batteries', i, 'name', x.name, 130)}${clSel('batteries', i, x.cluster)}${sel('batteries', i, 'type', x.type, ['LV', 'HV'])}${inp('batteries', i, 'capacity_kwh', x.capacity_kwh, 60, 'kWh')}${inp('batteries', i, 'soc_eid', x.soc_eid, 170, 'sensor.soc')}${inp('batteries', i, 'power_eid', x.power_eid, 170, 'sensor.moc')}${inp('batteries', i, 'temp_eid', x.temp_eid, 170, 'sensor.temp')}${del('batteries', i)}`)).join('');
+        return `<div class="section"><div class="section-title">🏭 Flota — konfiguracja</div><div class="chart-card full" style="padding:14px 16px;">
+          <div class="dv-note">Etap 1: tylko odczyt — nic nie jest zapisywane do falowników. Falowniki i baterie są niezależne: każdy element wskazuje swój klaster (jedna bateria może należeć do klastra wielu falowników). Moc w W lub kW (przeliczane automatycznie).</div>
+          <b>Klastry</b>${cls}<button class="dv-btn sec" data-dv="fl-add-cl" ${e.clusters.length >= lim.clusters ? 'disabled' : ''}>➕ Klaster</button>
+          <div style="margin-top:10px;"><b>Falowniki</b> (${e.inverters.length}/${lim.inverters})</div>${invs}<button class="dv-btn sec" data-dv="fl-add-inv" ${e.inverters.length >= lim.inverters ? 'disabled' : ''}>➕ Falownik</button>
+          <div style="margin-top:10px;"><b>Baterie</b> (${e.batteries.length}/${lim.batteries})</div>${bats}<button class="dv-btn sec" data-dv="fl-add-bat" ${e.batteries.length >= lim.batteries ? 'disabled' : ''}>➕ Bateria</button>
+          <div class="dv-bar" style="margin-top:12px;"><button class="dv-btn" data-dv="fl-save">💾 Zapisz</button><button class="dv-btn sec" data-dv="fl-cancel">Anuluj</button></div></div></div>`;
+      },
       _dvClick(ev) {
         const t = ev.target && ev.target.closest ? ev.target.closest('[data-dv]') : null; if (!t) return;
         const s = this._dvS(); const a = t.dataset.dv;
+        if (a.indexOf('fl-') === 0) { this._flClick(a, t); return; }
         if (a === 'range') { s.range = t.dataset.r; this._dvRender(); }
         else if (a === 'sel') { if (ev.target.closest('[data-dv="edit"]')) return; s.sel = s.sel === t.dataset.id ? 'all' : t.dataset.id; this._dvRender(); }
         else if (a === 'reload') { s.fetchedAt = 0; s.statsKey = ''; this._dvLoad(); }
-        else if (a === 'add') { s.edit = Object.assign(this._dvDefaultsFor('other', {}), { _new: true, room: '', power_eid: '', energy_eid: '', switch_eid: '', ctl_mode: 'off', ctl_power_w: 1000, ctl_soc: 90, ctl_hours: 2, ctl_max_h: 0, ctl_ready_h: 0, ctl_split: false, ctl_neg: false, ctl_neg_price: 0, ctl_cond_eid: '', ctl_cond_states: 'on' }); this._dvRender(); }
+        else if (a === 'add') { s.edit = Object.assign(this._dvDefaultsFor('other', {}), { _new: true, room: '', power_eid: '', energy_eid: '', switch_eid: '', ctl_mode: 'off', ctl_power_w: 1000, ctl_soc: 90, ctl_hours: 2, ctl_max_h: 0, ctl_ready_h: 0, ctl_split: false, ctl_neg: false, ctl_neg_price: 0, ctl_cond_eid: '', ctl_cond_states: 'on', ev_target_kwh: 0, ev_target_pct: 0, ev_car_kwh: 0, ev_soc_eid: '', ev_current_eid: '', ev_min_a: 6, ev_max_a: 16, ev_phases: 1, ev_volts: 230, ev_grid_limit_w: 0, ev_soc_floor: 0, dhw_temp_eid: '', dhw_comfort_c: 0, dhw_comfort_h: 6, dhw_boost_c: 0, dhw_max_c: 0, dhw_leg: false, dhw_leg_c: 60, dhw_leg_dow: 6, dhw_setpoint_eid: '', dhw_sp_hi: 55, dhw_sp_lo: 45 }); this._dvRender(); }
         else if (a === 'edit') { const d = this._dvDevs().find((x) => x.id === t.dataset.id); if (d) { s.edit = Object.assign({}, d); this._dvRender(); } }
         else if (a === 'cancel') { s.edit = null; this._dvRender(); }
         else if (a === 'save') this._dvSave();
@@ -593,6 +697,6 @@
     });
   };
   install.contract = 1;
-  install.version = '0.9.5.7';
+  install.version = '0.9.5.8';
   window.__bmsDevicesInstall = install;
 })();

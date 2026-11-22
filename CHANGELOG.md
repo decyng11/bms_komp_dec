@@ -1,4 +1,18 @@
-# EMS komp-dec 0.9.5.7
+# EMS komp-dec 0.9.5.8
+
+## Ładowanie EV (uniwersalne) i CWU z regułami
+- **Dowolna ładowarka** sterowana przez encje (przełącznik, opcjonalnie `number` z prądem). Tryby: wyłączone, nadwyżka PV, tanie godziny, ceny ujemne, natychmiast. Domyślnie tylko podgląd — sterowanie wymaga włączonego `switch.bms_device_control` i trybu na urządzeniu.
+- **Cel sesji:** kWh albo % SOC auta (z czujnika), godzina odjazdu; tanie godziny liczone z brakującej energii. Prąd płynnie 6–16 A (własne granice, 1 lub 3 fazy), **limit przyłącza** zmniejsza prąd albo wstrzymuje ładowanie, dolny próg SOC baterii domu. Osiągnięcie celu i limit przyłącza wyłączają od razu.
+- **Koszt sesji** (cena × energia) na kafelku i powiadomienie `ev_session`. Zużycie EV (od 3% mocy) liczone osobno w prognozie zużycia domu.
+- **CWU:** reguły ujemnej/niskiej ceny, nadwyżki PV, bufor przed drogimi godzinami, minimum komfortu o wskazanej porze, antylegionella raz w tygodniu (wybrany dzień i temperatura), twardy limit temperatury (wyłącza zawsze); typy: włącz/wyłącz oraz podniesienie temperatury zadanej. Brak czujnika przy ustawionym limicie blokuje grzanie; bez czujnika działają minimalne godziny na dobę.
+
+## Flota: do 10 falowników i 30 baterii (etap 1 — tylko odczyt)
+- Klastry, falowniki (master/slave/single) i baterie są niezależnymi listami; każdy element wskazuje klaster, więc kilka baterii na falownik i odwrotnie to zwykły przypadek. SOC klastra i floty to średnia ważona pojemnością.
+- Alarmy per klaster: falownik nie odpowiada, różne tryby master/slave, zły podział masterów, bateria odstająca SOC (≥15 pkt), temperatury, brak odczytu SOC; powiadomienie `fleet_alert` raz na dobę dla danego zestawu.
+- Panel „🏭 Flota” na karcie Urządzenia: kafelki sum, zwijane klastry, edytor (admin). Usługi `fleet_get` i `fleet_set`. **Niczego nie zapisuje do falowników** — sterowanie (etapy 2–3) dopiero po listach encji z prawdziwych instalacji.
+- Testy: `test_evdhw.py`, `test_devctl_evdhw.py`, `test_fleet.py`, `devices_evdhw_ui_test.js`, `fleet_ui_test.js`.
+
+## Wcześniej w tym wydaniu (0.9.5.7)
 
 ## Podsumowania w formie tabeli
 - **Powiadomienia dzienne, tygodniowe i miesięczne to teraz zwarta tabela** zamiast kilku długich zdań: dzień „dziś / wczoraj”, tydzień jako siedem wierszy z najlepszym (▲) i najsłabszym (▼) dniem oraz wierszami „Razem” i „Poprz. tydz.”, miesiąc obok poprzedniego. Brak danych to „—”. Dodatkowe zdania (oszczędność, plan, zabezpieczenia) zostają pod tabelą. Nowy moduł `summtable.py`. Tabela to zwykły tekst wyrównany spacjami i „│”; na telefonie z czcionką o zmiennej szerokości kolumny mogą się lekko rozjechać.

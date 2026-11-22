@@ -21,12 +21,17 @@ from typing import Any
 
 from homeassistant.util import dt as dt_util
 
+from . import evdhw
 from .helpers import number_value, state_float, switch_on
 
 _LOGGER = logging.getLogger(__name__)
 
 MIN_SWITCH_S = 600          # najkrótszy odstęp między zmianami stanu jednego urządzenia
 HOLD_S = 300                # warunek musi trwać tyle, zanim zmienimy stan
+HARD_OFF = ("dzienny limit", "warunek", "temperatura", "osiągnięto", "brak odczytu", "cel ", "auto naładowane", "limit przyłącza")   # wyłączamy od razu, bez czekania na odstęp
+SESSION_IDLE_S = 600        # sesja EV bez warunku „podłączone” kończy się po tylu sekundach bez poboru
+SESSION_MIN_KWH = 0.2       # krótsze sesje nie trafiają do dziennika ani powiadomień
+AMPS_MIN_S = 30             # najrzadziej co tyle sekund zmieniamy prąd ładowarki
 MANUAL_GRACE_S = 90         # tyle czekamy na odświeżenie stanu przełącznika po naszej komendzie
 POWER_UNITS = {"w": 1.0, "kw": 1000.0}
 
@@ -152,7 +157,10 @@ class DeviceController:
                             "cond": ({"eid": d["ctl_cond_eid"], "ok": cond_ok, "why": cond_why} if d.get("ctl_cond_eid") else None),
                             "owned": rec.get("cmd") == "on", "manual": bool(rec.get("manual")),
                             "reason": rec.get("reason"), "on_h": round(float(rec.get("on_s") or 0.0) / 3600.0, 2),
-                            "window": rec.get("window"), "last": rec.get("last")}
+                            "window": rec.get("window"), "last": rec.get("last"),
+                            "sess": ({"kwh": round(float((rec.get("sess") or {}).get("kwh") or 0.0), 2), "cost": round(float((rec.get("sess") or {}).get("cost") or 0.0), 2)} if rec.get("sess") else None),
+                            "last_sess": rec.get("last_sess"), "amps": rec.get("amps"), "temp": rec.get("temp"), "dhw_target": rec.get("dhw_target"),
+                            "leg_week": rec.get("leg_week"), "need_h": rec.get("need_h")}
         return {"enabled": self.enabled(), "devices": out}
 
     # ------------------------------------------------------------ akcje
@@ -317,7 +325,11 @@ class DeviceController:
             if rec.get("shed"):
                 rec["reason"] = "oszczędzanie energii (niski SOC)"
                 continue
+            if d.get("category") == "ev":
+                await self._ev_session(d, rec, now)
+                self._ev_need(d, rec)
             want, why = self._decide(d, rec, now, is_on, owned, grid, soc, plan_curve)
+            want, why = self._kind_gates(d, rec, now, want, why, is_on, owned, grid, soc, plan_curve)
             limit_h = float(d.get("ctl_max_h") or 0.0)
             if want and limit_h > 0 and float(rec.get("on_s") or 0.0) >= limit_h * 3600.0:
                 want, why = False, f"dzienny limit pracy {limit_h:g} h"
@@ -331,8 +343,137 @@ class DeviceController:
             can_switch = ts - float(rec.get("ts") or 0.0) >= MIN_SWITCH_S
             if want and not is_on and can_switch:
                 await self._switch(d, rec, True, why, now)
-            elif not want and is_on and owned and (can_switch or outage or why.startswith(("dzienny limit", "warunek"))):
+            elif not want and is_on and owned and (can_switch or outage or why.startswith(HARD_OFF)):
                 await self._switch(d, rec, False, why, now)
+            if d.get("category") == "ev" and d.get("ev_current_eid"):
+                await self._ev_regulate(d, rec, now, want, is_on, owned, grid)
+            if d.get("dhw_setpoint_eid"):
+                await self._dhw_setpoint(d, rec, now, want and is_on)
+
+    # ------------------------------------------------------------ EV: sesja, cel, prąd
+    def _ev_need(self, d: dict, rec: dict) -> None:
+        """Ile godzin ładowania brakuje do celu (dla trybu najtańszych godzin); bez celu zostają godziny z ustawień."""
+        car = state_float(self.hass, d["ev_soc_eid"]) if d.get("ev_soc_eid") else None
+        h = evdhw.ev_hours_needed(d.get("ev_target_kwh"), (rec.get("sess") or {}).get("kwh"), car, d.get("ev_target_pct"), d.get("ev_car_kwh"), d.get("ctl_power_w"))
+        if h is None or h <= 0:
+            rec.pop("need_h", None)
+        else:
+            rec["need_h"] = min(12.0, max(0.5, h))
+
+    async def _ev_session(self, d: dict, rec: dict, now: datetime) -> None:
+        """Sesja ładowania: energia i szacowany koszt (cena zakupu × energia); koniec, gdy auto odłączone albo długo bez poboru."""
+        ts = now.timestamp()
+        has_cond = bool(d.get("ctl_cond_eid"))
+        p = self._power_w(d)
+        active = self.cond_state(d)[0] if has_cond else (p is not None and p > 50.0)
+        sess = rec.get("sess")
+        if active and not sess:
+            rec["sess"] = sess = {"t0": ts, "kwh": 0.0, "cost": 0.0, "last": ts}
+        if not sess:
+            return
+        dt = ts - float(sess.get("last") or ts)
+        sess["last"] = ts
+        if p is not None and 0 < dt <= 180:
+            e = max(0.0, p) * dt / 3_600_000.0
+            sess["kwh"] = float(sess.get("kwh") or 0.0) + e
+            price = self.rt.buy_price_signed()
+            if price is not None:
+                sess["cost"] = float(sess.get("cost") or 0.0) + e * price
+        if active:
+            sess.pop("idle", None)
+            return
+        end = has_cond
+        if not has_cond:
+            idle = sess.setdefault("idle", ts)
+            end = ts - float(idle) >= SESSION_IDLE_S
+        if not end:
+            return
+        rec.pop("sess", None)
+        kwh, cost = float(sess.get("kwh") or 0.0), float(sess.get("cost") or 0.0)
+        if kwh < SESSION_MIN_KWH:
+            return
+        rec["last_sess"] = {"end": dt_util.as_local(now).isoformat(timespec="minutes"), "kwh": round(kwh, 2), "cost": round(cost, 2),
+                            "min": round((ts - float(sess.get("t0") or ts)) / 60.0)}
+        self.rt.log.add("devices", f"{d['name']}: sesja ładowania zakończona — {kwh:.1f} kWh, ok. {cost:.2f} zł", "ok")
+        self.rt._save_state()  # noqa: SLF001
+        await self.rt.monitor.notifier.send("ev_session", "🚗 EMS: koniec sesji ładowania",
+                                            f"{d['name']}: {kwh:.1f} kWh w ok. {rec['last_sess']['min']} min, szacunkowo {cost:.2f} zł "
+                                            "(cena zakupu × energia, bez uwzględnienia własnego PV).", key=d["id"], level="info")
+
+    async def _set_number(self, eid: str, value: float, rec: dict, key: str, now: datetime, min_s: float) -> bool:
+        ts = now.timestamp()
+        if rec.get(key) == value or ts - float(rec.get(key + "_ts") or 0.0) < min_s:
+            return False
+        try:
+            await self.hass.services.async_call("number", "set_value", {"entity_id": eid, "value": value}, blocking=False)
+        except Exception as err:  # noqa: BLE001
+            self.rt.log.add("devices", f"nie udało się ustawić {eid} na {value:g} ({err})", "error")
+            return False
+        rec[key], rec[key + "_ts"] = value, ts
+        return True
+
+    async def _ev_regulate(self, d: dict, rec: dict, now: datetime, want: bool, is_on: bool, owned: bool, grid: float | None) -> None:
+        """Prąd ładowarki: za nadwyżką PV (tryb pv) albo maksymalny (pozostałe), zawsze pod limitem przyłącza."""
+        if not (want and (is_on or rec.get("cmd") == "on")):
+            return
+        volts, ph, lo, hi = d["ev_volts"], d["ev_phases"], d["ev_min_a"], d["ev_max_a"]
+        p_own = self._power_w(d)
+        if d["ctl_mode"] == "pv":
+            if grid is None:
+                return
+            own = (p_own if p_own is not None else float(d["ctl_power_w"])) if (is_on and owned) else 0.0
+            amps = evdhw.amps_for_power(own - grid, volts, ph, lo, hi) or int(lo)        # pauzę przy braku nadwyżki robi tryb pv (z histerezą)
+        else:
+            amps = int(hi)
+        if d.get("ev_grid_limit_w") and grid is not None:
+            lim = evdhw.limit_amps(amps, max(0.0, grid), d["ev_grid_limit_w"], p_own or 0.0, volts, ph, lo)
+            if lim <= 0 and amps > 0:
+                rec["reason"] = f"limit przyłącza {d['ev_grid_limit_w']:.0f} W — za mało miejsca na ładowanie"
+                if is_on and owned:
+                    await self._switch(d, rec, False, rec["reason"], now)
+                return
+            amps = lim
+        await self._set_number(d["ev_current_eid"], float(amps), rec, "amps", now, AMPS_MIN_S)
+
+    # ------------------------------------------------------------ bramki rodzaju urządzenia (EV, CWU)
+    def _kind_gates(self, d: dict, rec: dict, now: datetime, want: bool, why: str, is_on: bool, owned: bool,
+                    grid: float | None, soc: float | None, curve: dict | None) -> tuple[bool, str]:
+        loc = dt_util.as_local(now)
+        if d.get("category") == "ev":
+            car = state_float(self.hass, d["ev_soc_eid"]) if d.get("ev_soc_eid") else None
+            done, dwhy = evdhw.ev_goal((rec.get("sess") or {}).get("kwh"), d.get("ev_target_kwh"), car, d.get("ev_target_pct"))
+            if done:
+                return False, str(dwhy)
+            floor = float(d.get("ev_soc_floor") or 0.0)
+            if want and floor > 0 and d["ctl_mode"] in ("now", "cheap") and soc is not None and soc < floor:
+                return False, f"bateria domu {soc:.0f}% poniżej {floor:.0f}%"
+            return want, why
+        if not any(d.get(k) for k in ("dhw_temp_eid", "dhw_comfort_c", "dhw_max_c", "dhw_boost_c", "dhw_leg")):
+            return want, why
+        temp = state_float(self.hass, d["dhw_temp_eid"]) if d.get("dhw_temp_eid") else None
+        leg_due = bool(d.get("dhw_leg")) and evdhw.legionella_due(loc, d.get("dhw_leg_dow"), rec.get("leg_week"))
+        g = evdhw.dhw_decide(temp, loc, d, leg_due)
+        rec["temp"] = evdhw.sane_temp(temp)
+        rec["dhw_target"] = g.get("target")
+        if g.get("leg_done"):
+            rec["leg_week"] = evdhw.week_key(loc)
+            self.rt.log.add("devices", f"{d['name']}: antylegionella wykonana ({rec['temp']} °C)", "ok")
+            self.rt._save_state()  # noqa: SLF001
+        if g["block"] and not g["force"]:
+            return False, str(g["reason"])
+        if g["force"]:
+            return True, str(g["reason"])
+        if g.get("leg"):
+            w2, _y2 = self._decide(dict(d, ctl_mode="cheap"), rec, now, is_on, owned, grid, soc, curve)
+            if w2 or loc.hour >= 21:
+                return True, f"{g['reason']}" + (" (najtańsze godziny)" if w2 else " (po 21:00, domykam)")
+        return want, why
+
+    async def _dhw_setpoint(self, d: dict, rec: dict, now: datetime, boosting: bool) -> None:
+        """Pompa ciepła: temperatura zadana wysoka podczas grzania „na zapas”, niska poza nim."""
+        val = float(d["dhw_sp_hi"] if boosting else d["dhw_sp_lo"])
+        if val > 0:
+            await self._set_number(d["dhw_setpoint_eid"], val, rec, "sp", now, 300.0)
 
     def _held(self, rec: dict, key: str, cond: bool, ts: float) -> bool:
         """True, gdy warunek `key` trwa nieprzerwanie co najmniej HOLD_S."""
@@ -366,6 +507,8 @@ class DeviceController:
                     return False, ("brak ceny zakupu" if price is None else f"czeka na cenę zakupu < {thr:+.2f} zł/kWh (jest {price:+.2f})")
         if d["ctl_mode"] == "neg":
             return False, "czeka na ujemną cenę zakupu"
+        if d["ctl_mode"] == "now":
+            return True, "natychmiast"
         if d["ctl_mode"] == "pv":
             if grid is None:
                 return (is_on and owned), "brak odczytu mocy sieci"
@@ -402,7 +545,7 @@ class DeviceController:
         else:
             win = None
         if not in_win:                                       # okno wybieramy od nowa tylko poza oknem (nie przesuwamy w trakcie)
-            bw = best_window(curve, float(d.get("ctl_hours") or 2.0), need / 1000.0, deadline)
+            bw = best_window(curve, float(rec.get("need_h") or d.get("ctl_hours") or 2.0), need / 1000.0, deadline)
             if bw is not None:
                 win = [bw[0].isoformat(), bw[1].isoformat()]
                 rec["window"] = win
@@ -448,7 +591,7 @@ class DeviceController:
             slots, period_end = [], None
             rec["slots"], rec["slots_end"] = None, None
         if not slots:
-            hours = float(d.get("ctl_hours") or 2.0)
+            hours = float(rec.get("need_h") or d.get("ctl_hours") or 2.0)
             got = cheapest_slots(curve, hours, need / 1000.0, deadline, not_before=now)
             if got is None:
                 return False, ("brak godzin przed terminem" if (deadline is not None and curve) else "brak planu z cenami")

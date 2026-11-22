@@ -131,7 +131,7 @@ const ST = {
   ok(/Sterowanie urządzeniami wyłączone/.test(await sr(e, '#devRoot')), 'główny przełącznik widoczny (wyłączony)');
   await e.q(() => __el.shadowRoot.querySelector('[data-dv="edit"]').click()); await sleep(200);
   ok(await e.q(() => Array.from(__el.shadowRoot.querySelectorAll('#dvSw option')).map((o) => o.value).join(',') === 'input_boolean.pompa,switch.bojler'), 'podpowiedzi przełączników (bez switch.bms_*)');
-  ok(await e.q(() => Array.from(__el.shadowRoot.querySelectorAll('[data-dvf="ctl_mode"] option')).map((o) => o.value).join(',') === 'off,pv,cheap,neg'), 'lista trybów: nie steruj, PV, najtańsze, ujemna cena');
+  ok(await e.q(() => Array.from(__el.shadowRoot.querySelectorAll('[data-dvf="ctl_mode"] option')).map((o) => o.value).join(',') === 'off,pv,cheap,neg,now'), 'lista trybów: nie steruj, PV, najtańsze, ujemna cena, natychmiast');
   await e.q(() => { const R = __el.shadowRoot; const m = R.querySelector('[data-dvf="ctl_mode"]'); m.value = 'pv'; m.dispatchEvent(new Event('change', { bubbles: true })); });
   await e.q(() => __el.shadowRoot.querySelector('[data-dv="save"]').click()); await sleep(200);
   ok(/wskaż jego przełącznik/.test(await sr(e, '#dvMsg')), 'tryb bez przełącznika → komunikat');

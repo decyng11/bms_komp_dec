@@ -43,7 +43,7 @@ _SERVICES = (
     "notify_settings_get", "notify_settings_set", "notify_test", "inbox_action", "devices_get", "devices_set", "devices_discover", "insights_get", "self_test", "diagnostic_report",
     "override_set", "override_clear", "analysis_get", "analysis_set", "control_test", "settings_log_get",
     "profiles_get", "profile_apply", "profile_revert", "profile_save", "profile_delete", "profile_schedule", "profile_schedule_clear", "pv_caution_apply", "pv_caution_revert", "pv_caution_dismiss",
-    "grid_outage_test", "expand_estimate",
+    "grid_outage_test", "expand_estimate", "fleet_get", "fleet_set",
 )
 _SUGGEST_HOUR = 16   # RCE na jutro jest publikowane po południu — wcześniej propozycja bazowała na starych danych
 
@@ -330,6 +330,17 @@ def _register_services(hass: HomeAssistant) -> None:
         rt = _need_runtime(hass)
         year, month = _year_month(call.data.get("year"), call.data.get("month"))
         return rt.monthly_report(year, month)
+
+    async def handle_fleet_get(call):
+        rt = _need_runtime(hass)
+        return rt.fleet_get()
+
+    async def handle_fleet_set(call):
+        await _require_admin(hass, call)
+        rt = _need_runtime(hass)
+        cfg = rt.fleet_set(call.data.get("fleet"))
+        rt.log.add("system", f"Zapisano konfigurację floty (klastry: {len(cfg['clusters'])}, falowniki: {len(cfg['inverters'])}, baterie: {len(cfg['batteries'])})", "ok")
+        return rt.fleet_get()
 
     async def handle_outage_test(call):
         rt = _need_runtime(hass)
@@ -641,6 +652,8 @@ def _register_services(hass: HomeAssistant) -> None:
         ("health_check", handle_health, SupportsResponse.ONLY),
         ("monthly_report", handle_report, SupportsResponse.ONLY),
         ("grid_outage_test", handle_outage_test, SupportsResponse.ONLY),
+        ("fleet_get", handle_fleet_get, SupportsResponse.ONLY),
+        ("fleet_set", handle_fleet_set, SupportsResponse.OPTIONAL),
         ("expand_estimate", handle_expand, SupportsResponse.ONLY),
         ("get_plan", handle_plan, SupportsResponse.ONLY),
         ("diag_store_get_all", handle_diag_get_all, SupportsResponse.ONLY),

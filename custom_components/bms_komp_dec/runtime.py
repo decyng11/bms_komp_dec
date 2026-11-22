@@ -44,6 +44,7 @@ from . import deeds as deeds_mod
 from . import outage as outage_mod
 from . import adviser as adviser_mod
 from . import expand as expand_mod
+from . import fleet as fleet_mod
 
 ISSUES_EVERY_S = 55          # lista „co dziś nie działa” liczy się co tyle sekund
 from .holidays_pl import holiday_name, is_holiday
@@ -195,6 +196,7 @@ class BmsRuntime:
             "analysis_cfg": {},                # ceny alternatyw i nakłady do analiz (analysis.py)
             "control_test": None,              # wynik ostatniego testu sterowania falownikiem
             "deeds": {},                       # „co EMS zrobił za Ciebie”: liczniki miesięczne (deeds.py)
+            "fleet": {},                       # flota: klastry, falowniki, baterie (fleet.py), tylko odczyt
         }
         self._sign = SignLearner()
         self.log.on_entry = self._count_deed
@@ -2148,6 +2150,32 @@ class BmsRuntime:
         except Exception:  # noqa: BLE001
             pass
         return adviser_mod.advise(facts)
+
+    def fleet_set(self, raw: Any) -> dict[str, Any]:
+        cfg = fleet_mod.sanitize(raw)
+        self.state["fleet"] = cfg
+        self._save_state()
+        return cfg
+
+    def fleet_get(self) -> dict[str, Any]:
+        """Konfiguracja floty i bieżące sumy/alarmy z odczytów encji (moc w kW, temperatura w °C); nic nie zapisuje do urządzeń."""
+        cfg = fleet_mod.sanitize(self.state.get("fleet"))
+        vals: dict[str, Any] = {}
+        for it in cfg["inverters"] + cfg["batteries"]:
+            for k, eid in it.items():
+                if not k.endswith("_eid") or not eid or eid in vals:
+                    continue
+                st = self.hass.states.get(eid)
+                if st is None:
+                    vals[eid] = {"v": None, "s": None}
+                    continue
+                v = state_float(self.hass, eid)
+                unit = str((st.attributes or {}).get("unit_of_measurement") or "").strip().lower()
+                if v is not None and k in ("pv_eid", "power_eid"):
+                    v = v / 1000.0 if unit == "w" else (v * 1000.0 if unit == "mw" else v)
+                vals[eid] = {"v": v, "s": st.state}
+        res = fleet_mod.evaluate(cfg, vals)
+        return {"config": cfg, **res, "limits": {"inverters": fleet_mod.MAX_INVERTERS, "batteries": fleet_mod.MAX_BATTERIES, "clusters": fleet_mod.MAX_CLUSTERS}}
 
     def price_views(self) -> dict[str, Any]:
         """Kalendarz drogich dni (30 dób, średnia cena zakupu) i mapa cieplna cen (14 dób × 24 h) z zapisanych cen; brak cen → puste."""

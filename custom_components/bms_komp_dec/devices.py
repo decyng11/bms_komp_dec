@@ -31,6 +31,7 @@ KEEP_DAILY_DAYS = 400
 KEEP_CYCLES = 300
 MAX_STEP_S = 120.0                 # dłuższa przerwa w odczytach (restart) nie jest całkowana
 MAX_KWH_STEP = 20.0                # skok licznika większy niż 20 kWh w jednym kroku = błąd odczytu
+EV_SHARE = 0.03                    # próg „dużego” urządzenia dla ładowarki EV
 BIG_SHARE = 0.15                   # „duże” urządzenie: co najmniej 15% zużycia domu (30 dni)
 SPLIT_MIN_DAYS = 14
 POWER_WINDOW_S = 300.0             # okno do szacowania mocy z licznika kWh                # tyle dni danych urządzeń, zanim prognoza z podziałem może zastąpić zwykłą
@@ -92,7 +93,9 @@ _EID_RE = re.compile(r"^sensor\.[a-z0-9_]+$")
 _SWITCH_RE = re.compile(r"^(switch|input_boolean)\.[a-z0-9_]+$")
 _COND_RE = re.compile(r"^[a-z_]+\.[a-z0-9_]+$")               # encja warunku: dowolna domena, tylko do odczytu stanu
 COND_MAX_STATES = 6
-CTL_MODES = ("off", "pv", "cheap", "neg")
+CTL_MODES = ("off", "pv", "cheap", "neg", "now")
+_NUM_RE = re.compile(r"^number\.[a-z0-9_]+$")
+_SENS_RE = re.compile(r"^(sensor|number)\.[a-z0-9_]+$")
 _POWER_UNITS = {"w": 1.0, "kw": 1000.0, "mw": 1_000_000.0}
 _ENERGY_UNITS = {"wh": 0.001, "kwh": 1.0, "mwh": 1000.0}
 
@@ -174,6 +177,39 @@ def sanitize_device(raw: Any) -> dict[str, Any] | None:
         "ctl_ready_h": int(_clamp(raw.get("ctl_ready_h"), 0.0, 23.0, 0.0)),
         # warunek uruchomienia: EMS włącza urządzenie tylko, gdy encja ma jeden z dozwolonych stanów (np. auto podłączone = on)
         **_sanitize_cond(raw, bool(_SWITCH_RE.match(sw))),
+        **_sanitize_kind(raw, bool(_SWITCH_RE.match(sw))),
+    }
+
+
+def _sanitize_kind(raw: dict[str, Any], has_switch: bool) -> dict[str, Any]:
+    """Pola ładowarki EV (ev_*) i CWU (dhw_*). Bez przełącznika wszystko wyłączone; liczby zawsze w bezpiecznych granicach."""
+    def eid(key: str, rx: re.Pattern) -> str:
+        v = str(raw.get(key) or "").strip().lower()
+        return v if has_switch and rx.match(v) else ""
+
+    def flag(key: str) -> bool:
+        v = raw.get(key)
+        return bool(v) if has_switch and isinstance(v, bool) else False
+
+    min_a = _clamp(raw.get("ev_min_a"), 1.0, 32.0, 6.0)
+    max_a = max(min_a, _clamp(raw.get("ev_max_a"), 1.0, 80.0, 16.0))
+    cmax = _clamp(raw.get("dhw_max_c"), 0.0, 95.0, 0.0)
+    boost = _clamp(raw.get("dhw_boost_c"), 0.0, 90.0, 0.0)
+    leg_c = _clamp(raw.get("dhw_leg_c"), 50.0, 90.0, 60.0)
+    if cmax > 0:                                    # limit bezpieczeństwa jest nadrzędny wobec zadanej i antylegionelli
+        boost = min(boost, cmax)
+        leg_c = min(leg_c, cmax)
+    return {
+        "ev_target_kwh": _clamp(raw.get("ev_target_kwh"), 0.0, 300.0, 0.0), "ev_target_pct": _clamp(raw.get("ev_target_pct"), 0.0, 100.0, 0.0),
+        "ev_car_kwh": _clamp(raw.get("ev_car_kwh"), 0.0, 250.0, 0.0), "ev_soc_eid": eid("ev_soc_eid", _SENS_RE),
+        "ev_current_eid": eid("ev_current_eid", _NUM_RE), "ev_min_a": min_a, "ev_max_a": max_a,
+        "ev_phases": 3 if _f(raw.get("ev_phases")) == 3 else 1, "ev_volts": _clamp(raw.get("ev_volts"), 100.0, 400.0, 230.0),
+        "ev_grid_limit_w": _clamp(raw.get("ev_grid_limit_w"), 0.0, 100000.0, 0.0), "ev_soc_floor": _clamp(raw.get("ev_soc_floor"), 0.0, 100.0, 0.0),
+        "dhw_temp_eid": eid("dhw_temp_eid", _SENS_RE), "dhw_comfort_c": _clamp(raw.get("dhw_comfort_c"), 0.0, 90.0, 0.0),
+        "dhw_comfort_h": int(_clamp(raw.get("dhw_comfort_h"), 0.0, 23.0, 6.0)), "dhw_boost_c": boost, "dhw_max_c": cmax,
+        "dhw_leg": flag("dhw_leg"), "dhw_leg_c": leg_c, "dhw_leg_dow": int(_clamp(raw.get("dhw_leg_dow"), 0.0, 6.0, 6.0)),
+        "dhw_setpoint_eid": eid("dhw_setpoint_eid", _NUM_RE), "dhw_sp_hi": _clamp(raw.get("dhw_sp_hi"), 0.0, 90.0, 55.0),
+        "dhw_sp_lo": _clamp(raw.get("dhw_sp_lo"), 0.0, 90.0, 45.0),
     }
 
 
@@ -621,7 +657,8 @@ class DeviceManager:
         out = []
         for d in self.devices:
             rec = self.data.get(d["id"]) or _blank()
-            if sum(rec["daily"].get(k, 0.0) for k in d30) / house >= BIG_SHARE:
+            # ładowarka EV liczy się osobno już od 3% zużycia domu: jej sesje są nieregularne i psują profil reszty domu
+            if sum(rec["daily"].get(k, 0.0) for k in d30) / house >= (EV_SHARE if d.get("category") == "ev" else BIG_SHARE):
                 out.append(d)
         return out
 

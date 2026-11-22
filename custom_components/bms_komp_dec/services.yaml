@@ -482,3 +482,18 @@ expand_estimate:
           min: 14
           max: 365
           mode: box
+
+fleet_get:
+  name: Flota — odczyt
+  description: Zwraca konfigurację floty (klastry, falowniki, baterie) oraz bieżące sumy, SOC ważony pojemnością i alarmy. Tylko odczyt.
+
+fleet_set:
+  name: Flota — zapis konfiguracji
+  description: Zapisuje listę klastrów, falowników (do 10) i baterii (do 30). Tylko administrator. Nie zmienia ustawień falowników, służy do podglądu.
+  fields:
+    fleet:
+      name: Konfiguracja
+      description: Obiekt z listami clusters, inverters, batteries.
+      required: true
+      selector:
+        object:

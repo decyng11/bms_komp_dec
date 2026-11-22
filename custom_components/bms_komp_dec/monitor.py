@@ -189,7 +189,7 @@ class Monitor:
                           ("ładowanie z sieci stoi", self._grid_charge_stalled), 
                           ("pobór z sieci", self._high_import), ("ceny jutro", self._prices_tomorrow),
                           ("źródła danych", self._sources), ("zużycie", self._load_above),
-                          ("nocny pobór", self._night_draw), ("PV jutro", self._weak_pv), ("plan na jutro", self._plan_tomorrow), ("ostrożność PV", self._pv_caution), ("cel miesięczny", self._bill_goal), ("słoneczny dzień", self._sunny_day), ("plan a próg", self._plan_floor), ("trafność prognoz", self._accuracy), ("zdrowie baterii", self._health),
+                          ("nocny pobór", self._night_draw), ("PV jutro", self._weak_pv), ("plan na jutro", self._plan_tomorrow), ("ostrożność PV", self._pv_caution), ("cel miesięczny", self._bill_goal), ("słoneczny dzień", self._sunny_day), ("flota", self._fleet), ("plan a próg", self._plan_floor), ("trafność prognoz", self._accuracy), ("zdrowie baterii", self._health),
                           ("podsumowania", self._summaries), ("autoodczyt", self._inbox_auto_read)):
             try:
                 await chk(now)
@@ -741,6 +741,24 @@ class Monitor:
         if not self._once("bill_goal", f"{loc:%Y-%m}:{g['status']}"):
             return
         await self.notifier.send("bill_goal", "💸 EMS: cel miesięczny", g["text"] + " Szacunek z bilansu z siecią, bez opłat stałych.", level="info")
+
+    async def _fleet(self, now: datetime) -> None:
+        """Flota: alarmy z fleet.evaluate; jedno powiadomienie na dobę dla danego zestawu alarmów."""
+        if not (self.rt.state.get("fleet") or {}).get("inverters") and not (self.rt.state.get("fleet") or {}).get("batteries"):
+            return
+        if not ncfg.kind(self.notifier.cfg(), "fleet_alert").get("on"):
+            return
+        try:
+            issues = self.rt.fleet_get().get("issues") or []
+        except Exception:  # noqa: BLE001
+            return
+        if not issues:
+            return
+        loc = dt_util.as_local(now)
+        token = f"{loc.date().isoformat()}:" + ",".join(sorted(i["id"] for i in issues))
+        if not self._once("fleet", token):
+            return
+        await self.notifier.send("fleet_alert", "🏭 EMS: flota — alarm", "\n".join("• " + i["text"] for i in issues[:8]), level="warn")
 
     async def _sunny_day(self, now: datetime) -> None:
         """Wieczorem, po kilku pochmurnych dobach: jutro ma być słonecznie (sunny.py). Raz na dobę."""

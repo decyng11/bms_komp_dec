@@ -69,6 +69,8 @@ CATALOG: dict[str, tuple] = {
     "storm": ("Działanie", "Tryb burzowy", "Włączenie i automatyczne wyłączenie trybu burzowego.", True, True, 5, False, None),
     # --- urządzenia (zakładka „Urządzenia”; przy każdym urządzeniu można też wyłączyć jego powiadomienia)
     "device_cycle": ("Urządzenia", "Koniec cyklu urządzenia", "Pralka, zmywarka, suszarka… skończyła — czas, kWh i koszt cyklu.", True, True, 0, False, None),
+    "fleet_alert": ("Falownik", "Flota: alarm", "Falownik nie odpowiada, rozjazd trybu master/slave, bateria odstająca od reszty klastra, wysoka temperatura. Raz na dobę dla każdego zestawu alarmów.", True, True, 0, True, None),
+    "ev_session": ("Urządzenia", "Koniec sesji ładowania EV", "Po odłączeniu auta albo zakończeniu ładowania: ile kWh poszło i ile to szacunkowo kosztowało. Krótsze niż 0,2 kWh pomijamy.", True, False, 0, True, None),
     "device_anomaly": ("Urządzenia", "Nietypowa praca urządzenia", "Ciągła praca dłużej niż limit urządzenia albo zużycie dnia ponad 2× typowe.", True, True, 360, False, None),
     "device_shed": ("Urządzenia", "Oszczędzanie energii: urządzenia wyłączone", "Przy SOC poniżej progu EMS wyłączył sterowalne urządzenia, a po odbiciu SOC włączył je z powrotem.", True, True, 180, False, None),
     "device_hint": ("Urządzenia", "Uruchom teraz (urządzenia elastyczne)", "Nadwyżka PV albo najtańsza godzina — dobry moment na pralkę, bojler, auto… (raz na dobę na urządzenie).", True, True, 0, False, None),
@@ -93,7 +95,7 @@ PRIORITY: dict[str, int] = {
     "rce_missing": 2, "data_repair": 2, "buy_prices_missing": 2, "pv_forecast_missing": 2, "plan_error": 2, "auto_apply": 2, "storm": 2, "battery_health": 2,
     "device_anomaly": 2, "device_shed": 2, "profile_plan": 2, "night_draw": 2, "weak_pv": 2, "rce_negative": 2, "summary_daily": 2, "summary_weekly": 2, "summary_monthly": 2,
     "bill_goal": 2, "sunny_day": 3, "rce_high": 3, "plan_tomorrow": 3, "pv_caution": 3, "load_above": 3, "high_import": 3, "battery_full": 3, "proposal": 3, "schedule_skipped": 3, "sale": 3, "grid_charge": 3,
-    "price_reaction": 3, "device_cycle": 3, "device_hint": 3, "device_plan": 3, "devices_unknown": 3,
+    "price_reaction": 3, "device_cycle": 3, "ev_session": 3, "fleet_alert": 2, "device_hint": 3, "device_plan": 3, "devices_unknown": 3,
 }
 PRIO_LABELS = {1: "krytyczne", 2: "ważne", 3: "info"}
 PHONE_LEVELS = ("all", "important", "critical")           # wszystkie / ważne i krytyczne / tylko krytyczne
