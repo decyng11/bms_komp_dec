@@ -106,6 +106,16 @@ async def main():
     check("wyłączenie ochrony przywraca 60 A", reduced < 60 and rt7.calls[-1][2] == 60 and rt7.state.get("grid_limit") == {}, (reduced, rt7.calls))
     await lm7.tick(_Now(7200.0))
     check("po przywróceniu nic więcej nie jest zapisywane", len(rt7.calls) == 2)
+    # dryf napięcia baterii (sufit 8 kW → ok. 153 A) nie przestawia prądu co kilkanaście minut (martwa strefa)
+    ceil_a = 8000.0 / 52.1
+    flips = 0; cur = 153.0
+    for v in (52.1, 51.9, 52.3, 52.0, 51.8, 52.2, 52.1, 51.95):
+        want, why = GL.plan_decision(cur, 8000.0 / v, 150.0, None, 0.0, 0.0, v)
+        if abs(want - cur) >= 1.0:
+            flips += 1; cur = float(int(round(want)))
+    check("sufit mocy: wahania napięcia ±0,3 V nie zmieniają prądu (0 zmian)", flips == 0, flips)
+    w1, y1 = GL.plan_decision(100.0, 8000.0 / 52.1, 100.0, None, 0.0, 0.0, 52.1)
+    check("sufit mocy: duża różnica nadal koryguje prąd", y1 == "ceiling" and abs(w1 - ceil_a) < 1e-6, (w1, y1))
     # plan: sufit mocy obniża max_chg_kw
     from custom_components.bms_komp_dec import scheduler as SCH
     opt = SCH.ScheduleOptimizer.__new__(SCH.ScheduleOptimizer)

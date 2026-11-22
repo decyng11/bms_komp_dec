@@ -28,6 +28,8 @@ HEADROOM_KW = 0.5         # zapas pod limitem przy przywracaniu prądu
 OVER_MARGIN_KW = 0.3      # redukcja z naddatkiem, by nie trzeba było poprawiać co chwilę
 CHARGING_W = 200.0        # poniżej tej mocy ładowania redukcja prądu nic nie da
 NOTE_GAP_S = 3600.0
+CEIL_BAND_A = 2.0         # martwa strefa wokół sufitu: sufit w A = kW / napięcie baterii, a napięcie „pływa” o ułamki wolta,
+CEIL_BAND_FRAC = 0.025    # więc bez niej prąd skakał 153 ↔ 154 A co kilkanaście minut (większa z wartości: 2 A albo 2,5% sufitu)
 
 
 def grid_charge_current_eid(hass, cfg: dict[str, Any]) -> str | None:
@@ -60,8 +62,9 @@ def plan_decision(cur: float, ceiling: float | None, base: float, p_w: float | N
                   limit_kw: float, v: float) -> tuple[float, str]:
     """Czysta decyzja: (docelowy prąd w A, powód: 'ceiling'|'reduce'|'restore'|'hold'|'cannot')."""
     ceil_a = ceiling if ceiling else base
+    band = max(CEIL_BAND_A, CEIL_BAND_FRAC * ceil_a)
     if limit_kw <= 0 or p_w is None:
-        return (ceil_a, "ceiling") if abs(cur - ceil_a) >= 1.0 else (cur, "hold")
+        return (ceil_a, "ceiling") if abs(cur - ceil_a) >= band else (cur, "hold")
     over_w = p_w - limit_kw * 1000.0
     if over_w > 0:
         if charging_w < CHARGING_W:
@@ -69,10 +72,10 @@ def plan_decision(cur: float, ceiling: float | None, base: float, p_w: float | N
         want = max(MIN_A, cur - (over_w + OVER_MARGIN_KW * 1000.0) / v)
         want = min(want, ceil_a)
         return (want, "reduce") if cur - want >= 1.0 else (cur, "cannot" if cur <= MIN_A + 0.5 else "hold")
-    if -over_w > (HEADROOM_KW + 0.5) * 1000.0 and cur < ceil_a - 0.5:
+    if -over_w > (HEADROOM_KW + 0.5) * 1000.0 and cur < ceil_a - band:
         want = min(ceil_a, cur + (-over_w - HEADROOM_KW * 1000.0) / v)
         return (want, "restore") if want - cur >= 1.0 else (cur, "hold")
-    if cur > ceil_a + 0.5:
+    if cur > ceil_a + band:
         return ceil_a, "ceiling"
     return cur, "hold"
 

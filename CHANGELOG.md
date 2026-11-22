@@ -12,6 +12,9 @@
 - Panel „🏭 Flota” na karcie Urządzenia: kafelki sum, zwijane klastry, edytor (admin). Usługi `fleet_get` i `fleet_set`. **Niczego nie zapisuje do falowników** — sterowanie (etapy 2–3) dopiero po listach encji z prawdziwych instalacji.
 - Testy: `test_evdhw.py`, `test_devctl_evdhw.py`, `test_fleet.py`, `devices_evdhw_ui_test.js`, `fleet_ui_test.js`.
 
+## Ochrona przyłącza: koniec przeskoków prądu 153 ↔ 154 A
+- Sufit mocy ładowania z sieci (kW → A przez napięcie baterii) ma teraz martwą strefę (większa z wartości: 2 A albo 2,5% sufitu), więc wahania napięcia o ułamki wolta nie przestawiają prądu co kilkanaście minut. Duże odchylenia nadal są korygowane, a limit poboru z sieci działa jak wcześniej. Test w `test_gridlimit.py`.
+
 ## Zmiana wyglądu (bez nowej wersji)
 - **„Co dziś nie działa” przeniesione z paska na ekranie głównym do Ustawienia → Diagnostyka → Przegląd.** Lista otwiera się sama, gdy jest ostrzeżenie lub błąd; sama informacja (np. „naprawiono uszkodzone dane przy starcie”) jest zwinięta. Ostrzeżenia i błędy dalej zapalają ⚠ na zakładce Ustawienia. Test: `diag_issues_test.js`.
 
