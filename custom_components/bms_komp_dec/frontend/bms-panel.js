@@ -537,13 +537,6 @@
     .sb-item.warn { background:rgba(255,159,10,.14); color:var(--orange); }
     .sb-item.bad { background:rgba(255,69,58,.14); color:var(--red); }
     .sb-item b { font-weight:700; }
-    .sb-issues summary { cursor:pointer; list-style:none; }
-    .sb-issues summary::-webkit-details-marker { display:none; }
-    .sb-issues summary::after { content:' ▾'; opacity:.7; }
-    .sb-issues[open] summary::after { content:' ▴'; }
-    .sb-issues ul { margin:8px 0 2px; padding-left:18px; display:flex; flex-direction:column; gap:7px; }
-    .sb-issues li .sb-d { display:block; font-size:12px; opacity:.9; }
-    .sb-issues li .sb-f { display:block; font-size:12px; opacity:.8; font-style:italic; }
     .price-pill { background: var(--card); border-radius: 20px; padding: 6px 12px; font-size: 13px; box-shadow: var(--shadow, none); white-space:nowrap; }
     .price-pill b { font-size: 15px; }
     .price-pill.buy b { color: #ff6b6b; } .price-pill.sell b { color: #30d158; } .price-pill.sell.neg b { color:#ff453a; }
@@ -4406,17 +4399,7 @@
       if (!this._findEntity(ENTITY_FALLBACKS.soc)) items.push(['bad', '⚠ <b>Brak danych z falownika</b> — sprawdź połączenie (Ustawienia → Łączność).']);
       const gen = Date.parse(String(this._pvAttrs().generated_at || '')) / 1000;
       if (isFinite(gen) && gen > 0 && nowS - gen > 3600) items.push(['warn', `⚠ <b>Plan nieaktualny od ${Math.floor((nowS - gen) / 3600)} h</b> — EMS nie odświeżył planu; sprawdź zakładkę Ustawienia.`]);
-      // „Co dziś nie działa”: braki danych i usterki, które integracja zebrała w jedną listę (sensor monitor_status → issues)
-      const iss = (Array.isArray(a.issues) ? a.issues : []).filter((i) => i && i.title);
-      if (iss.length) {
-        const lv = (l) => (l === 'error' ? 'bad' : (l === 'warn' ? 'warn' : ''));
-        const worst = iss.some((i) => i.level === 'error') ? 'bad' : (iss.some((i) => i.level === 'warn') ? 'warn' : '');
-        const hm = (t) => { const d = new Date(Number(t) * 1000); return isFinite(d) && Number(t) > 0 ? d.toLocaleTimeString('pl-PL', { hour: '2-digit', minute: '2-digit' }) : ''; };
-        const titles = iss.slice(0, 2).map((i) => this._esc(i.title)).join(' · ') + (iss.length > 2 ? ` · +${iss.length - 2}` : '');
-        const rows = iss.map((i) => `<li class="${lv(i.level)}"><b>${this._esc(i.title)}</b>${hm(i.since) ? ` <span style="opacity:.75;">(od ${hm(i.since)})</span>` : ''}`
-          + (i.detail ? `<span class="sb-d">${this._esc(i.detail)}</span>` : '') + (i.fix ? `<span class="sb-f">${this._esc(i.fix)}</span>` : '') + '</li>').join('');
-        items.push([worst, `<details class="sb-issues" id="sbIssues"><summary>🩺 <b>Co dziś nie działa:</b> ${titles}</summary><ul>${rows}</ul></details>`]);
-      }
+      // Lista „Co dziś nie działa” (sensor monitor_status → issues) jest w Ustawienia → Diagnostyka → Przegląd.
       const key = JSON.stringify(items);
       if (key === this._sbKey) return;
       this._sbKey = key;

@@ -12,6 +12,9 @@
 - Panel „🏭 Flota” na karcie Urządzenia: kafelki sum, zwijane klastry, edytor (admin). Usługi `fleet_get` i `fleet_set`. **Niczego nie zapisuje do falowników** — sterowanie (etapy 2–3) dopiero po listach encji z prawdziwych instalacji.
 - Testy: `test_evdhw.py`, `test_devctl_evdhw.py`, `test_fleet.py`, `devices_evdhw_ui_test.js`, `fleet_ui_test.js`.
 
+## Zmiana wyglądu (bez nowej wersji)
+- **„Co dziś nie działa” przeniesione z paska na ekranie głównym do Ustawienia → Diagnostyka → Przegląd.** Lista otwiera się sama, gdy jest ostrzeżenie lub błąd; sama informacja (np. „naprawiono uszkodzone dane przy starcie”) jest zwinięta. Ostrzeżenia i błędy dalej zapalają ⚠ na zakładce Ustawienia. Test: `diag_issues_test.js`.
+
 ## Wcześniej w tym wydaniu (0.9.5.7)
 
 ## Podsumowania w formie tabeli

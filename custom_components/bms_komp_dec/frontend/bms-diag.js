@@ -344,7 +344,7 @@
       if (DG_ST.card && !DG_ST.ready && Date.now() - DG_ST.retryAt > 30000) { DG_ST.retryAt = Date.now(); dgStoreLoad(this); }
       if (DG_ST.ready && DG_ST.card && Object.keys(DG_ST.dirty).length && !DG_ST.timer) dgStoreSchedule(2000);
       const b = this._el('tabDiag');
-      if (b) { b.style.display = this._dgIsAdmin() ? '' : 'none'; const ms = this._hass.states[this._eid('sensor', 'monitor_status')]; const be = ms && ms.attributes && Array.isArray(ms.attributes.alarms) ? ms.attributes.alarms.length : 0; const bad = (DG_LS.get('bms_diag_alarms', []).length || be) ? ' ⚠' : ''; const want = 'Ustawienia' + bad; const lb = b.querySelector('.tl'); if (lb && lb.textContent !== want) lb.textContent = want; b.classList.toggle('warn', !!bad); }
+      if (b) { b.style.display = this._dgIsAdmin() ? '' : 'none'; const ms = this._hass.states[this._eid('sensor', 'monitor_status')]; const be = ms && ms.attributes && Array.isArray(ms.attributes.alarms) ? ms.attributes.alarms.length : 0; const bad = (DG_LS.get('bms_diag_alarms', []).length || be || (this._dgIssues().some((i) => i.level === 'error' || i.level === 'warn') ? 1 : 0)) ? ' ⚠' : ''; const want = 'Ustawienia' + bad; const lb = b.querySelector('.tl'); if (lb && lb.textContent !== want) lb.textContent = want; b.classList.toggle('warn', !!bad); }
       const s = this._dgS();
       const nw = Date.now(); if (nw - (s._wcAt || 0) > 5000) { s._wcAt = nw; try { this._dgWatchCheck(); } catch (e) { console.warn('EMS diag watch', e); } }
       if (s.until && !this._dgUnlocked() && this._activeTab === 'diag' && this._el('dgBody')) { s.until = 0; this._dgRender(); }
@@ -978,9 +978,22 @@
       const age = (x) => { const t = Date.parse(x.st.last_updated || ''); if (!t) return '—'; const d = Math.round((now - t) / 1000); return d < 90 ? d + ' s' : d < 5400 ? Math.round(d / 60) + ' min' : Math.round(d / 3600) + ' h'; };
       return `<table class="dg-tbl stack"><thead><tr><th>Odczyt</th><th class="num">Wartość</th><th class="num">Zmiana</th></tr></thead><tbody>${rows.map(x => `<tr><td>${dgEsc(x.name)}<div class="dg-muted dg-mono" style="font-size:10.5px">${dgEsc(x.eid)}</div></td><td class="num"><b>${dgEsc(this._dgFmt(x.st.state))}</b> ${dgEsc(x.unit)}</td><td class="num dg-muted">${age(x)}</td></tr>`).join('') || '<tr><td colspan="3" class="dg-muted">Brak odczytów pasujących do filtra.</td></tr>'}</tbody></table>${total > 300 ? `<div class="dg-muted">Pokazano 300 z ${total} — zawęź wyszukiwanie.</div>` : ''}`;
     },
+    // „Co dziś nie działa”: lista problemów zebrana przez integrację (sensor monitor_status → issues), pokazywana w Przeglądzie.
+    _dgIssues() {
+      const ma = ((this._hass && this._hass.states[this._eid('sensor', 'monitor_status')]) || {}).attributes || {};
+      return (Array.isArray(ma.issues) ? ma.issues : []).filter((i) => i && i.title);
+    },
+    _dgIssuesHtml() {
+      const iss = this._dgIssues(); if (!iss.length) return '';
+      const cls = (l) => (l === 'error' ? 'dg-bad' : (l === 'warn' ? 'dg-warn' : 'dg-muted'));
+      const hm = (t) => { const x = new Date(Number(t) * 1000); return isFinite(x) && Number(t) > 0 ? x.toLocaleTimeString('pl-PL', { hour: '2-digit', minute: '2-digit' }) : ''; };
+      const rows = iss.map((i) => `<div style="padding:7px 0;border-bottom:1px solid var(--line);font-size:12px;line-height:1.45;"><b class="${cls(i.level)}">${dgEsc(i.title)}</b>${hm(i.since) ? ` <span class="dg-muted">(od ${hm(i.since)})</span>` : ''}${i.detail ? `<div>${dgEsc(i.detail)}</div>` : ''}${i.fix ? `<div class="dg-muted" style="font-style:italic;">${dgEsc(i.fix)}</div>` : ''}</div>`).join('');
+      const open = iss.some((i) => i.level === 'error' || i.level === 'warn');
+      return `<details class="dg-card" id="dgIssues" ${open ? 'open' : ''}><summary style="cursor:pointer;font-weight:600;">🩺 Co dziś nie działa <span class="dg-muted" style="font-weight:400;">· ${iss.length}</span></summary>${rows}</details>`;
+    },
     _dgSec_overview() {
       const s = this._dgS();
-      return `<div class="dg-card"><h4>Stan falownika na żywo</h4><div class="sub">Prefiks encji: <b>${dgEsc(this._dgPrefix() || '—')}</b> · ${dgEsc(this._dgPrefixSource())} (zmiana: Zaawansowane)</div><div class="dg-tiles" id="dgLive">${this._dgLiveTiles()}</div></div>
+      return `${this._dgIssuesHtml()}<div class="dg-card"><h4>Stan falownika na żywo</h4><div class="sub">Prefiks encji: <b>${dgEsc(this._dgPrefix() || '—')}</b> · ${dgEsc(this._dgPrefixSource())} (zmiana: Zaawansowane)</div><div class="dg-tiles" id="dgLive">${this._dgLiveTiles()}</div></div>
         <div class="dg-card"><h4>Wszystkie odczyty</h4><input type="search" id="dgSenQ" placeholder="Szukaj odczytu…" value="${dgEsc(s.senQ)}" style="width:100%;margin-bottom:8px;" /><div id="dgSenList">${this._dgSensorTable()}</div></div>`;
     },
     _dgRefreshSensors() { const el = this._el('dgSenList'); if (el) el.innerHTML = this._dgSensorTable(); },
