@@ -74,12 +74,12 @@ const sleep = (ms) => new Promise(r => setTimeout(r, ms));
   wc = await e.q(() => window.__wsCalls);
   ok(wc.some(c => c[0] === 'override_clear' && c[1].id === 'o1'), 'nadpisania: usunięcie po id');
 
-  // ---- Zysk i log: symulacja (porównanie taryf usunięte z panelu)
+  // ---- Zysk i log: porównanie taryf (wróciło na prośbę użytkownika) i symulacja
   await e.q(() => __el.shadowRoot.querySelector('[data-tab="log"]').click());
   await e.page.waitForFunction(() => !!__el.shadowRoot.querySelector('#exSimBox table'), null, { timeout: 8000 });
   const an = await e.q(() => { const s = __el.shadowRoot; return { tar: !!s.querySelector('#exTarBox'), sim: s.querySelector('#exSimBox').textContent, simRows: s.querySelectorAll('#exSimBox tbody tr').length }; });
-  ok(an.tar === false, 'porównanie taryf nie jest już w panelu');
-  ok(an.simRows === 4 && /zwrot PV: 10,0 lat/.test(an.sim) && /ekstrapolacja/.test(an.sim), 'symulacja: 4 scenariusze, zwrot i ostrzeżenie o ekstrapolacji');
+  ok(an.tar === false && /Jedna stawka \(G11\)/.test(an.sim), 'porównanie taryf: tabela w polu Zysk i log (bez starej sekcji exTarBox)');
+  ok(an.simRows === 6 && /zwrot PV: 10,0 lat/.test(an.sim) && /ekstrapolacja/.test(an.sim), 'symulacja: 4 scenariusze, zwrot i ostrzeżenie o ekstrapolacji');
   await e.q(() => { const s = __el.shadowRoot; s.getElementById('pxIp').value = '25000'; s.getElementById('pxIb').value = '15000'; s.querySelector('[data-px-an="invest"]').click(); });
   await sleep(500);
   wc = await e.q(() => window.__wsCalls);

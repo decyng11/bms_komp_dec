@@ -112,6 +112,8 @@ async def main():
         check("noc: uzasadnienie mówi o najtańszych godzinach", "najtańsze godziny" in st["reason"], st["reason"])
         cur = res["curve"]
         t0 = datetime.fromisoformat(cur["start"])
+        h0_abs = t0.hour + (24 if t0.date() != d0 else 0)
+        check("noc: ceny na jutro znane → krzywa/tabela planu do końca jutra (dziś + jutro, > 30 h)", cur["hours"] == min(47, 48 - h0_abs) and (cur["hours"] > 30 or h0_abs >= 18), (cur["hours"], cur["start"]))
         idx = [i for i in range(cur["hours"]) if (t0 + timedelta(hours=i)).hour == end_peak - 24 and (t0 + timedelta(hours=i)).date() == d1]
         target = float(st["reason"].split("zostało ~")[1].split("%")[0])
         soc_at_peak = cur["soc"][idx[0] - 1] if idx else None

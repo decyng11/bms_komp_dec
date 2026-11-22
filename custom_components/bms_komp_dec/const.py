@@ -178,6 +178,7 @@ SWITCHES = [
     ("dzien_nd", "Harmonogram aktywny: niedziela", "mdi:calendar-today", True),
     # --- funkcje automatyczne (domyślnie wyłączone)
     ("negative_price_reaction", "Reakcja na niskie/ujemne ceny RCE", "mdi:cash-remove", False),
+    ("price_feed", "Własne ceny z PSE (RCE) → cena zakupu dopasowana do taryfy", "mdi:cloud-download", False),
     ("profit_check", "Sprawdzaj opłacalność sprzedaży", "mdi:calculator-variant", False),
     ("dynamic_reserve", "Dynamiczna rezerwa SOC", "mdi:battery-heart-variant", False),
     ("auto_apply", "Automatyczne stosowanie propozycji", "mdi:robot", False),
@@ -304,6 +305,7 @@ MODE_ZERO = "Zero Export To Load"
 # Sensory runtime (wartości liczone przez BmsRuntime): key, nazwa, jednostka, ikona
 RUNTIME_SENSORS = [
     ("decision_log", "EMS Dziennik decyzji", None, "mdi:clipboard-text-clock"),
+    ("buy_rce", "EMS Cena zakupu z RCE (dopasowana)", "PLN/kWh", "mdi:cash-clock"),
     ("profit_today", "EMS Bilans dziś", "PLN", "mdi:cash"),
     ("profit_month", "EMS Bilans miesiąc", "PLN", "mdi:cash-multiple"),
     ("profit_total", "EMS Bilans łącznie", "PLN", "mdi:cash-register"),

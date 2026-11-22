@@ -2514,12 +2514,24 @@
         header.textContent = `Ceny sprzedaży > Teraz: ${cur === null ? '--' : cur.toFixed(2)} PLN/kWh`;
         const bNote = (bT || bJ) && !bJ && typeof a.price_buy_tomorrow_note === 'string' ? a.price_buy_tomorrow_note : '';
         const bNoteWait = a.price_buy_tomorrow_state === 'waiting';
-        const key = JSON.stringify([sT, sJ, bT, bJ, bE, bEN, a.price_sell_source, a.price_buy_source, bNote, bNoteWait, new Date().getHours()]);
+        const feed = this._hass.states[this._eid('sensor', 'buy_rce')], fa = (feed && feed.attributes) || null;
+        const feedOn = !!(fa && fa.enabled);
+        const key = JSON.stringify([sT, sJ, bT, bJ, bE, bEN, a.price_sell_source, a.price_buy_source, bNote, bNoteWait, new Date().getHours(),
+          feedOn, fa && fa.fit, fa && fa.note, fa && fa.tomorrow_available, fa && fa.is_buy_source]);
         if (this._lastPriceTableKey === key) return;
         this._lastPriceTableKey = key;
         let html = this._priceTableHtml(sT, sJ, '', '');
         if (bT || bJ) html += this._priceTableHtml(bT, bJ || bE, 'Ceny zakupu (taryfa dynamiczna)', a.price_buy_source || a.price_buy_entity || '', true, !!bE);
         if (bEN) html += `<div class="price-note est" id="priceBuyEstNote">📈 ${this._esc(bEN)}</div>`;
+        if (feedOn) {
+          const f = fa.fit;
+          const txt = f
+            ? `Własne ceny z PSE (RCE): dopasowanie do Twojej taryfy ${this._esc(String(f.quality))} (średni błąd ${Number(f.rmse).toFixed(3)} zł/kWh, ${this._esc(String(f.days))} dób). `
+              + (fa.is_buy_source ? (fa.tomorrow_available ? 'Cena zakupu bierze się z tego sensora — jutro jest już znane.' : 'Cen na jutro PSE jeszcze nie opublikowało (zwykle po ~13:00).')
+                : 'Żeby planer ich używał, wskaż jako „encję ceny zakupu” sensor.bms_buy_rce (po kilku dobach zbierania możesz wyłączyć dotychczasowe źródło).')
+            : this._esc(String(fa.note || 'Własne ceny z PSE: czekam na dane.'));
+          html += `<div class="price-note" id="priceFeedNote">🌐 ${txt}</div>`;
+        }
         if (bNote) html += `<div class="price-note${bNoteWait ? ' wait' : ''}" id="priceBuyNote">${bNoteWait ? '⏳' : 'ℹ️'} <b>Jutro:</b> ${this._esc(bNote)}</div>`;
         container.innerHTML = html;
         return;
@@ -2973,6 +2985,7 @@
 
       const FEATURES = [
         ['negative_price_reaction', 'Reakcja na niskie/ujemne ceny RCE'],
+        ['price_feed', 'Własne ceny z PSE (RCE) → cena zakupu dopasowana do taryfy'],
         ['profit_check', 'Sprawdzaj opłacalność sprzedaży'],
         ['dynamic_reserve', 'Dynamiczna rezerwa SOC'],
         ['auto_apply', 'Automatycznie stosuj propozycje'],

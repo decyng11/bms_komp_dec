@@ -1150,13 +1150,16 @@ class ScheduleOptimizer:
         return out
 
     def _plan_curve(self, ctx: dict) -> dict[str, Any]:
-        """Przewidywany SOC godzina po godzinie (do ~30 h) z zaplanowanym ładowaniem i sprzedażą.
+        """Przewidywany SOC godzina po godzinie (do ~30 h, a gdy znane są ceny na jutro — do końca jutra, ~47 h) z zaplanowanym ładowaniem i sprzedażą.
 
         Dane do wykresu planu na karcie: SOC, próg odcięcia falownika, PV, zużycie, ceny kupna/sprzedaży,
         godziny ładowania z sieci i sprzedaży oraz szczyt taryfy."""
         now = ctx["now"]
         h0 = now.hour + 1
-        n = max(1, min(30, 48 - h0))
+        # ceny na jutro znane (≥ 20 godzin) → krzywa i tabela planu obejmują dziś + jutro do północy (do ~47 h); bez nich 30 h
+        rce_tom = ctx["rce"][1] if len(ctx.get("rce") or []) > 1 else None
+        tomorrow_known = bool(rce_tom) and sum(1 for v in rce_tom if isinstance(v, (int, float))) >= 20
+        n = max(1, min(47 if tomorrow_known else 30, 48 - h0))
         h1 = h0 + n
         grid = set(ctx["grid_hours"])
         sale = set(ctx["sold"])

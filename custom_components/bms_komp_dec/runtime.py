@@ -45,6 +45,7 @@ from . import outage as outage_mod
 from . import adviser as adviser_mod
 from . import expand as expand_mod
 from . import fleet as fleet_mod
+from . import pricefeed as pricefeed_mod
 
 ISSUES_EVERY_S = 55          # lista „co dziś nie działa” liczy się co tyle sekund
 from .holidays_pl import holiday_name, is_holiday
@@ -1952,6 +1953,103 @@ class BmsRuntime:
         self._save_state()
         return self.state["analysis_cfg"]
 
+    # --------------------------------------------- własne ceny z PSE (RCE) → cena zakupu dopasowana do taryfy
+    PRICEFEED_ENTITY = "sensor.bms_buy_rce"
+    PRICEFEED_HISTORY_DAYS = 14
+
+    def pricefeed_state(self) -> dict[str, Any]:
+        st = self.state.get("pricefeed")
+        if not isinstance(st, dict):
+            st = self.state["pricefeed"] = {}
+        return st
+
+    def pricefeed_is_buy_source(self) -> bool:
+        return str(self.optimizer.config.get(CONF_PRICE_BUY_ENTITY, "") or "") == self.PRICEFEED_ENTITY
+
+    async def _pricefeed_fetch_day(self, d: date) -> list[float | None] | None:
+        from yarl import URL
+        from homeassistant.helpers.aiohttp_client import async_get_clientsession
+        sess = async_get_clientsession(self.hass)
+        resp = await asyncio.wait_for(sess.get(URL(pricefeed_mod.day_url(d), encoded=True)), 20)
+        try:
+            if resp.status != 200:
+                raise RuntimeError(f"PSE odpowiedziało kodem {resp.status}")
+            data = await asyncio.wait_for(resp.json(content_type=None), 20)
+        finally:
+            resp.release()
+        return pricefeed_mod.parse_rce(data, d)
+
+    async def pricefeed_tick(self, now: datetime) -> None:
+        if not switch_on(self.hass, "price_feed", False):
+            return
+        st = self.pricefeed_state()
+        loc = dt_util.as_local(now)
+        today = loc.date()
+        tom = today + timedelta(days=1)
+        rce = pricefeed_mod.prune(st.get("rce"), today)
+        ts = now.timestamp()
+        last = float(st.get("fetched_ts") or 0.0)
+        hist_missing = [(today - timedelta(days=i)) for i in range(self.PRICEFEED_HISTORY_DAYS, 0, -1)
+                        if (today - timedelta(days=i)).isoformat() not in rce]
+        tom_missing = tom.isoformat() not in rce
+        due = (ts - last >= 3600 or (tom_missing and loc.hour >= 12 and ts - last >= 600)
+               or (today.isoformat() not in rce and ts - last >= 60) or (bool(hist_missing) and ts - last >= 20))
+        if not due:
+            return
+        st["fetched_ts"] = ts
+        days = [today] + ([tom] if loc.hour >= 11 else []) + hist_missing[-4:]
+        got, err = 0, None
+        for d in days:
+            try:
+                arr = await self._pricefeed_fetch_day(d)
+            except Exception as e:  # noqa: BLE001
+                err = f"{type(e).__name__}: {e}"[:160]
+                break
+            if arr:
+                rce[d.isoformat()] = arr
+                got += 1
+        st["rce"] = rce
+        st["err"] = err
+        if got:
+            st["ok_at"] = loc.isoformat(timespec="minutes")
+        if got and not self.pricefeed_is_buy_source():      # uczymy się tylko z PRAWDZIWEJ ceny zakupu (nie z własnej prognozy)
+            fit = pricefeed_mod.fit(rce, self.insights.buy_history(today, self.PRICEFEED_HISTORY_DAYS))
+            if fit:
+                st["fit"] = fit
+                st["fit_at"] = loc.isoformat(timespec="minutes")
+        self._save_state()
+
+    def pricefeed_payload(self) -> dict[str, Any]:
+        st = self.pricefeed_state()
+        now = dt_util.now()
+        today = now.date()
+        tom = today + timedelta(days=1)
+        rce = pricefeed_mod.prune(st.get("rce"), today)
+        fit = st.get("fit") if isinstance(st.get("fit"), dict) else None
+        enabled = switch_on(self.hass, "price_feed", False)
+        tz = lambda d: dt_util.as_local(datetime(d.year, d.month, d.day, 12, tzinfo=timezone.utc)).strftime("%z")  # noqa: E731
+        fmt = lambda d: (lambda z: f"{z[:3]}:{z[3:]}")(tz(d))  # noqa: E731
+        p0 = pricefeed_mod.predict(rce.get(today.isoformat()), fit)
+        p1 = pricefeed_mod.predict(rce.get(tom.isoformat()), fit)
+        cur = p0[now.hour] if p0 else None
+        note = None
+        if not enabled:
+            note = "Włącz przełącznik „Własne ceny z PSE (RCE)”."
+        elif st.get("err"):
+            note = f"Nie udało się pobrać cen z PSE: {st['err']}"
+        elif not rce:
+            note = "Czekam na pierwsze pobranie cen z PSE."
+        elif not fit:
+            note = ("Brak dopasowania do Twojej taryfy: potrzeba co najmniej 3 dób prawdziwych cen zakupu "
+                    f"(EMS zapisuje je godzina po godzinie). Zostaw na ten czas dotychczasowe źródło ceny zakupu.")
+        return {"now": None if cur is None else round(float(cur), 4), "enabled": enabled,
+                "prices_today": pricefeed_mod.series(today, p0, fmt(today)),
+                "prices_tomorrow": pricefeed_mod.series(tom, p1, fmt(tom)),
+                "tomorrow_available": bool(p1), "rce_today": rce.get(today.isoformat()), "rce_tomorrow": rce.get(tom.isoformat()),
+                "fit": ({k: fit[k] for k in ("a", "rmse", "quality", "days", "pairs")} if fit else None),
+                "fit_at": st.get("fit_at"), "ok_at": st.get("ok_at"), "error": st.get("err"), "note": note,
+                "is_buy_source": self.pricefeed_is_buy_source(), "unit_of_measurement": "PLN/kWh"}
+
     # --------------------------------------------- niskie/ujemne ceny (funkcja 1)
     async def price_reaction_tick(self, now: datetime) -> None:
         pr = self.state["price_reaction"]
@@ -2836,6 +2934,7 @@ class BmsRuntime:
             ("snapshot", None),
             ("tryby", self.modes_tick),
             ("ceny", self.price_reaction_tick),
+            ("ceny z PSE", self.pricefeed_tick),
             ("nadpisania", self.override_tick),
             ("harmonogram", self.process_rules),
             ("zabezpieczenia", self.enforce_guard),

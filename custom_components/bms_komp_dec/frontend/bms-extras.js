@@ -1223,7 +1223,7 @@
         const t = a.table_totals || {};
         box.innerHTML = (this._planSummaryHtml ? this._planSummaryHtml(rows) : '') + `<div class="px-tbl-wrap px-plan"><table class="px-tbl plan"><thead><tr><th>Godz.</th><th>Akcja</th><th>Kup zł</th><th>Sprz. zł</th><th>PV kWh</th><th>Dom kWh</th><th>SOC</th><th>Koszt</th></tr></thead><tbody>${html}`
           + `<tr class="tot"><td colspan="2">Razem</td><td colspan="4" style="text-align:left;">pobór ${exFmt(t.import_kwh, 1)} kWh · oddanie ${exFmt(t.export_kwh, 1)} kWh</td><td></td><td class="${exNum(t.cost) < 0 ? 'px-neg' : 'px-pos'}">${pxZl(t.cost, true)}</td></tr></tbody></table></div>`
-          + '<div class="px-note">Szacunek z planu (bez strat i opłat stałych): koszt = pobór z sieci × cena zakupu − oddanie × cena sprzedaży; minus = przychód. Pomarańczowy pasek = godziny szczytu taryfy. Plan obejmuje najbliższe ~30 godzin.</div>';
+          + '<div class="px-note">Szacunek z planu (bez strat i opłat stałych): koszt = pobór z sieci × cena zakupu − oddanie × cena sprzedaży; minus = przychód. Pomarańczowy pasek = godziny szczytu taryfy. Plan obejmuje najbliższe ~30 godzin, a gdy ceny na jutro są już znane — całą resztę dzisiaj i jutro (do ~47 h).</div>';
       },
 
       // ------------------------------------------------------------ historia SOC (20)

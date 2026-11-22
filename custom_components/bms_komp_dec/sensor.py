@@ -134,6 +134,7 @@ class BmsRuntimeSensor(BmsBaseEntity, SensorEntity):
         "price_sell_entity", "price_buy_entity", "price_sell_source", "price_buy_source", "tariff_mode", "tariff_dynamic",
         "price_buy_tomorrow_state", "price_buy_tomorrow_note", "prices_buy_tomorrow_est", "price_buy_tomorrow_est_note",
         "pv_forecast_source", "pv_hourly_today", "pv_hourly_tomorrow", "pv_daily", "pv_sources", "pv_fallback", "assumptions",
+        "prices_today", "prices_tomorrow", "rce_today", "rce_tomorrow",
         "devices", "power_total", "accuracy", "table", "overrides", "soc_history", "why", "control_test", "issues", "reviews",
     })
 
@@ -170,6 +171,8 @@ class BmsRuntimeSensor(BmsBaseEntity, SensorEntity):
         today = dt_util.now().date()
         if self._key == "decision_log":
             return rt.log.latest_text
+        if self._key == "buy_rce":
+            return rt.pricefeed_payload().get("now")
         if self._key == "profit_today":
             return round(rt.ledger.day_net(today), 2)
         if self._key == "profit_month":
@@ -324,6 +327,9 @@ class BmsRuntimeSensor(BmsBaseEntity, SensorEntity):
             return None
         if self._key == "decision_log":
             return {"entries": rt.log.last(80), "count": len(rt.log.entries)}
+        if self._key == "buy_rce":
+            pl = rt.pricefeed_payload()
+            return {k: v for k, v in pl.items() if k != "now"}
         if self._key == "profit_today":
             day = rt.ledger.days.get(dt_util.now().date().isoformat()) or {}
             return {
