@@ -15,6 +15,9 @@
 ## Prognoza zużycia: weekendy nie spóźniają się za trendem
 - Baza prognozy dnia wolnego pochodziła z kilku ostatnich weekendów (2–4 tygodnie wstecz), więc przy rosnącym zużyciu (jesienne zimno) systematycznie je zaniżała (na karcie: „dni wolne: błąd 49%, zaniżone o 45%”). Nowy wariant modelu: świeży poziom z ostatnich 7 dni (dowolnego typu, po zdjęciu indeksu dnia roboczego/wolnego) × indeks typu dnia. Wchodzi do samostrojenia (parametr `lvl_w`: 0, 0,5 albo 1) i jest wybierany tylko wtedy, gdy na twojej historii daje ≥3% mniejszy błąd niż standardowy; domyślnie wyłączony, więc na stabilnych danych nic się nie zmienia. Nazwa wybranego wariantu: „świeży poziom z ostatnich 7 dni”. Testy w `test_lftune.py`.
 
+## Prognoza zużycia: zaniżanie nie jest już „zamrożone” sufitem korekty
+- Samokorekta (mediana rzeczywiste/model z ostatnich dni danego typu) miała sufit ±25%, więc gdy każdy z ostatnich dni wolnych (albo roboczych) wychodził wyraźnie wyżej niż model, prognoza i tak zostawała zaniżona o kilkadziesiąt procent. Teraz, gdy model **stale zaniża** (co najmniej 3 dni danego typu, każdy ≥5% powyżej modelu), sufit korekty w górę wynosi +50% (`BIAS_MAX_UNDER`); zawyżanie i niestałe błędy zostają przy dawnym ±25%. Test w `test_lftune.py`.
+
 ## Ochrona przyłącza: koniec przeskoków prądu 153 ↔ 154 A
 - Sufit mocy ładowania z sieci (kW → A przez napięcie baterii) ma teraz martwą strefę (większa z wartości: 2 A albo 2,5% sufitu), więc wahania napięcia o ułamki wolta nie przestawiają prądu co kilkanaście minut. Duże odchylenia nadal są korygowane, a limit poboru z sieci działa jak wcześniej. Test w `test_gridlimit.py`.
 

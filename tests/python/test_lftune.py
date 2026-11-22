@@ -46,6 +46,17 @@ def main():
     check("trend: samostrojenie wybiera wariant ze świeżym poziomem", "świeży poziom" in str(lf.tune.get("variant")) and lf.params.get("lvl_w", 0) > 0, lf.tune)
     lf = mk([10.0 + 0.8 * math.sin(i * 1.7) for i in range(50)], today); lf._autotune(today)
     check("stabilne dane: lvl_w zostaje 0", lf.params.get("lvl_w", 0) == 0, lf.tune)
+    # --- stałe zaniżanie dni wolnych: korekta może przekroczyć ±25% (do +50%)
+    jump = []
+    for i in range(60):
+        d = today - timedelta(days=60 - i)
+        k = max(0, (i - 40) // 7 + 1) if d.weekday() >= 5 else 0          # każdy kolejny weekend o 35% wyższy
+        jump.append(10.0 * (1.35 ** k) * (1.03 if d.weekday() == 6 else 1.0))
+    lf = mk(jump, today); lf.params = dict(lfm.DEFAULT_PARAMS)
+    f_off = lf._bias_factor(today + timedelta(days=1), True)
+    check("skok weekendów: korekta dla dni wolnych przekracza dawny sufit 1,25", 1.25 < f_off <= 1.5, f_off)
+    check("skok weekendów: dni robocze bez zmiany (≈1)", abs(lf._bias_factor(today + timedelta(days=1), False) - 1.0) < 0.1, lf._bias_factor(today + timedelta(days=1), False))
+    check("sufit korekty zaniżania to 1,5", lfm.BIAS_MAX_UNDER == 1.5)
     # --- za mało historii
     lf = mk([10.0] * 12, today); lf._autotune(today)
     check("za mało dni: bez zmiany parametrów", lf.params == lfm.DEFAULT_PARAMS and lf.tune.get("n") == 0, lf.tune)

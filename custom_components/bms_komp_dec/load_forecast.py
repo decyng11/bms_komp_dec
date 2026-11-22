@@ -59,6 +59,7 @@ BIAS_MIN_SAMPLES = 6
 BIAS_GAIN = 0.5
 BIAS_MIN = 0.75
 BIAS_MAX = 1.25
+BIAS_MAX_UNDER = 1.5       # sufit korekty, gdy model stale zaniża dni danego typu
 WEATHER_REFRESH_SEC = 1800
 # samostrojenie (0.9.3): co dobę wybór wariantu modelu na podstawie „prognoz wstecz” z własnej historii
 TUNE_EVAL_DAYS = 30            # ile ostatnich dni ocenia wariant
@@ -1124,6 +1125,10 @@ class LoadForecaster:
             # błąd stale po jednej stronie → pewniejszy, korekta mocniejsza
             if len(ratios) >= 3 and (all(r > 1.05 for r in ratios) or all(r < 0.95 for r in ratios)):
                 gain = min(1.0, gain + 0.3)
+            # Zaniżanie stale w jednym kierunku (każdy z ostatnich dni tego typu wyższy niż model) kosztuje najwięcej:
+            # sufit ±25% zostawiał np. weekendy zaniżone o kilkadziesiąt procent — tu może sięgnąć do +50%.
+            if len(ratios) >= 3 and all(r > 1.05 for r in ratios):
+                mx = max(mx, BIAS_MAX_UNDER - 1.0)
         factor = 1.0
         min_samples = 3 if (off is not None and len(typed_ratios) >= 3) else (BIAS_MIN_SAMPLES if n_days >= 14 else 4)
         if len(ratios) >= min_samples and gain > 0:
