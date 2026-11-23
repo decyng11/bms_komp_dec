@@ -1,16 +1,20 @@
-# EMS komp-dec 0.9.5.8
+# EMS komp-dec 0.9.6.0
 
-## Ładowanie EV (uniwersalne) i CWU z regułami
-- **Dowolna ładowarka** sterowana przez encje (przełącznik, opcjonalnie `number` z prądem). Tryby: wyłączone, nadwyżka PV, tanie godziny, ceny ujemne, natychmiast. Domyślnie tylko podgląd — sterowanie wymaga włączonego `switch.bms_device_control` i trybu na urządzeniu.
-- **Cel sesji:** kWh albo % SOC auta (z czujnika), godzina odjazdu; tanie godziny liczone z brakującej energii. Prąd płynnie 6–16 A (własne granice, 1 lub 3 fazy), **limit przyłącza** zmniejsza prąd albo wstrzymuje ładowanie, dolny próg SOC baterii domu. Osiągnięcie celu i limit przyłącza wyłączają od razu.
-- **Koszt sesji** (cena × energia) na kafelku i powiadomienie `ev_session`. Zużycie EV (od 3% mocy) liczone osobno w prognozie zużycia domu.
-- **CWU:** reguły ujemnej/niskiej ceny, nadwyżki PV, bufor przed drogimi godzinami, minimum komfortu o wskazanej porze, antylegionella raz w tygodniu (wybrany dzień i temperatura), twardy limit temperatury (wyłącza zawsze); typy: włącz/wyłącz oraz podniesienie temperatury zadanej. Brak czujnika przy ustawionym limicie blokuje grzanie; bez czujnika działają minimalne godziny na dobę.
+## Najlepsze okno dla urządzenia (karta: Plan → pod tabelą cen)
+Pasek cen zakupu od teraz do końca jutra (zielony = tanio, czerwony = drogo) i przyciski „pracuje przez 1–4 h”: panel pokazuje najtańszy i najdroższy ciągły blok oraz o ile taniej niż średnio. Powiadomienie „plan na jutro” dopisuje przy taryfie dynamicznej zdanie „Najtaniej 12–14 (śr. …), najdrożej 18–20 (…)”.
 
-## Flota: do 10 falowników i 30 baterii (etap 1 — tylko odczyt)
-- Klastry, falowniki (master/slave/single) i baterie są niezależnymi listami; każdy element wskazuje klaster, więc kilka baterii na falownik i odwrotnie to zwykły przypadek. SOC klastra i floty to średnia ważona pojemnością.
-- Alarmy per klaster: falownik nie odpowiada, różne tryby master/slave, zły podział masterów, bateria odstająca SOC (≥15 pkt), temperatury, brak odczytu SOC; powiadomienie `fleet_alert` raz na dobę dla danego zestawu.
-- Panel „🏭 Flota” na karcie Urządzenia: kafelki sum, zwijane klastry, edytor (admin). Usługi `fleet_get` i `fleet_set`. **Niczego nie zapisuje do falowników** — sterowanie (etapy 2–3) dopiero po listach encji z prawdziwych instalacji.
-- Testy: `test_evdhw.py`, `test_devctl_evdhw.py`, `test_fleet.py`, `devices_evdhw_ui_test.js`, `fleet_ui_test.js`.
+## Ostrzeżenie o ujemnych cenach jutro
+Powiadomienie o niskich/ujemnych cenach sprzedaży już było. Dodano osobne o UJEMNEJ CENIE ZAKUPU jutro (sprzedawca dopłaca do poboru: dobry czas na pralkę, bojler, auto). Pod tabelą cen pojawiają się notatki o ujemnej sprzedaży i zakupie jutro, z podpowiedzią, czy „Reakcja na niskie/ujemne ceny” jest włączona. To tylko informacja i podpowiedź: sterowania nie zmieniono (zakaz ładowania z sieci i sprzedaży z baterii nadal obowiązuje).
+
+## Prognoza kosztu dziś i jutro (Zysk i log → Oszczędności)
+„Dziś: dotąd X zł, do końca doby wg planu Y zł, razem ≈ Z zł” oraz „Jutro wg planu: ≈ W zł” (minus = zarabiasz). Szacunek z planu godzina po godzinie, bez strat i opłat stałych. Prognoza do końca miesiąca zostaje w „Rachunek i cel”.
+
+## Czy większa bateria się opłaca (Zysk i log → symulacja roczna)
+Tabela „+5 kWh” i „+10 kWh”: ta sama doba godzina po godzinie z prostą strategią (ładowanie z nadwyżki PV, rozładowanie na dom) dla obecnej i powiększonej pojemności, skalowana do roku. To dolna granica, bo EMS z arbitrażem cenowym może zyskać więcej. Po wpisaniu ceny dokupienia baterii (zł za kWh) pokazuje czas zwrotu. Obok istniejącego narzędzia „📐 Czy opłaca się rozbudowa?” (ono liczy na żądanie z dowolną pojemnością).
+
+## Poprawki z przeglądu całego kodu
+- **Karta:** metoda `_fx` była zdefiniowana dwa razy, a druga nadpisywała pierwszą i rzucała błąd przy braku liczby (undefined / NaN). Teraz jest jedna: brak liczby daje „—”, `null` zostaje `null`, minus jest typograficzny.
+- Posprzątane nieużywane importy i zmienna; reszta uwag analizatorów dotyczy dołączonego kodu z ha-solarman (`direct/`) i jest zamierzona.
 
 ## Prognoza zużycia: weekendy nie spóźniają się za trendem
 - Baza prognozy dnia wolnego pochodziła z kilku ostatnich weekendów (2–4 tygodnie wstecz), więc przy rosnącym zużyciu (jesienne zimno) systematycznie je zaniżała (na karcie: „dni wolne: błąd 49%, zaniżone o 45%”). Nowy wariant modelu: świeży poziom z ostatnich 7 dni (dowolnego typu, po zdjęciu indeksu dnia roboczego/wolnego) × indeks typu dnia. Wchodzi do samostrojenia (parametr `lvl_w`: 0, 0,5 albo 1) i jest wybierany tylko wtedy, gdy na twojej historii daje ≥3% mniejszy błąd niż standardowy; domyślnie wyłączony, więc na stabilnych danych nic się nie zmienia. Nazwa wybranego wariantu: „świeży poziom z ostatnich 7 dni”. Testy w `test_lftune.py`.
@@ -44,6 +48,20 @@ W „Zysk i log” pojawiła się tabela: ile zapłaciłbyś za ten sam pobór z
 
 ## Zmiana wyglądu (bez nowej wersji)
 - **„Co dziś nie działa” przeniesione z paska na ekranie głównym do Ustawienia → Diagnostyka → Przegląd.** Lista otwiera się sama, gdy jest ostrzeżenie lub błąd; sama informacja (np. „naprawiono uszkodzone dane przy starcie”) jest zwinięta. Ostrzeżenia i błędy dalej zapalają ⚠ na zakładce Ustawienia. Test: `diag_issues_test.js`.
+
+## Wydanie 0.9.5.8 (EV, CWU, flota)
+
+## Ładowanie EV (uniwersalne) i CWU z regułami
+- **Dowolna ładowarka** sterowana przez encje (przełącznik, opcjonalnie `number` z prądem). Tryby: wyłączone, nadwyżka PV, tanie godziny, ceny ujemne, natychmiast. Domyślnie tylko podgląd — sterowanie wymaga włączonego `switch.bms_device_control` i trybu na urządzeniu.
+- **Cel sesji:** kWh albo % SOC auta (z czujnika), godzina odjazdu; tanie godziny liczone z brakującej energii. Prąd płynnie 6–16 A (własne granice, 1 lub 3 fazy), **limit przyłącza** zmniejsza prąd albo wstrzymuje ładowanie, dolny próg SOC baterii domu. Osiągnięcie celu i limit przyłącza wyłączają od razu.
+- **Koszt sesji** (cena × energia) na kafelku i powiadomienie `ev_session`. Zużycie EV (od 3% mocy) liczone osobno w prognozie zużycia domu.
+- **CWU:** reguły ujemnej/niskiej ceny, nadwyżki PV, bufor przed drogimi godzinami, minimum komfortu o wskazanej porze, antylegionella raz w tygodniu (wybrany dzień i temperatura), twardy limit temperatury (wyłącza zawsze); typy: włącz/wyłącz oraz podniesienie temperatury zadanej. Brak czujnika przy ustawionym limicie blokuje grzanie; bez czujnika działają minimalne godziny na dobę.
+
+## Flota: do 10 falowników i 30 baterii (etap 1 — tylko odczyt)
+- Klastry, falowniki (master/slave/single) i baterie są niezależnymi listami; każdy element wskazuje klaster, więc kilka baterii na falownik i odwrotnie to zwykły przypadek. SOC klastra i floty to średnia ważona pojemnością.
+- Alarmy per klaster: falownik nie odpowiada, różne tryby master/slave, zły podział masterów, bateria odstająca SOC (≥15 pkt), temperatury, brak odczytu SOC; powiadomienie `fleet_alert` raz na dobę dla danego zestawu.
+- Panel „🏭 Flota” na karcie Urządzenia: kafelki sum, zwijane klastry, edytor (admin). Usługi `fleet_get` i `fleet_set`. **Niczego nie zapisuje do falowników** — sterowanie (etapy 2–3) dopiero po listach encji z prawdziwych instalacji.
+- Testy: `test_evdhw.py`, `test_devctl_evdhw.py`, `test_fleet.py`, `devices_evdhw_ui_test.js`, `fleet_ui_test.js`.
 
 ## Wcześniej w tym wydaniu (0.9.5.7)
 

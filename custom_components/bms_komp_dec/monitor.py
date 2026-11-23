@@ -20,10 +20,11 @@ from . import inbox
 from . import nightdraw as nightdraw_mod
 from . import autonomy as autonomy_mod
 from . import tomorrowplan as tomorrowplan_mod
+from . import pricewin as pricewin_mod
 from . import sunny as sunny_mod
 from . import notify_cfg as ncfg
 from .const import CONF_BATTERY_TEMPERATURE, CONF_GRID_POWER, CONF_GRID_VOLTAGE_L1
-from .helpers import number_value, switch_on
+from .helpers import switch_on
 from .tariff import get_profile, next_offpeak_window
 
 _LOGGER = logging.getLogger(__name__)
@@ -516,6 +517,14 @@ class Monitor:
             await self.notifier.send("rce_negative", "📉 EMS: niskie ceny RCE jutro",
                                      f"Jutro cena sprzedaży ≤ {lo:.2f} zł/kWh w godzinach {spans} (najniżej {mn:.2f} zł/kWh). "
                                      "W tych godzinach lepiej ładować baterię niż eksportować do sieci.", key=f"rce_neg:{key}", level="info")
+        try:       # ujemna cena ZAKUPU (sprzedawca płaci za pobór): dobry czas na pralkę, bojler, ładowanie auta
+            bneg = pricewin_mod.negative_hours(self.rt.optimizer.buy_hourly_for(tomorrow))
+        except Exception:  # noqa: BLE001
+            bneg = []
+        if bneg and self._once("buy_negative", key):
+            await self.notifier.send("rce_negative", "💸 EMS: ujemna cena zakupu jutro",
+                                     f"Jutro cena ZAKUPU prądu jest poniżej zera w godzinach {pricewin_mod.spans(bneg)} — sprzedawca dopłaca do poboru. "
+                                     "To najlepszy czas na pralkę, zmywarkę, bojler albo ładowanie auta.", key=f"buy_neg:{key}", level="info")
         hi = self._thr("rce_high")
         top_h, top_v = max(vals, key=lambda x: x[1])
         if hi is not None and top_v >= hi and self._once("rce_high", key):
@@ -712,6 +721,11 @@ class Monitor:
         except Exception:  # noqa: BLE001
             pv = None
         info = tomorrowplan_mod.summarize(plan.get("proposals"), pv)
+        try:       # taryfa dynamiczna: najtańsze i najdroższe godziny zakupu jutro (okno dla pralki, zmywarki, bojlera)
+            if get_profile().mode == "dynamic":
+                info["windows"] = pricewin_mod.windows_text(self.rt.optimizer.buy_hourly_for(tomorrow))
+        except Exception:  # noqa: BLE001
+            pass
         self._once("plan_tomorrow", key)
         await self.notifier.send("plan_tomorrow", f"🗓 EMS: plan na jutro ({tomorrow:%d.%m})", tomorrowplan_mod.message(info), level="info")
 

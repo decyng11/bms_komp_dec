@@ -454,7 +454,7 @@ def _register_services(hass: HomeAssistant) -> None:
         return {"savings": rt.insights.savings(), "accuracy": rt.insights.accuracy(lf),
                 "reviews": reviews, "reviews_tally": tally(reviews), "arb_proof": rt.arb_proof(14),
                 "pv_caution": rt.pv_caution(), "bill": rt.bill(), "deeds": rt.deeds_summary(), "advice": rt.advice(), "price_views": rt.price_views(),
-                "pv_correction_on": switch_on(hass, "pv_forecast_correction", True),
+                "pv_correction_on": switch_on(hass, "pv_forecast_correction", True), "cost_forecast": rt.cost_forecast(),
                 "wear_cost": round(float(rt.optimizer.wear_cost()), 4) if hasattr(rt.optimizer, "wear_cost") else 0.0}
 
     async def handle_self_test(call):
@@ -592,7 +592,7 @@ def _register_services(hass: HomeAssistant) -> None:
     async def handle_analysis_set(call):
         await _require_admin(hass, call)
         rt = _need_runtime(hass)
-        data = {k: call.data.get(k) for k in ("g11", "zone", "dyn_markup", "invest_pv", "invest_batt") if k in call.data}
+        data = {k: call.data.get(k) for k in ("g11", "zone", "dyn_markup", "invest_pv", "invest_batt", "batt_zl_kwh") if k in call.data}
         rt.analysis_set(data)
         return rt.analysis_payload()
 

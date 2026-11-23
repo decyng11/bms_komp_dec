@@ -316,6 +316,11 @@ analysis_set:
       required: false
       selector:
         number: {min: 0, max: 1000000}
+    batt_zl_kwh:
+      name: Cena dokupienia baterii (zł za kWh pojemności)
+      required: false
+      selector:
+        number: {min: 0, max: 100000}
 
 control_test:
   name: Testuj sterowanie falownikiem

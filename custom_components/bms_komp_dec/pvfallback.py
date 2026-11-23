@@ -6,7 +6,7 @@ tylko „zakładamy, że jutro będzie jak ostatnio, trochę gorzej”. Karta za
 from __future__ import annotations
 
 import math
-from datetime import date, timedelta
+from datetime import date
 from typing import Any
 
 N_DAYS = 5               # tyle ostatnich pełnych dób wchodzi do mediany

@@ -76,4 +76,6 @@ def message(info: dict[str, Any], day_label: str = "jutro") -> str:
         txt = f"Plan na {day_label}: bez ładowania z sieci i bez sprzedaży z baterii — dom jedzie na własnym PV i baterii."
     if info.get("pv_kwh") is not None:
         txt += f" Prognoza PV: {_f(info['pv_kwh'])} kWh."
+    if info.get("windows"):
+        txt += f" Ceny zakupu: {info['windows']} Dobry czas na pralkę, zmywarkę czy bojler."
     return txt

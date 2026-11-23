@@ -6,7 +6,7 @@ wyraźna zarówno procentowo, jak i w watach — dom z poborem 80 W zamiast 50 W
 from __future__ import annotations
 
 import math
-from datetime import date, timedelta
+from datetime import date
 from typing import Any
 
 NIGHT_HOURS = (1, 2, 3, 4)       # 1:00–5:00 — pora, gdy w domu zwykle nikt nic nie robi

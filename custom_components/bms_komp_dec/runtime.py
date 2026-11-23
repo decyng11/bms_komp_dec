@@ -46,6 +46,7 @@ from . import adviser as adviser_mod
 from . import expand as expand_mod
 from . import fleet as fleet_mod
 from . import pricefeed as pricefeed_mod
+from . import costforecast as costforecast_mod
 
 ISSUES_EVERY_S = 55          # lista „co dziś nie działa” liczy się co tyle sekund
 from .holidays_pl import holiday_name, is_holiday
@@ -1914,6 +1915,14 @@ class BmsRuntime:
         cap = float(self.optimizer.config.get(CONF_BATTERY_CAPACITY_KWH, DEFAULT_BATTERY_CAPACITY_KWH))
         return planview.plan_table((self._plan or {}).get("curve"), cap)
 
+    def cost_forecast(self) -> dict[str, Any]:
+        """Prognoza kosztu dziś i jutro (costforecast.py) z księgi i tabeli planu."""
+        try:
+            return costforecast_mod.forecast(self.ledger.days, self.plan_table().get("rows"), dt_util.now().date())
+        except Exception:  # noqa: BLE001
+            _LOGGER.debug("EMS: prognoza kosztu nieudana", exc_info=True)
+            return {}
+
     def soc_history(self, days: int = 7) -> list[dict[str, Any]]:
         today = dt_util.now().date()
         keys = [(today - timedelta(days=i)).isoformat() for i in range(days)]
@@ -1937,7 +1946,14 @@ class BmsRuntime:
             neg = analysis_mod.neg_summary({k: b for k, b in buckets.items() if b})
         except Exception:  # noqa: BLE001
             pass
-        return {"tariff": analysis_mod.tariff_compare(buckets, cfg, today),
+        batt = None
+        try:
+            from .insights import day_costs as _day_costs
+            batt = analysis_mod.battery_size({k: b for k, b in buckets.items() if b}, self.insights._params, cfg,  # noqa: SLF001
+                                             _day_costs, self.insights._soc0)  # noqa: SLF001
+        except Exception:  # noqa: BLE001
+            _LOGGER.debug("EMS: symulacja większej baterii nieudana", exc_info=True)
+        return {"batt": batt, "tariff": analysis_mod.tariff_compare(buckets, cfg, today),
                 "sim": analysis_mod.year_sim(dict(self.insights.days), cfg, avg), "cfg": cfg, "neg": neg,
                 "neg_reaction": switch_on(self.hass, "negative_price_reaction", False),
                 "neg_threshold": number_value(self.hass, "low_price_threshold", 0.0)}
@@ -2041,7 +2057,7 @@ class BmsRuntime:
             note = "Czekam na pierwsze pobranie cen z PSE."
         elif not fit:
             note = ("Brak dopasowania do Twojej taryfy: potrzeba co najmniej 3 dób prawdziwych cen zakupu "
-                    f"(EMS zapisuje je godzina po godzinie). Zostaw na ten czas dotychczasowe źródło ceny zakupu.")
+                    "(EMS zapisuje je godzina po godzinie). Zostaw na ten czas dotychczasowe źródło ceny zakupu.")
         return {"now": None if cur is None else round(float(cur), 4), "enabled": enabled,
                 "prices_today": pricefeed_mod.series(today, p0, fmt(today)),
                 "prices_tomorrow": pricefeed_mod.series(tom, p1, fmt(tom)),

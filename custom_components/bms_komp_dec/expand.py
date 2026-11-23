@@ -40,7 +40,6 @@ def battery(days: Any, add_kwh: Any, cost_per_kwh: Any, avg_buy: Any, avg_sell: 
     if len(exp) < MIN_DAYS:
         return None
     unit = EFF * pb - ps - max(0.0, w)
-    shifted = sum(min(x, e) for e in exp) * EFF
     per_year = (sum(min(x, e) for e in exp) / len(exp)) * 365.0
     annual = per_year * unit
     cost = x * c

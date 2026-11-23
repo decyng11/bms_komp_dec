@@ -107,6 +107,12 @@ async def main():
     neg, hi = pn(hass, "bms_rce_negative"), pn(hass, "bms_rce_high")
     check("ceny ujemne jutro: godziny 10–13, raz", len(neg) == 1 and "10–13" in neg[0][2]["message"], neg)
     check("cena wysoka jutro: 19:00 i plan sprzedaży", len(hi) == 1 and "19:00" in hi[0][2]["message"] and "start 19:00" in hi[0][2]["message"], hi)
+    clear(hass); rt.state["notify_once"] = {}
+    opt.buy_hourly_for = lambda d: [0.8] * 11 + [-0.10, -0.05] + [0.8] * 11
+    await rt.monitor._prices_tomorrow(at(2026, 11, 5, 15, 0)); await rt.monitor._prices_tomorrow(at(2026, 11, 5, 16, 0))
+    bn = [x for x in pn(hass, "bms_rce_negative") if "zakupu" in x[2]["title"]]
+    check("ujemna cena ZAKUPU jutro: godziny 11–13, raz", len(bn) == 1 and "11–13" in bn[0][2]["message"] and "pralkę" in bn[0][2]["message"], bn)
+    del opt.buy_hourly_for
     opt._read_rce_arrays = lambda: {d1.isoformat(): [0.4] * 20}
     hass2 = hass; clear(hass2); rt.state["notify_once"] = {}
     await rt.monitor._prices_tomorrow(at(2026, 11, 5, 15, 0))

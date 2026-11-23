@@ -23,14 +23,14 @@ def _f(v: Any) -> float | None:
 
 
 # górne granice ustawień analiz: cena zł/kWh, nakład zł
-_CFG_MAX = {"g11": 20.0, "dyn_markup": 20.0, "invest_pv": 5_000_000.0, "invest_batt": 5_000_000.0}
+_CFG_MAX = {"g11": 20.0, "dyn_markup": 20.0, "invest_pv": 5_000_000.0, "invest_batt": 5_000_000.0, "batt_zl_kwh": 100_000.0}
 
 
 def clean_cfg(raw: dict | None) -> dict[str, Any]:
     """Ustawienia użytkownika (ceny alternatyw, nakłady) — tylko poprawne liczby."""
     raw = raw if isinstance(raw, dict) else {}
     out: dict[str, Any] = {}
-    for k in ("g11", "invest_pv", "invest_batt", "dyn_markup"):
+    for k in ("g11", "invest_pv", "invest_batt", "dyn_markup", "batt_zl_kwh"):
         v = _f(raw.get(k))
         if v is not None and 0 <= v <= _CFG_MAX[k]:      # absurdalne wartości (1e308, inf) odrzucamy zamiast liczyć z nimi
             out[k] = round(v, 4)
@@ -217,3 +217,58 @@ def year_sim(insight_days: dict[str, dict], cfg: dict, avg_buy: float | None) ->
     if pay:
         out["payback"] = pay
     return out
+
+
+BATT_EXTRAS = (5.0, 10.0)      # o ile kWh większą baterię sprawdzamy
+BATT_MIN_DAYS = 5
+
+
+def battery_size(buckets_by_day: dict[str, list], params: dict, cfg: dict, day_costs_fn, soc0_fn=None,
+                 extras: tuple = BATT_EXTRAS) -> dict[str, Any] | None:
+    """Ile więcej zaoszczędziłbyś z większą baterią: ta sama doba godzina po godzinie, prosta strategia (bateria ładuje się
+    z nadwyżki PV i rozładowuje na dom, bez planera) dla obecnej pojemności i powiększonej o `extras` kWh.
+
+    To dolna granica: EMS z arbitrażem cenowym może zyskać więcej, a prosta strategia nie zna cen. Wynik skalowany do roku
+    (przy mniej niż roku danych to ekstrapolacja). `day_costs_fn` to insights.day_costs (przekazane, żeby moduł został czysty)."""
+    cfg = clean_cfg(cfg)
+    try:
+        cap = float(params.get("cap", 10.0))
+        base_kw = dict(eff=float(params.get("eff", 0.9)), floor_pct=float(params.get("floor", 10.0)),
+                       max_chg_kw=float(params.get("max_chg_kw", 5.0)), max_dis_kw=float(params.get("max_dis_kw", 5.0)))
+    except (TypeError, ValueError):
+        return None
+    if cap <= 0:
+        return None
+    sums = {e: 0.0 for e in extras}
+    n = 0
+    for k in sorted(buckets_by_day):
+        b = buckets_by_day[k]
+        if not b or not any(x is not None for x in b):
+            continue
+        soc0 = soc0_fn(k) if soc0_fn else None
+        try:
+            base = day_costs_fn(b, cap_kwh=cap, soc0=soc0, **base_kw)
+            if not base or not base.get("complete"):
+                continue
+            alt = {e: day_costs_fn(b, cap_kwh=cap + e, soc0=soc0, **base_kw) for e in extras}
+        except Exception:  # noqa: BLE001
+            continue
+        if any(a is None for a in alt.values()):
+            continue
+        n += 1
+        for e in extras:
+            sums[e] += base["simple"] - alt[e]["simple"]
+    if n < BATT_MIN_DAYS:
+        return None
+    scale = 365.0 / n
+    price = cfg.get("batt_zl_kwh")
+    rows = []
+    for e in extras:
+        year = sums[e] * scale
+        row = {"extra_kwh": e, "cap_kwh": round(cap + e, 1), "saving_period": round(sums[e], 2), "saving_year": round(year, 2)}
+        if price and year > 0:
+            row["payback_years"] = round(price * e / year, 1)
+        rows.append(row)
+    return {"days": n, "cap_kwh": round(cap, 1), "rows": rows, "extrapolated": n < FULL_YEAR_DAYS,
+            "note": ("Dolna granica: prosta strategia bez planera i bez arbitrażu cenowego; EMS może zyskać z większej baterii więcej. "
+                     + (f"{n} dób, wynik przeliczony na rok — sezonowość może go mocno zmienić." if n < FULL_YEAR_DAYS else f"{n} dób."))}

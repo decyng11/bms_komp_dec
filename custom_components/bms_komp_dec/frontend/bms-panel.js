@@ -2495,6 +2495,63 @@
       return html + `</table>`;
     }
 
+    // najlepsze okno dla urządzenia: pasek cen zakupu od teraz do końca jutra, najtańszy / najdroższy ciągły blok 1–4 h
+    // i ostrzeżenie o ujemnych cenach jutro (sprzedaż / zakup)
+    _priceFinderHtml(bT, bJ, sJ, reactionOn) {
+      const nowH = new Date().getHours();
+      const seq = [];
+      (bT || []).forEach((v, h) => { if (h >= nowH) seq.push({ d: 0, h, v }); });
+      if (bJ) bJ.forEach((v, h) => seq.push({ d: 1, h, v }));
+      const known = seq.filter(x => x.v !== null);
+      const dur = [1, 2, 3, 4].includes(this._pfDur) ? this._pfDur : 2;
+      const fmt = (v) => v.toFixed(2).replace('.', ',');
+      const lab = (x) => (x.d ? 'jutro' : 'dziś') + ' ' + String(x.h).padStart(2, '0') + ':00';
+      const blk = (cheapest) => {
+        let best = null;
+        for (let i = 0; i + dur <= seq.length; i++) {
+          const w = seq.slice(i, i + dur);
+          if (w.some(x => x.v === null)) continue;
+          const avg = w.reduce((a, x) => a + x.v, 0) / dur;
+          if (best === null || (cheapest ? avg < best.avg : avg > best.avg)) best = { i, avg };
+        }
+        return best;
+      };
+      let html = '';
+      // ostrzeżenia o ujemnych cenach jutro
+      const spans = (arr) => { const hs = []; (arr || []).forEach((v, h) => { if (v !== null && v < 0) hs.push(h); });
+        const out = []; for (let i = 0; i < hs.length;) { let j = i; while (j + 1 < hs.length && hs[j + 1] === hs[j] + 1) j++; out.push(String(hs[i]).padStart(2, '0') + '–' + String(hs[j] + 1).padStart(2, '0')); i = j + 1; } return out.join(', '); };
+      const negS = spans(sJ), negB = spans(bJ);
+      if (negS) html += `<div class="price-note" id="priceNegSell">📉 <b>Jutro ujemna cena sprzedaży</b> w godzinach ${this._esc(negS)}: za eksport do sieci byś dopłacał. ${reactionOn ? 'Reakcja na niskie/ujemne ceny jest włączona — EMS wstrzyma sprzedaż z baterii.' : 'Włącz „Reakcję na niskie/ujemne ceny RCE” (Ustawienia), żeby EMS wstrzymał wtedy sprzedaż z baterii.'} W tych godzinach nie opłaca się ładować z sieci.</div>`;
+      if (negB) html += `<div class="price-note" id="priceNegBuy">💸 <b>Jutro ujemna cena zakupu</b> w godzinach ${this._esc(negB)}: sprzedawca dopłaca do poboru. Najlepszy czas na pralkę, zmywarkę, bojler albo ładowanie auta.</div>`;
+      if (known.length < 4) return html;
+      const vals = known.map(x => x.v), mn = Math.min(...vals), mx = Math.max(...vals), span = mx - mn || 1;
+      const lo = blk(true), hi = blk(false);
+      const bars = seq.map((x) => {
+        if (x.v === null) return '<div style="flex:1;min-width:0;height:100%;"></div>';
+        const t = (x.v - mn) / span, hue = Math.round(120 - 120 * t);
+        const hgt = 14 + Math.round(t * 34);
+        const inBlk = (b) => b && seq.indexOf(x) >= b.i && seq.indexOf(x) < b.i + dur;
+        const ring = inBlk(lo) ? 'outline:2px solid var(--green);' : (inBlk(hi) ? 'outline:2px solid var(--red);' : '');
+        return `<div title="${this._esc(lab(x))} — ${fmt(x.v)} zł/kWh" style="flex:1;min-width:0;height:100%;display:flex;align-items:flex-end;"><div style="width:100%;height:${hgt}px;background:hsl(${hue},65%,48%);border-radius:2px;${ring}"></div></div>`;
+      }).join('');
+      const line = (b, ico, name) => {
+        if (!b) return '';
+        const a = seq[b.i], z = seq[b.i + dur - 1];
+        const endH = (z.h + 1) % 24;
+        const when = a.d === z.d || endH === 0 ? `${lab(a)}–${String(endH).padStart(2, '0')}:00` : `${lab(a)} – ${lab(z)}`;
+        return `<div style="font-size:12px;margin-top:4px;">${ico} ${name}: <b>${this._esc(when)}</b>, średnio ${fmt(b.avg)} zł/kWh</div>`;
+      };
+      const avgAll = vals.reduce((a, v) => a + v, 0) / vals.length;
+      const save = lo ? `<div style="font-size:11px;opacity:.7;margin-top:2px;">≈ ${fmt(avgAll - lo.avg)} zł taniej za każdą kWh niż średnio w tym okresie (${fmt(avgAll)} zł/kWh).</div>` : '';
+      const btns = [1, 2, 3, 4].map(n => `<button class="btn${n === dur ? ' active' : ''}" data-pf-dur="${n}" style="padding:5px 12px;font-size:12px;">${n} h</button>`).join('');
+      html += `<div class="price-header" style="margin-top:10px;">⏱ Najlepsze okno dla urządzenia <span style="opacity:.6;font-size:11px;">(od teraz${bJ ? ' do końca jutra' : ''})</span></div>
+        <div style="display:flex;gap:6px;margin:6px 0;align-items:center;font-size:12px;">Pracuje przez: ${btns}</div>
+        <div id="priceFinderBars" style="display:flex;gap:1px;height:52px;align-items:flex-end;">${bars}</div>
+        <div style="display:flex;justify-content:space-between;font-size:10px;opacity:.6;"><span>${this._esc(lab(seq[0]))}</span><span>${this._esc(lab(seq[seq.length - 1]))}</span></div>
+        ${line(lo, '🟢', 'Najtaniej')}${line(hi, '🔴', 'Najdrożej')}${save}`;
+      return html;
+    }
+
     _renderPriceTable() {
       const container = this._el('priceTableContainer');
       const header = this._el('priceTableHeader');
@@ -2517,12 +2574,24 @@
         const feed = this._hass.states[this._eid('sensor', 'buy_rce')], fa = (feed && feed.attributes) || null;
         const feedOn = !!(fa && fa.enabled);
         const key = JSON.stringify([sT, sJ, bT, bJ, bE, bEN, a.price_sell_source, a.price_buy_source, bNote, bNoteWait, new Date().getHours(),
-          feedOn, fa && fa.fit, fa && fa.note, fa && fa.tomorrow_available, fa && fa.is_buy_source]);
+          feedOn, fa && fa.fit, fa && fa.note, fa && fa.tomorrow_available, fa && fa.is_buy_source, this._pfDur || 2, (this._hass.states[this._eid('switch', 'negative_price_reaction')] || {}).state]);
         if (this._lastPriceTableKey === key) return;
         this._lastPriceTableKey = key;
         let html = this._priceTableHtml(sT, sJ, '', '');
         if (bT || bJ) html += this._priceTableHtml(bT, bJ || bE, 'Ceny zakupu (taryfa dynamiczna)', a.price_buy_source || a.price_buy_entity || '', true, !!bE);
         if (bEN) html += `<div class="price-note est" id="priceBuyEstNote">📈 ${this._esc(bEN)}</div>`;
+        {
+          const reactOn = (this._hass.states[this._eid('switch', 'negative_price_reaction')] || {}).state === 'on';
+          html += this._priceFinderHtml(bT, bJ, sJ, reactOn);
+          if (!container._pfBound) {
+            container._pfBound = true;
+            container.addEventListener('click', (ev) => {
+              const b = ev.target && ev.target.closest ? ev.target.closest('[data-pf-dur]') : null;
+              if (!b) return;
+              this._pfDur = Number(b.dataset.pfDur); this._lastPriceTableKey = null; this._renderPriceTable();
+            });
+          }
+        }
         if (feedOn) {
           const f = fa.fit;
           const txt = f
@@ -4782,8 +4851,6 @@
     }
 
     // ===== PRZEPŁYW MOCY (węzły) + PLAN DNIA =====
-    // liczba z przecinkiem dziesiętnym (jak reszta panelu); brak wartości → „—”
-    _fx(v, d) { const n = Number(v); return v === null || v === undefined || v === '' || !isFinite(n) ? '—' : n.toFixed(d === undefined ? 1 : d).replace('.', ','); }
     // zysk dzisiaj z sensora „EMS Bilans dziś”; brak czujnika lub „unknown” → NaN (a nie 0 zł)
     _profitToday() { const raw = this._st(this._eid('sensor', 'profit_today')); return raw === '' ? NaN : Number(raw); }
     _fmtW(w) {
@@ -4812,7 +4879,8 @@
       }
       return null;
     }
-    _fx(v, d = 1) { return v === null ? null : v.toFixed(d).replace('.', ',').replace('-', '−'); }
+    // jedna definicja (wcześniej dwie, druga nadpisywała pierwszą i rzucała błąd dla undefined / NaN): null → null, brak liczby → „—”
+    _fx(v, d = 1) { if (v === null) return null; const n = Number(v); return v === undefined || v === '' || !isFinite(n) ? '—' : n.toFixed(d).replace('.', ',').replace('-', '−'); }
 
     // szczegóły pokazywane w oknie wykresu: napięcia, prądy, częstotliwość, temperatura baterii (pary etykieta/wartość)
     _nodeDetails() {
@@ -5949,7 +6017,7 @@
   // =====================================================================
   // Wersja tego pliku (ustawiana skryptem pakującym z manifest.json). Każdy moduł niesie tę samą w install.version:
   // gdy się różnią, przeglądarka podała starą kopię modułu z pamięci podręcznej.
-  const CARD_VERSION = '0.9.5.8';
+  const CARD_VERSION = '0.9.6.0';
   const MOD_TIMEOUT_MS = 20000;
   const MODULES = {
     diag:   { file: 'bms-diag.js',   global: '__bmsDiagInstall',   contract: 1, label: 'Diagnostyki', p: null, ready: false, err: '', got: '' },
