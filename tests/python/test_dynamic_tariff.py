@@ -303,6 +303,15 @@ async def main():
             check("południe (G12w): bez kosztu zużycia doładowanie, z kosztem — pominięte",
                   not zone_base.get("skip") and p2.get("skip") and "zużycia" in p2.get("reason", ""), (zone_base.get("reason"), p2.get("reason")))
 
+    # ---------------- wieczór tańszy niż po północy: okno nie zaczyna się dopiero od końca „szczytu” z cen
+    ev0 = [0.50, 0.48, 0.45, 0.42, 0.44, 0.50, 0.70, 1.10, 1.25, 1.15, 0.75, 0.45, 0.40, 0.42, 0.48, 0.85, 1.20, 1.40, 1.55, 1.45, 0.60, 0.60, 0.60, 0.62]
+    ev1 = [0.90, 0.90, 0.90, 0.90, 0.90, 0.92, 1.00, 1.10, 1.30, 1.05, 0.70, 0.46, 0.38, 0.40, 0.47, 0.60, 0.90, 1.35, 1.60, 1.50, 1.30, 0.80, 0.60, 0.52]
+    hass, c, sch, rt, d0, d1 = await env((2026, 11, 22, 20, 30), soc=30.0, buy=("bankilo", ev0, ev1))
+    P = (await sch.suggest())["proposals"]
+    st, sp = P.get("start_grid_charge", {}), P.get("stop_grid_charge", {})
+    check("wieczór 0,60 vs po północy 0,90: ładowanie przed północą, nie po", not st.get("skip") and st.get("proposed") and
+          int(sp["proposed"][:2]) in (23, 0) and 20 < int(st["proposed"][:2]) <= 23, (st, sp))
+
     print(f"DYN-TARIFF PASS={common.PASS} FAIL={common.FAIL}")
 asyncio.run(main())
 sys.exit(1 if common.FAIL else 0)

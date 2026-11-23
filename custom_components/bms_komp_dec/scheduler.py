@@ -1277,6 +1277,11 @@ class ScheduleOptimizer:
             earliest = now_h
         end = end_h + 24 if nxt else end_h
         ne = end % 24
+        # Taryfa dynamiczna: okno nie musi zaczynać się dopiero od końca wieczornego „szczytu” wyliczonego z cen. Jeśli wieczorem
+        # (bez PV) jest taniej niż po północy (np. 0,60 o 20:00 wobec 0,90 po 24:00), liczy się cena, a nie etykieta godziny.
+        if not urgent and (prof.dynamic_for(ctx["now"].date()) or prof.dynamic_for(ctx["now"].date() + timedelta(days=1))):
+            while earliest - 1 >= now_h + 1 and self._pv_abs(ctx, earliest - 1) <= 0.05:
+                earliest -= 1
         if earliest >= end:
             self._skip_pair(out, set1 + set2, f"Pomiń — okno nocne (do {ne:02d}:00) już się kończy; propozycja pojawi się po południu.")
             return out
