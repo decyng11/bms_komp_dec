@@ -151,6 +151,10 @@ class BmsRuntime:
             optimizer.block_fn = self.blocked_kinds          # plan nie proponuje tego, co jest zablokowane (tryb prosty / nadpisania)
         except Exception:  # noqa: BLE001
             pass
+        try:
+            optimizer.full_due_fn = self.full_charge_due       # plan podnosi cel ładowania do 100%, gdy minął termin pełnego ładowania
+        except Exception:  # noqa: BLE001
+            pass
         self.log = DecisionLog(hass)
         self.ledger = Ledger(hass)
         self.stats = BatteryStats(hass)
@@ -1978,6 +1982,45 @@ class BmsRuntime:
         self._save_state()
         return self.state["analysis_cfg"]
 
+    # --------------------------------------------- pełne ładowanie co N dni (kalibracja SOC, wyrównanie ogniw)
+    FULL_SOC = 98.0
+
+    def fullcharge_state(self) -> dict[str, Any]:
+        st = self.state.get("fullcharge")
+        if not isinstance(st, dict):
+            st = self.state["fullcharge"] = {}
+        return st
+
+    def full_charge_due(self) -> dict[str, Any] | None:
+        """Czy minął termin pełnego ładowania: {"days": ile dni od ostatnich ~100%, "every": co ile} albo None (wyłączone / jeszcze nie pora)."""
+        if not switch_on(self.hass, "full_charge", False):
+            return None
+        every = max(1, int(round(number_value(self.hass, "full_charge_days", 7.0))))
+        last = self.fullcharge_state().get("last")
+        today = dt_util.now().date()
+        try:
+            days = (today - date.fromisoformat(str(last))).days if last else None
+        except ValueError:
+            days = None
+        if days is not None and days < every:
+            return None
+        return {"days": days, "every": every}
+
+    async def fullcharge_tick(self, now: datetime) -> None:
+        """Zapamiętuje dzień, w którym bateria dobiła do ~100% (z sieci albo z PV): to zeruje licznik."""
+        if not switch_on(self.hass, "full_charge", False):
+            return
+        try:
+            soc = self.optimizer._read_soc()  # noqa: SLF001
+        except Exception:  # noqa: BLE001
+            return
+        if isinstance(soc, (int, float)) and soc >= self.FULL_SOC:
+            day = dt_util.as_local(now).date().isoformat()
+            st = self.fullcharge_state()
+            if st.get("last") != day:
+                st["last"] = day
+                self._save_state()
+
     # --------------------------------------------- własne ceny z PSE (RCE) → cena zakupu dopasowana do taryfy
     PRICEFEED_ENTITY = "sensor.bms_buy_rce"
     PRICEFEED_HISTORY_DAYS = 14
@@ -2960,6 +3003,7 @@ class BmsRuntime:
             ("tryby", self.modes_tick),
             ("ceny", self.price_reaction_tick),
             ("ceny z PSE", self.pricefeed_tick),
+            ("pełne ładowanie", self.fullcharge_tick),
             ("nadpisania", self.override_tick),
             ("harmonogram", self.process_rules),
             ("zabezpieczenia", self.enforce_guard),

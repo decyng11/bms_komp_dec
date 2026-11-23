@@ -3,6 +3,9 @@
 ## Ładowanie z sieci: wieczór tańszy niż po północy
 Przy taryfie dynamicznej okno ładowania zaczynało się dopiero po wieczornym „szczycie” wyliczonym z cen, więc tańsze godziny wieczorem (np. 0,60 zł o 20:00 wobec 0,90 zł po północy) w ogóle nie brały udziału w wyborze. Teraz, gdy PV już nie produkuje, okno obejmuje też wcześniejsze godziny wieczorne i wygrywa najtańszy blok.
 
+## Pełne ładowanie baterii co N dni (kalibracja SOC, wyrównanie ogniw)
+Nowy przełącznik „Pełne ładowanie baterii co kilka dni” (Ustawienia → funkcje, domyślnie wyłączony) i pole „co ile dni” (domyślnie 7). EMS zapamiętuje dzień, w którym bateria dobiła do ~100% (z sieci albo z PV, więc słoneczny dzień zalicza cykl bez dopłaty). Gdy od ostatniego pełnego naładowania minie wskazana liczba dni, planer podnosi cel nocnego ładowania do 100% i wybiera najtańszy blok, także gdy zwykły rachunek ładowania się nie spina. Opis okna w Planie mówi, ile dni minęło. Przy braku cen na jutro i w trybie burzowym zachowanie bez zmian.
+
 ## Porównanie taryf: stawki wyliczane automatycznie
 Pola „strefa: szczyt / poza”, „okna” i „narzut dynamicznej” nie trzeba już wpisywać: puste pola liczą się same z Twoich zapisanych cen (mediana ceny zakupu w godzinach szczytu i poza nim wg okien z konfiguracji; narzut = mediana „cena zakupu − cena sprzedaży/RCE”) i pokazują się w polu jako „auto …”. Wpisana ręcznie wartość ma pierwszeństwo. G11 i nakładów (PV, bateria) nie da się odgadnąć z danych, więc zostają do wpisania.
 

@@ -179,6 +179,7 @@ SWITCHES = [
     # --- funkcje automatyczne (domyślnie wyłączone)
     ("negative_price_reaction", "Reakcja na niskie/ujemne ceny RCE", "mdi:cash-remove", False),
     ("price_feed", "Własne ceny z PSE (RCE) → cena zakupu dopasowana do taryfy", "mdi:cloud-download", False),
+    ("full_charge", "Pełne ładowanie baterii co kilka dni (kalibracja SOC i wyrównanie ogniw)", "mdi:battery-check", False),
     ("profit_check", "Sprawdzaj opłacalność sprzedaży", "mdi:calculator-variant", False),
     ("dynamic_reserve", "Dynamiczna rezerwa SOC", "mdi:battery-heart-variant", False),
     ("auto_apply", "Automatyczne stosowanie propozycji", "mdi:robot", False),
@@ -241,6 +242,7 @@ NUMBERS = [
     ("pv_plan_pessimism_pct", "Ostrożność prognozy PV w planie (0 = mediana, 100 = wersja pesymistyczna)", 0, 100, 5, "%"),
     ("grid_arbitrage_block_kwh", "Blokada arbitrażu — tolerancja (0 = wył.)", 0, 20, 0.1, "kWh"),
     ("low_price_threshold", "Niska cena RCE — próg reakcji", -5, 5, 0.01, "PLN/kWh"),
+    ("full_charge_days", "Pełne ładowanie baterii — co ile dni", 1, 60, 1, "dni"),
     ("min_sell_margin", "Min. marża sprzedaży", 0, 5, 0.01, "PLN/kWh"),
     ("cycle_efficiency", "Sprawność cyklu baterii", 50, 100, 1, "%"),
     ("reserve_floor_soc", "Dynamiczna rezerwa — minimum", 0, 60, 1, "%"),
@@ -273,6 +275,7 @@ NUMBER_DEFAULTS = {
     "pv_plan_pessimism_pct": 0.0,
     "grid_arbitrage_block_kwh": 0.5,
     "low_price_threshold": 0.0,
+    "full_charge_days": 7,
     "min_sell_margin": DEFAULT_MIN_SELL_MARGIN,
     "cycle_efficiency": 90,
     "reserve_floor_soc": 15,

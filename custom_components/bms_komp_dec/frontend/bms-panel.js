@@ -3055,6 +3055,7 @@
       const FEATURES = [
         ['negative_price_reaction', 'Reakcja na niskie/ujemne ceny RCE'],
         ['price_feed', 'Własne ceny z PSE (RCE) → cena zakupu dopasowana do taryfy'],
+        ['full_charge', 'Pełne ładowanie baterii co kilka dni (kalibracja SOC, wyrównanie ogniw)'],
         ['profit_check', 'Sprawdzaj opłacalność sprzedaży'],
         ['dynamic_reserve', 'Dynamiczna rezerwa SOC'],
         ['auto_apply', 'Automatycznie stosuj propozycje'],
@@ -3065,6 +3066,7 @@
       const DAYS = [['dzien_pn', 'Pn'], ['dzien_wt', 'Wt'], ['dzien_sr', 'Śr'], ['dzien_cz', 'Cz'], ['dzien_pt', 'Pt'], ['dzien_so', 'So'], ['dzien_nd', 'Nd']];
       const NUMS = [
         ['low_price_threshold', 'Próg niskiej ceny RCE (PLN/kWh)', 0.01],
+        ['full_charge_days', 'Pełne ładowanie baterii: co ile dni', 1],
         ['min_sell_margin', 'Min. marża sprzedaży (PLN/kWh)', 0.01],
         ['cycle_efficiency', 'Sprawność cyklu baterii (%)', 1],
         ['reserve_floor_soc', 'Rezerwa SOC — minimum (%)', 1],
