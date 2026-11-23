@@ -21,7 +21,9 @@ MIN_FIT_DAYS = 3            # tyle dób z parą (RCE, cena zakupu) trzeba, żeby
 MIN_FIT_PAIRS = 48
 A_MIN, A_MAX = 0.3, 3.0     # sensowny mnożnik (VAT 1,23 itp.)
 KEEP_DAYS = 20
-QUALITY = ((0.05, "dobre"), (0.12, "średnie"))      # RMSE w zł/kWh; powyżej „słabe”
+QUALITY = ((0.012, "idealne"), (0.05, "dobre"), (0.12, "średnie"))      # RMSE w zł/kWh; powyżej „słabe”
+EXACT_TOL = 0.01                                    # „co do grosza”: różnica ≤ 1 gr
+MIN_WEEKEND_PAIRS = 8
 
 
 def day_url(d: date) -> str:
@@ -80,26 +82,35 @@ def parse_rce(payload: Any, day: date) -> list[float | None] | None:
     return out if sum(1 for v in out if v is not None) >= MIN_HOURS_DAY else None
 
 
+def _weekend(key: str) -> bool:
+    try:
+        return date.fromisoformat(str(key)[:10]).weekday() >= 5
+    except ValueError:
+        return False
+
+
 def fit(rce: dict[str, list[float | None]], buy: dict[str, list[float | None]]) -> dict[str, Any] | None:
     """Uczy `cena = a × RCE + b[godzina]` z par (RCE, prawdziwa cena zakupu) z tych samych godzin.
 
     a — z odchyleń w obrębie godziny (stałe opłaty i strefy nie wpływają na nachylenie), b[h] — mediana reszt godziny
-    (łapie strefy G12 i opłaty). None, gdy za mało danych."""
-    pairs: list[tuple[int, float, float]] = []
+    (łapie strefy G12 i opłaty). Weekendy i dni robocze mają osobne b[h] (strefy bywają inne), gdy weekendów jest dość.
+    Ocena: błąd RMSE oraz odsetek godzin trafionych co do grosza. None, gdy za mało danych."""
+    pairs: list[tuple[int, float, float, bool]] = []
     days = set()
     for k, rr in rce.items():
         bb = buy.get(k)
         if not isinstance(rr, list) or not isinstance(bb, list):
             continue
+        we = _weekend(k)
         for h in range(min(24, len(rr), len(bb))):
             x, y = _num(rr[h]), _num(bb[h])
             if x is not None and y is not None and y > 0:
-                pairs.append((h, x, y))
+                pairs.append((h, x, y, we))
                 days.add(k)
     if len(days) < MIN_FIT_DAYS or len(pairs) < MIN_FIT_PAIRS:
         return None
     by_h: dict[int, list[tuple[float, float]]] = {}
-    for h, x, y in pairs:
+    for h, x, y, _w in pairs:
         by_h.setdefault(h, []).append((x, y))
     num = den = 0.0
     for lst in by_h.values():
@@ -110,30 +121,51 @@ def fit(rce: dict[str, list[float | None]], buy: dict[str, list[float | None]]) 
         den += sum((x - mx) ** 2 for x, _ in lst)
     a = num / den if den > 1e-9 else 1.0
     a = min(A_MAX, max(A_MIN, a))
-    b: list[float | None] = []
-    for h in range(24):
-        lst = by_h.get(h)
-        b.append(median([y - a * x for x, y in lst]) if lst and len(lst) >= 2 else None)
-    known = [v for v in b if v is not None]
+
+    def offsets(sel) -> list[float | None]:
+        grp: dict[int, list[float]] = {}
+        for h, x, y, w in pairs:
+            if sel(w):
+                grp.setdefault(h, []).append(y - a * x)
+        return [median(grp[h]) if len(grp.get(h, [])) >= 2 else None for h in range(24)]
+
+    b_all = offsets(lambda w: True)
+    known = [v for v in b_all if v is not None]
     if not known:
         return None
     fill = median(known)
-    b = [round(v if v is not None else fill, 4) for v in b]
-    res = [y - (a * x + b[h]) for h, x, y in pairs]
+    b_all = [v if v is not None else fill for v in b_all]
+    n_we = sum(1 for p in pairs if p[3])
+    b_wd_raw, b_we_raw = offsets(lambda w: not w), offsets(lambda w: w)
+    split = n_we >= MIN_WEEKEND_PAIRS and (len(pairs) - n_we) >= MIN_WEEKEND_PAIRS
+    if split:
+        b = [round(v if v is not None else b_all[h], 4) for h, v in enumerate(b_wd_raw)]
+        bw: list[float] | None = [round(v if v is not None else b_all[h], 4) for h, v in enumerate(b_we_raw)]
+    else:
+        b, bw = [round(v, 4) for v in b_all], None
+    res = []
+    for h, x, y, w in pairs:
+        res.append(y - (a * x + ((bw if (w and bw) else b)[h])))
     rmse = math.sqrt(sum(r * r for r in res) / len(res))
+    exact = sum(1 for r in res if abs(r) <= EXACT_TOL) / len(res)
     quality = "słabe"
     for lim, name in QUALITY:
         if rmse <= lim:
             quality = name
             break
-    return {"a": round(a, 4), "b": b, "rmse": round(rmse, 4), "pairs": len(pairs), "days": len(days), "quality": quality}
+    return {"a": round(a, 4), "b": b, "bw": bw, "rmse": round(rmse, 4), "exact": round(exact, 3), "max_err": round(max(abs(r) for r in res), 3),
+            "pairs": len(pairs), "days": len(days), "quality": quality}
 
 
-def predict(rce_day: list[float | None] | None, model: dict[str, Any] | None) -> list[float | None] | None:
-    """Cena zakupu na 24 godziny z RCE doby i dopasowanego modelu (None bez modelu albo bez RCE)."""
+def predict(rce_day: list[float | None] | None, model: dict[str, Any] | None, day: date | None = None) -> list[float | None] | None:
+    """Cena zakupu na 24 godziny z RCE doby i dopasowanego modelu (None bez modelu albo bez RCE).
+    Dla weekendu (gdy model ma osobne `bw`) używa opłat weekendowych."""
     if not rce_day or not model:
         return None
     a, b = _num(model.get("a")), model.get("b")
+    bw = model.get("bw")
+    if day is not None and day.weekday() >= 5 and isinstance(bw, list) and len(bw) == 24:
+        b = bw
     if a is None or not isinstance(b, list) or len(b) != 24:
         return None
     out: list[float | None] = []

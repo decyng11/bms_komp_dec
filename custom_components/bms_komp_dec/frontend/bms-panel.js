@@ -2606,7 +2606,7 @@
         if (feedOn) {
           const f = fa.fit;
           const txt = f
-            ? `Własne ceny z PSE (RCE): dopasowanie do Twojej taryfy ${this._esc(String(f.quality))} (średni błąd ${Number(f.rmse).toFixed(3)} zł/kWh, ${this._esc(String(f.days))} dób). `
+            ? `Własne ceny z PSE (RCE): dopasowanie do Twojej taryfy ${this._esc(String(f.quality))} (średni błąd ${Number(f.rmse).toFixed(3)} zł/kWh, ${this._esc(String(f.days))} dób${typeof f.exact === 'number' ? `; co do grosza trafia w ${Math.round(f.exact * 100)}% godzin, największy błąd ${Number(f.max_err).toFixed(2)} zł` : ''}). `
               + (fa.is_buy_source ? (fa.tomorrow_available ? 'Cena zakupu bierze się z tego sensora — jutro jest już znane.' : 'Cen na jutro PSE jeszcze nie opublikowało (zwykle po ~13:00).')
                 : 'Żeby planer ich używał, wskaż jako „encję ceny zakupu” sensor.bms_buy_rce (po kilku dobach zbierania możesz wyłączyć dotychczasowe źródło).')
             : this._esc(String(fa.note || 'Własne ceny z PSE: czekam na dane.'));

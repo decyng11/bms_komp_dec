@@ -28,6 +28,8 @@ const { chromium } = require('playwright'); const fs = require('fs');
   ok('włączone bez dopasowania: pokazuje powód', r && /Brak dopasowania/.test(r.text), r);
   r = await render({ enabled: true, fit: { quality: 'dobre', rmse: 0.0123, days: 9, a: 1.23, pairs: 200 }, is_buy_source: false, tomorrow_available: true });
   ok('dopasowanie: jakość, błąd, liczba dób i wskazówka o sensorze', r && /dobre/.test(r.text) && /0\.012/.test(r.text) && /9 dób/.test(r.text) && /sensor\.bms_buy_rce/.test(r.text), r);
+  r = await render({ enabled: true, fit: { quality: 'idealne', rmse: 0.004, days: 12, a: 1.23, pairs: 280, exact: 0.987, max_err: 0.02 }, is_buy_source: false, tomorrow_available: true });
+  ok('odsetek godzin trafionych co do grosza i największy błąd', r && /idealne/.test(r.text) && /99% godzin/.test(r.text) && /0\.02 zł/.test(r.text), r);
   r = await render({ enabled: true, fit: { quality: 'średnie', rmse: 0.09, days: 5, a: 1.2, pairs: 100 }, is_buy_source: true, tomorrow_available: false });
   ok('jako źródło zakupu, jutra jeszcze brak: informacja o publikacji PSE', r && /nie opublikowało/.test(r.text), r);
   r = await render({ enabled: true, fit: null, note: '<img src=x onerror=alert(1)>' });

@@ -2176,8 +2176,8 @@ class BmsRuntime:
         e1 = e1 if isinstance(e1, list) and len(e1) == 24 else None
         token_set = bool(st.get("token"))
         # dokładne ceny z API Pstryka mają pierwszeństwo; model z PSE tylko tam, gdzie ich brak (np. jutro przed publikacją)
-        p0 = e0 or pricefeed_mod.predict(rce.get(today.isoformat()), fit)
-        p1 = e1 or pricefeed_mod.predict(rce.get(tom.isoformat()), fit)
+        p0 = e0 or pricefeed_mod.predict(rce.get(today.isoformat()), fit, today)
+        p1 = e1 or pricefeed_mod.predict(rce.get(tom.isoformat()), fit, tom)
         cur = p0[now.hour] if p0 else None
         note = None
         if token_set and st.get("pstryk_err"):
@@ -2197,7 +2197,7 @@ class BmsRuntime:
                 "prices_today": pricefeed_mod.series(today, p0, fmt(today)),
                 "prices_tomorrow": pricefeed_mod.series(tom, p1, fmt(tom)),
                 "tomorrow_available": bool(p1), "tomorrow_exact": bool(e1), "rce_today": rce.get(today.isoformat()), "rce_tomorrow": rce.get(tom.isoformat()),
-                "fit": ({k: fit[k] for k in ("a", "rmse", "quality", "days", "pairs")} if fit else None),
+                "fit": ({k: fit[k] for k in ("a", "rmse", "quality", "days", "pairs", "exact", "max_err") if k in fit} if fit else None),
                 "fit_at": st.get("fit_at"), "ok_at": st.get("ok_at"), "error": st.get("err"), "note": note,
                 "token_set": token_set, "exact_today": bool(e0), "exact_tomorrow": bool(e1), "pstryk_ok_at": st.get("pstryk_ok_at"),
                 "is_buy_source": self.pricefeed_is_buy_source(), "unit_of_measurement": "PLN/kWh"}
