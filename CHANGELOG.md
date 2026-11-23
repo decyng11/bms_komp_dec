@@ -3,6 +3,10 @@
 ## Ładowanie z sieci: wieczór tańszy niż po północy
 Przy taryfie dynamicznej okno ładowania zaczynało się dopiero po wieczornym „szczycie” wyliczonym z cen, więc tańsze godziny wieczorem (np. 0,60 zł o 20:00 wobec 0,90 zł po północy) w ogóle nie brały udziału w wyborze. Teraz, gdy PV już nie produkuje, okno obejmuje też wcześniejsze godziny wieczorne i wygrywa najtańszy blok.
 
+## Dokładne ceny prosto z API Pstryka (klucz z aplikacji)
+Pod tabelą cen (przy włączonych „Własnych cenach z PSE”) pojawiło się pole „Klucz API Pstryka” (klucz: aplikacja Pstryk → Konto → Urządzenia i integracje → Klucz API). Po zapisaniu EMS pobiera godzinowe ceny brutto (`price_gross`, jak w aplikacji) na dziś i na jutro bezpośrednio od Pstryka i wystawia je w `sensor.bms_buy_rce`. Ceny są wtedy identyczne co do grosza, bez przybliżenia z PSE; model z PSE zostaje tylko jako rezerwa dla godzin, których Pstryk jeszcze nie opublikował. Błąd (zły klucz, brak odpowiedzi) pokazuje się w notatce, a ceny nie są wtedy zgadywane. Klucz jest przechowywany tylko w stanie EMS, nie trafia do atrybutów sensora ani diagnostyki. Żeby planer z tego korzystał, wskaż `sensor.bms_buy_rce` jako „Encję ceny zakupu”.
+Uwaga: format odpowiedzi API (pole `price_gross`, lista `frames`, nagłówek `Authorization`) opiera się na publicznych opisach i nie był sprawdzony na prawdziwym koncie.
+
 ## Pełne ładowanie baterii co N dni (kalibracja SOC, wyrównanie ogniw)
 Nowy przełącznik „Pełne ładowanie baterii co kilka dni” (Ustawienia → funkcje, domyślnie wyłączony) i pole „co ile dni” (domyślnie 7). EMS zapamiętuje dzień, w którym bateria dobiła do ~100% (z sieci albo z PV, więc słoneczny dzień zalicza cykl bez dopłaty). Gdy od ostatniego pełnego naładowania minie wskazana liczba dni, planer podnosi cel nocnego ładowania do 100% i wybiera najtańszy blok, także gdy zwykły rachunek ładowania się nie spina. Opis okna w Planie mówi, ile dni minęło. Przy braku cen na jutro i w trybie burzowym zachowanie bez zmian.
 

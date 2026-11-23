@@ -287,6 +287,16 @@ analysis_get:
   name: "Analizy: porównanie taryf i symulacja roczna"
   description: Zwraca porównanie taryf na własnym poborze i symulację roczną z szacunkiem zwrotu inwestycji.
 
+pricefeed_token_set:
+  name: "Ceny: klucz API Pstryka"
+  description: Zapisuje klucz API Pstryka (Konto → Urządzenia i integracje → Klucz API), żeby EMS brał dokładne ceny z Pstryka. Pusty klucz wyłącza (administrator).
+  fields:
+    token:
+      name: Klucz API
+      required: false
+      selector:
+        text: {}
+
 analysis_set:
   name: "Analizy: zapisz ceny i nakłady"
   description: Ceny alternatywnych taryf i nakłady na PV/baterię do analiz (administrator).

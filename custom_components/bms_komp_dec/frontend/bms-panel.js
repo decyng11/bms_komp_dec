@@ -2574,7 +2574,7 @@
         const feed = this._hass.states[this._eid('sensor', 'buy_rce')], fa = (feed && feed.attributes) || null;
         const feedOn = !!(fa && fa.enabled);
         const key = JSON.stringify([sT, sJ, bT, bJ, bE, bEN, a.price_sell_source, a.price_buy_source, bNote, bNoteWait, new Date().getHours(),
-          feedOn, fa && fa.fit, fa && fa.note, fa && fa.tomorrow_available, fa && fa.is_buy_source, this._pfDur || 2, (this._hass.states[this._eid('switch', 'negative_price_reaction')] || {}).state]);
+          feedOn, fa && fa.fit, fa && fa.note, fa && fa.tomorrow_available, fa && fa.is_buy_source, fa && fa.token_set, fa && fa.exact_today, fa && fa.exact_tomorrow, this._pfDur || 2, (this._hass.states[this._eid('switch', 'negative_price_reaction')] || {}).state]);
         if (this._lastPriceTableKey === key) return;
         this._lastPriceTableKey = key;
         let html = this._priceTableHtml(sT, sJ, '', '');
@@ -2586,6 +2586,17 @@
           if (!container._pfBound) {
             container._pfBound = true;
             container.addEventListener('click', (ev) => {
+              const tk = ev.target && ev.target.closest ? ev.target.closest('[data-pf-token]') : null;
+              if (tk) {
+                const inp = container.querySelector('#pfToken');
+                const v = inp ? String(inp.value || '').trim() : '';
+                const clear = tk.dataset.pfToken === 'clear';
+                if (!clear && !v) return;
+                tk.disabled = true;
+                Promise.resolve(this._call('bms_komp_dec', 'pricefeed_token_set', { token: clear ? '' : v }))
+                  .catch(() => {}).then(() => { this._lastPriceTableKey = null; setTimeout(() => this._renderPriceTable(), 1500); });
+                return;
+              }
               const b = ev.target && ev.target.closest ? ev.target.closest('[data-pf-dur]') : null;
               if (!b) return;
               this._pfDur = Number(b.dataset.pfDur); this._lastPriceTableKey = null; this._renderPriceTable();
@@ -2599,7 +2610,14 @@
               + (fa.is_buy_source ? (fa.tomorrow_available ? 'Cena zakupu bierze się z tego sensora — jutro jest już znane.' : 'Cen na jutro PSE jeszcze nie opublikowało (zwykle po ~13:00).')
                 : 'Żeby planer ich używał, wskaż jako „encję ceny zakupu” sensor.bms_buy_rce (po kilku dobach zbierania możesz wyłączyć dotychczasowe źródło).')
             : this._esc(String(fa.note || 'Własne ceny z PSE: czekam na dane.'));
-          html += `<div class="price-note" id="priceFeedNote">🌐 ${txt}</div>`;
+          const ptxt = fa.token_set && fa.note ? this._esc(String(fa.note)) : txt;
+          html += `<div class="price-note" id="priceFeedNote">🌐 ${ptxt}</div>`;
+          html += `<div class="price-note" id="priceFeedToken" style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;">`
+            + `<span>🔑 Klucz API Pstryka (dokładne ceny zamiast przybliżenia z PSE)${fa.token_set ? ' — <b>ustawiony</b>' : ''}:</span>`
+            + `<input type="password" id="pfToken" autocomplete="off" placeholder="${fa.token_set ? 'wpisz nowy klucz, by zmienić' : 'wklej klucz z aplikacji Pstryk'}" style="flex:1;min-width:140px" />`
+            + `<button class="btn" data-pf-token="save" style="padding:7px 14px;">Zapisz</button>`
+            + (fa.token_set ? `<button class="btn" data-pf-token="clear" style="padding:7px 14px;">Usuń</button>` : '')
+            + `</div>`;
         }
         if (bNote) html += `<div class="price-note${bNoteWait ? ' wait' : ''}" id="priceBuyNote">${bNoteWait ? '⏳' : 'ℹ️'} <b>Jutro:</b> ${this._esc(bNote)}</div>`;
         container.innerHTML = html;

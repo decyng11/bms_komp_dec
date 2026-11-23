@@ -46,6 +46,7 @@ from . import adviser as adviser_mod
 from . import expand as expand_mod
 from . import fleet as fleet_mod
 from . import pricefeed as pricefeed_mod
+from . import pstrykapi as pstryk_mod
 from . import costforecast as costforecast_mod
 
 ISSUES_EVERY_S = 55          # lista „co dziś nie działa” liczy się co tyle sekund
@@ -2047,11 +2048,83 @@ class BmsRuntime:
             resp.release()
         return pricefeed_mod.parse_rce(data, d)
 
+    # --- dokładne ceny z API Pstryka (klucz z aplikacji); gdy ustawiony, zastępuje przybliżenie z PSE
+    def pstryk_token_set(self, token: str | None) -> bool:
+        st = self.pricefeed_state()
+        tok = str(token or "").strip()
+        if tok:
+            st["token"] = tok
+        else:
+            for k in ("token", "pstryk", "pstryk_err", "pstryk_ok_at", "pstryk_ts"):
+                st.pop(k, None)
+        st.pop("pstryk_err", None)
+        st["pstryk_ts"] = 0.0
+        self._save_state()
+        return bool(tok)
+
+    async def _pstryk_fetch_day(self, d: date) -> list[float | None] | None:
+        from yarl import URL
+        from homeassistant.helpers.aiohttp_client import async_get_clientsession
+        tok = str(self.pricefeed_state().get("token") or "")
+        sess = async_get_clientsession(self.hass)
+        tz = dt_util.get_default_time_zone() if hasattr(dt_util, "get_default_time_zone") else dt_util.DEFAULT_TIME_ZONE
+        url = URL(pstryk_mod.day_url(d, tz), encoded=True)
+        data = None
+        for bearer in (False, True):
+            resp = await asyncio.wait_for(sess.get(url, headers=pstryk_mod.headers(tok, bearer)), 20)
+            try:
+                if resp.status in (401, 403) and not bearer:
+                    continue
+                if resp.status in (401, 403):
+                    raise RuntimeError("Pstryk odrzucił klucz API (sprawdź klucz w aplikacji: Konto → Urządzenia i integracje → Klucz API)")
+                if resp.status == 429:
+                    raise RuntimeError("Pstryk: za dużo zapytań, spróbuję później")
+                if resp.status != 200:
+                    raise RuntimeError(f"Pstryk odpowiedział kodem {resp.status}")
+                data = await asyncio.wait_for(resp.json(content_type=None), 20)
+            finally:
+                resp.release()
+            break
+        return pstryk_mod.parse_day(data, d, tz)
+
+    async def _pstryk_tick(self, now: datetime, st: dict, loc: datetime) -> None:
+        if not st.get("token"):
+            return
+        today = loc.date()
+        tom = today + timedelta(days=1)
+        ps = {k: v for k, v in (st.get("pstryk") or {}).items() if isinstance(v, list) and len(v) == 24
+              and k in (today.isoformat(), tom.isoformat())} if isinstance(st.get("pstryk"), dict) else {}
+        ts = now.timestamp()
+        last = float(st.get("pstryk_ts") or 0.0)
+        tom_missing = tom.isoformat() not in ps
+        due = (ts - last >= 3600 or (tom_missing and loc.hour >= 12 and ts - last >= 600)
+               or (today.isoformat() not in ps and ts - last >= 60))
+        if not due:
+            st["pstryk"] = ps
+            return
+        st["pstryk_ts"] = ts
+        err = None
+        for d in [today] + ([tom] if loc.hour >= 11 else []):
+            try:
+                arr = await self._pstryk_fetch_day(d)
+            except Exception as e:  # noqa: BLE001
+                err = f"{type(e).__name__}: {e}"[:200]
+                break
+            if arr:
+                ps[d.isoformat()] = arr
+                st["pstryk_ok_at"] = loc.isoformat(timespec="minutes")
+            elif d == today:
+                err = "Pstryk nie zwrócił pełnych cen na dziś (sprawdź klucz i format odpowiedzi)"
+        st["pstryk"] = ps
+        st["pstryk_err"] = err
+        self._save_state()
+
     async def pricefeed_tick(self, now: datetime) -> None:
         if not switch_on(self.hass, "price_feed", False):
             return
         st = self.pricefeed_state()
         loc = dt_util.as_local(now)
+        await self._pstryk_tick(now, st, loc)
         today = loc.date()
         tom = today + timedelta(days=1)
         rce = pricefeed_mod.prune(st.get("rce"), today)
@@ -2097,11 +2170,21 @@ class BmsRuntime:
         enabled = switch_on(self.hass, "price_feed", False)
         tz = lambda d: dt_util.as_local(datetime(d.year, d.month, d.day, 12, tzinfo=timezone.utc)).strftime("%z")  # noqa: E731
         fmt = lambda d: (lambda z: f"{z[:3]}:{z[3:]}")(tz(d))  # noqa: E731
-        p0 = pricefeed_mod.predict(rce.get(today.isoformat()), fit)
-        p1 = pricefeed_mod.predict(rce.get(tom.isoformat()), fit)
+        ex = st.get("pstryk") if isinstance(st.get("pstryk"), dict) else {}
+        e0, e1 = ex.get(today.isoformat()), ex.get(tom.isoformat())
+        e0 = e0 if isinstance(e0, list) and len(e0) == 24 else None
+        e1 = e1 if isinstance(e1, list) and len(e1) == 24 else None
+        token_set = bool(st.get("token"))
+        # dokładne ceny z API Pstryka mają pierwszeństwo; model z PSE tylko tam, gdzie ich brak (np. jutro przed publikacją)
+        p0 = e0 or pricefeed_mod.predict(rce.get(today.isoformat()), fit)
+        p1 = e1 or pricefeed_mod.predict(rce.get(tom.isoformat()), fit)
         cur = p0[now.hour] if p0 else None
         note = None
-        if not enabled:
+        if token_set and st.get("pstryk_err"):
+            note = f"Pstryk API: {st['pstryk_err']}"
+        elif token_set and e0:
+            note = "Ceny dokładnie z API Pstryka (price_gross, jak w aplikacji)" + ("" if e1 else "; jutro Pstryk jeszcze nie opublikował cen")
+        elif not enabled:
             note = "Włącz przełącznik „Własne ceny z PSE (RCE)”."
         elif st.get("err"):
             note = f"Nie udało się pobrać cen z PSE: {st['err']}"
@@ -2113,9 +2196,10 @@ class BmsRuntime:
         return {"now": None if cur is None else round(float(cur), 4), "enabled": enabled,
                 "prices_today": pricefeed_mod.series(today, p0, fmt(today)),
                 "prices_tomorrow": pricefeed_mod.series(tom, p1, fmt(tom)),
-                "tomorrow_available": bool(p1), "rce_today": rce.get(today.isoformat()), "rce_tomorrow": rce.get(tom.isoformat()),
+                "tomorrow_available": bool(p1), "tomorrow_exact": bool(e1), "rce_today": rce.get(today.isoformat()), "rce_tomorrow": rce.get(tom.isoformat()),
                 "fit": ({k: fit[k] for k in ("a", "rmse", "quality", "days", "pairs")} if fit else None),
                 "fit_at": st.get("fit_at"), "ok_at": st.get("ok_at"), "error": st.get("err"), "note": note,
+                "token_set": token_set, "exact_today": bool(e0), "exact_tomorrow": bool(e1), "pstryk_ok_at": st.get("pstryk_ok_at"),
                 "is_buy_source": self.pricefeed_is_buy_source(), "unit_of_measurement": "PLN/kWh"}
 
     # --------------------------------------------- niskie/ujemne ceny (funkcja 1)
