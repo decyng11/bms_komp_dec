@@ -40,8 +40,22 @@ _NONE_WORDS = {"brak", "none", "no", "nie", "flat", "g11", "-", "—", "–"}
 _SPAN_RE = re.compile(r"^\s*(\d{1,2})(?::(\d{2}))?\s*[-–—]\s*(\d{1,2})(?::(\d{2}))?\s*$")
 
 
-def parse_peaks(text: str | None) -> tuple[tuple[tuple[int, int], ...] | None, str | None]:
-    """„6-13,15-22” → ((6, 13), (15, 22)). Zwraca (okna, błąd); przy błędzie okna = None.
+# Gotowe taryfy wpisywane słowem zamiast okien (godziny z taryf operatorów; weekendy i święta ustawia się osobnymi przełącznikami):
+#  g12w — Pn–Pt 6–13 i 15–22 (Tauron/Enea/PGE), g12r — Energa: 7–13 i 16–22 codziennie,
+#  g13  — Tauron: przedpołudnie 7–13 oraz popołudnie 16–21 (zima 1.X–31.III) albo 19–22 (lato 1.IV–30.IX); reszta doby, weekendy i święta tanie.
+PRESET_PEAKS = {"g12w": ((6, 13), (15, 22)), "g12r": ((7, 13), (16, 22))}
+G13_WINTER = ((7, 13), (16, 21))
+G13_SUMMER = ((7, 13), (19, 22))
+
+
+def g13_peaks(today: date | None = None) -> tuple[tuple[int, int], ...]:
+    """Okna szczytu G13 dla sezonu danego dnia (zima 1.X–31.III, lato 1.IV–30.IX)."""
+    m = (today or dt_util.now().date()).month
+    return G13_SUMMER if 4 <= m <= 9 else G13_WINTER
+
+
+def parse_peaks(text: str | None, today: date | None = None) -> tuple[tuple[tuple[int, int], ...] | None, str | None]:
+    """„6-13,15-22” → ((6, 13), (15, 22)); także słowa „g12w”, „g12r”, „g13” (G13 przełącza się sezonowo). Zwraca (okna, błąd); przy błędzie okna = None.
 
     „brak” oznacza taryfę jednostrefową (bez szczytu). Okna tylko w pełnych godzinach, rosnąco,
     bez przecięć przez północ (dla szczytu przez północ podaj dwa okna, np. „0-6,22-24”)."""
@@ -50,6 +64,10 @@ def parse_peaks(text: str | None) -> tuple[tuple[tuple[int, int], ...] | None, s
         return DEFAULT_PEAKS, None
     if raw in _NONE_WORDS:
         return (), None
+    if raw in PRESET_PEAKS:
+        return PRESET_PEAKS[raw], None
+    if raw == "g13":
+        return g13_peaks(today), None
     spans: list[tuple[int, int]] = []
     for part in re.split(r"[;,]", raw):
         if not part.strip():
