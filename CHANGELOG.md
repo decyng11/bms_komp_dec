@@ -3,6 +3,9 @@
 ## Ładowanie z sieci: wieczór tańszy niż po północy
 Przy taryfie dynamicznej okno ładowania zaczynało się dopiero po wieczornym „szczycie” wyliczonym z cen, więc tańsze godziny wieczorem (np. 0,60 zł o 20:00 wobec 0,90 zł po północy) w ogóle nie brały udziału w wyborze. Teraz, gdy PV już nie produkuje, okno obejmuje też wcześniejsze godziny wieczorne i wygrywa najtańszy blok.
 
+## Porównanie taryf: stawki wyliczane automatycznie
+Pola „strefa: szczyt / poza”, „okna” i „narzut dynamicznej” nie trzeba już wpisywać: puste pola liczą się same z Twoich zapisanych cen (mediana ceny zakupu w godzinach szczytu i poza nim wg okien z konfiguracji; narzut = mediana „cena zakupu − cena sprzedaży/RCE”) i pokazują się w polu jako „auto …”. Wpisana ręcznie wartość ma pierwszeństwo. G11 i nakładów (PV, bateria) nie da się odgadnąć z danych, więc zostają do wpisania.
+
 ## Najlepsze okno dla urządzenia (karta: Plan → pod tabelą cen)
 Pasek cen zakupu od teraz do końca jutra (zielony = tanio, czerwony = drogo) i przyciski „pracuje przez 1–4 h”: panel pokazuje najtańszy i najdroższy ciągły blok oraz o ile taniej niż średnio. Powiadomienie „plan na jutro” dopisuje przy taryfie dynamicznej zdanie „Najtaniej 12–14 (śr. …), najdrożej 18–20 (…)”.
 

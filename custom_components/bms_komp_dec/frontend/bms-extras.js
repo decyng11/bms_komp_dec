@@ -1322,13 +1322,14 @@
       _exSimHtml() {
         const an = this._exPx().an;
         if (!an.data) return an.err ? `<div class="chart-empty" style="color:var(--red);">Nie udało się wczytać: ${exEsc(an.err)}</div>` : '<div class="chart-empty">Ładowanie…</div>';
-        const sim = an.data.sim, cfg = an.data.cfg || {};
+        const sim = an.data.sim, cfg = an.data.cfg || {}, au = an.data.auto || {};
         const inp = (id, v, ph) => `<input type="text" inputmode="decimal" id="${id}" value="${v == null ? '' : exEsc(String(v))}" placeholder="${ph}" style="width:110px" />`;
-        const zc = cfg.zone || {};
+        const zc = cfg.zone || {}, az = au.zone || {};
+        const ph = (v, t) => (v == null ? t : 'auto ' + exFmt(v, 2));
         const form = '<div class="px-row"><div class="nm">Nakłady (do liczenia zwrotu)<small>instalacja PV i bateria, zł; cena dokupienia baterii za 1 kWh</small></div>' + inp('pxIp', cfg.invest_pv, 'PV zł') + inp('pxIb', cfg.invest_batt, 'bateria zł') + inp('pxIk', cfg.batt_zl_kwh, 'zł za kWh baterii')
           + '<button class="btn" data-px-an="invest" style="padding:7px 14px;">Zapisz</button></div>'
-          + '<div class="px-row"><div class="nm">Porównanie taryf<small>stawki do porównania, zł/kWh (puste = pomiń)</small></div>' + inp('pxTg', cfg.g11, 'G11 zł/kWh') + inp('pxTd', cfg.dyn_markup, 'narzut dynamicznej')
-          + inp('pxTzp', zc.peak, 'strefa: szczyt') + inp('pxTzo', zc.off, 'strefa: poza') + inp('pxTzw', zc.windows, 'okna np. 6-13,15-22')
+          + '<div class="px-row"><div class="nm">Porównanie taryf<small>stawki do porównania, zł/kWh. Puste pola liczą się automatycznie z Twoich cen (strefowa, dynamiczna); G11 trzeba wpisać</small></div>' + inp('pxTg', cfg.g11, 'G11 zł/kWh') + inp('pxTd', cfg.dyn_markup, ph(au.dyn_markup, 'narzut dynamic'))
+          + inp('pxTzp', zc.peak, ph(az.peak, 'strefa: szczyt')) + inp('pxTzo', zc.off, ph(az.off, 'strefa: poza')) + inp('pxTzw', zc.windows, az.windows && az.peak != null ? 'auto ' + az.windows : 'okna np. 6-13,15-22')
           + '<button class="btn" data-px-an="invest" style="padding:7px 14px;">Zapisz</button></div>';
         const bt = an.data.batt;
         const battBox = bt && Array.isArray(bt.rows) && bt.rows.length

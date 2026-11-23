@@ -1953,8 +1953,17 @@ class BmsRuntime:
                                              _day_costs, self.insights._soc0)  # noqa: SLF001
         except Exception:  # noqa: BLE001
             _LOGGER.debug("EMS: symulacja większej baterii nieudana", exc_info=True)
-        return {"batt": batt, "tariff": analysis_mod.tariff_compare(buckets, cfg, today),
-                "sim": analysis_mod.year_sim(dict(self.insights.days), cfg, avg), "cfg": cfg, "neg": neg,
+        auto: dict[str, Any] = {}
+        try:
+            prof = get_profile()
+            base = getattr(prof, "base", prof)
+            auto = analysis_mod.auto_cfg({k: b for k, b in buckets.items() if b}, base.as_text().replace("brak", ""),
+                                         bool(getattr(base, "weekend_offpeak", True)), bool(getattr(base, "holiday_offpeak", True)))
+        except Exception:  # noqa: BLE001
+            _LOGGER.debug("EMS: automatyczne stawki taryf nieudane", exc_info=True)
+        eff = {**auto, **cfg}                      # to, co wpisał użytkownik, ma pierwszeństwo przed wyliczonym automatycznie
+        return {"batt": batt, "tariff": analysis_mod.tariff_compare(buckets, eff, today), "auto": auto,
+                "sim": analysis_mod.year_sim(dict(self.insights.days), eff, avg), "cfg": cfg, "neg": neg,
                 "neg_reaction": switch_on(self.hass, "negative_price_reaction", False),
                 "neg_threshold": number_value(self.hass, "low_price_threshold", 0.0)}
 

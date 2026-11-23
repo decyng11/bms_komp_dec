@@ -4,7 +4,9 @@ Wszystko to SZACUNKI z godzinowych koszyków i dziennych kosztów Insights (a ni
 bez zmiany zachowania EMS przy innej taryfie."""
 from __future__ import annotations
 
+
 from datetime import date, datetime, timedelta
+from statistics import median
 from typing import Any
 
 from .tariff import TariffProfile, parse_peaks
@@ -44,6 +46,45 @@ def clean_cfg(raw: dict | None) -> dict[str, Any]:
                 out["zone"] = {"peak": round(peak, 4), "off": round(off, 4), "windows": txt,
                                "weekend_offpeak": bool(z.get("weekend_offpeak", True)),
                                "holiday_offpeak": bool(z.get("holiday_offpeak", True))}
+    return out
+
+
+def auto_cfg(buckets_by_day: dict[str, list], peaks_txt: str, weekend_offpeak: bool = True, holiday_offpeak: bool = True,
+             min_hours: int = 48) -> dict[str, Any]:
+    """Stawki do porównania taryf wyliczone z Twoich danych, gdy ich nie wpisałeś: strefowa (mediana ceny zakupu w godzinach
+    szczytu i poza nim wg okien z konfiguracji) i narzut dynamicznej (mediana: cena zakupu − cena sprzedaży/RCE).
+    G11 i nakładów nie da się odgadnąć z danych — te zostają do wpisania. Za mało danych → pole pomijamy."""
+    out: dict[str, Any] = {}
+    peaks, err = parse_peaks(peaks_txt or "")
+    pk: list[float] = []
+    off: list[float] = []
+    mk: list[float] = []
+    prof = TariffProfile(peaks or (), weekend_offpeak, holiday_offpeak) if peaks and err is None else None
+    for k, bs in buckets_by_day.items():
+        try:
+            d = date.fromisoformat(k)
+        except ValueError:
+            continue
+        for h, b in enumerate(bs or []):
+            if b is None or not b[_BUY_T] or b[_BUY_T] < 1800:
+                continue
+            buy = _f(b[_BUY_S] / b[_BUY_T])
+            if buy is None or buy <= 0:
+                continue
+            if prof is not None:
+                (pk if prof.is_peak(datetime(d.year, d.month, d.day, h)) else off).append(buy)
+            sell = _f(b[_SELL_S] / b[_SELL_T]) if b[_SELL_T] and b[_SELL_T] >= 1800 else None
+            if sell is not None:
+                mk.append(buy - max(0.0, sell))
+    if prof is not None and len(pk) >= 12 and len(off) >= 12:
+        p, o = median(pk), median(off)
+        if 0 < o < p <= _CFG_MAX["g11"]:
+            out["zone"] = {"peak": round(p, 4), "off": round(o, 4), "windows": peaks_txt,
+                           "weekend_offpeak": bool(weekend_offpeak), "holiday_offpeak": bool(holiday_offpeak)}
+    if len(mk) >= min_hours:
+        m = median(mk)
+        if 0 <= m <= _CFG_MAX["dyn_markup"]:
+            out["dyn_markup"] = round(m, 4)
     return out
 
 

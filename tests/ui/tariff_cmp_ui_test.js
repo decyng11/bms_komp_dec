@@ -13,16 +13,17 @@ const TARIFF = { days: 30, import_kwh: 400, note: 'Szacunek.', best: 'g11', rows
     const e = await openCard(b, { admin: true, mobile: true });
     await e.page.setViewportSize({ width: w, height: 800 });
     await e.q((t) => { document.getElementById('h').style.width = t.w + 'px'; window.__svc = window.__svc || {};
-      window.__svc['bms_komp_dec.analysis_get'] = () => ({ response: { tariff: t.tariff, cfg: { g11: 0.9 }, sim: null } });
+      window.__svc['bms_komp_dec.analysis_get'] = () => ({ response: { tariff: t.tariff, cfg: { g11: 0.9 }, auto: { zone: { peak: 1.29, off: 0.62, windows: '6-13,15-22' }, dyn_markup: 0.41 }, sim: null } });
       window.__svc['bms_komp_dec.analysis_set'] = (m) => { window.__sent = m.service_data || m; return { response: {} }; }; }, { w, tariff: TARIFF });
     await e.q(() => __el.shadowRoot.querySelector('.tab[data-tab="log"]').click());
     await e.page.waitForFunction(() => !!__el.shadowRoot.querySelector('#exSimBox table'), null, { timeout: 10000 }); await sleep(300);
     const r = await e.q(() => { const box = __el.shadowRoot.querySelector('#exSimBox'), wrap = box.querySelector('.px-tbl-wrap');
       return { rows: box.querySelectorAll('table tbody tr').length, fit: wrap.scrollWidth <= wrap.clientWidth + 1, doc: document.documentElement.scrollWidth,
-        whatif: (box.textContent.match(/scenariusz, nie taryfa/g) || []).length, best: !!box.querySelector('tr.px-best'), g11: box.querySelector('#pxTg').value }; });
+        whatif: (box.textContent.match(/scenariusz, nie taryfa/g) || []).length, best: !!box.querySelector('tr.px-best'), g11: box.querySelector('#pxTg').value, php: box.querySelector('#pxTzp').placeholder, phd: box.querySelector('#pxTd').placeholder }; });
     ok(r.rows === 4 && r.whatif === 2 && r.best, `${w}px: 4 wiersze, 2 oznaczone jako scenariusz, najlepsza podświetlona (${JSON.stringify(r)})`);
     ok(r.fit && r.doc <= w, `${w}px: tabela mieści się bez przewijania w bok`);
     ok(r.g11 === '0.9', `${w}px: pole G11 wypełnione z ustawień`);
+    ok(/auto 1,29/.test(r.php) && /auto 0,41/.test(r.phd), `${w}px: puste pola pokazują wartość wyliczoną automatycznie (${r.php} / ${r.phd})`);
     if (w === 390) {
       await e.q(() => { const sh = __el.shadowRoot; sh.querySelector('#pxTzp').value = '1,2'; sh.querySelector('#pxTzo').value = '0.6'; sh.querySelector('#pxTzw').value = '6-13'; sh.querySelector('[data-px-an]').click(); });
       await sleep(400);
