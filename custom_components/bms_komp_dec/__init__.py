@@ -41,7 +41,7 @@ _SERVICES = (
     "watch_write", "watch_status", "watch_clear", "health_check", "monthly_report", "get_plan",
     "diag_store_get_all", "diag_store_set", "diag_store_delete",
     "notify_settings_get", "notify_settings_set", "notify_test", "inbox_action", "devices_get", "devices_set", "devices_discover", "insights_get", "self_test", "diagnostic_report",
-    "override_set", "override_clear", "analysis_get", "analysis_set", "pricefeed_token_set", "control_test", "settings_log_get",
+    "override_set", "override_clear", "analysis_get", "analysis_set", "control_test", "settings_log_get",
     "profiles_get", "profile_apply", "profile_revert", "profile_save", "profile_delete", "profile_schedule", "profile_schedule_clear", "pv_caution_apply", "pv_caution_revert", "pv_caution_dismiss",
     "grid_outage_test", "expand_estimate", "fleet_get", "fleet_set",
 )
@@ -596,13 +596,6 @@ def _register_services(hass: HomeAssistant) -> None:
         rt.analysis_set(data)
         return rt.analysis_payload()
 
-    async def handle_pricefeed_token_set(call):
-        await _require_admin(hass, call)
-        rt = _need_runtime(hass)
-        ok = rt.pstryk_token_set(call.data.get("token"))
-        await rt.pricefeed_tick(dt_util.now())
-        return {"token_set": ok, **{k: v for k, v in rt.pricefeed_payload().items() if k in ("note", "exact_today", "exact_tomorrow", "error")}}
-
     async def handle_control_test(call):
         await _require_admin(hass, call)
         rt = _need_runtime(hass)
@@ -631,7 +624,6 @@ def _register_services(hass: HomeAssistant) -> None:
         ("override_clear", handle_override_clear, SupportsResponse.OPTIONAL),
         ("analysis_get", handle_analysis_get, SupportsResponse.ONLY),
         ("analysis_set", handle_analysis_set, SupportsResponse.OPTIONAL),
-        ("pricefeed_token_set", handle_pricefeed_token_set, SupportsResponse.OPTIONAL),
         ("control_test", handle_control_test, SupportsResponse.OPTIONAL),
         ("settings_log_get", handle_settings_log_get, SupportsResponse.ONLY),
         ("profiles_get", handle_profiles_get, SupportsResponse.ONLY),

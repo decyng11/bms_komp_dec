@@ -35,7 +35,7 @@ async def run():
         await rt.pricefeed_tick(now)
     pl = rt.pricefeed_payload()
     check("pobrano dziś, jutro i historię", today in calls and tom in calls and len(set(calls)) >= 15, sorted(set(calls))[:3])
-    check("dopasowanie z prawdziwych cen: mnożnik 1,23, jakość „idealne”", pl["fit"] and abs(pl["fit"]["a"] - 1.23) < 0.01 and pl["fit"]["quality"] == "idealne", pl["fit"])
+    check("dopasowanie z prawdziwych cen: mnożnik 1,23, jakość „dobre”", pl["fit"] and abs(pl["fit"]["a"] - 1.23) < 0.01 and pl["fit"]["quality"] == "dobre", pl["fit"])
     check("sensor: 24 ceny na dziś i na jutro, jutro dostępne", len(pl["prices_today"]) == 24 and len(pl["prices_tomorrow"]) == 24 and pl["tomorrow_available"], (len(pl["prices_today"]), len(pl["prices_tomorrow"])))
     exp = 1.23 * shape(-1)[10] + 0.40
     got = [x["price"] for x in pl["prices_tomorrow"]][10]
