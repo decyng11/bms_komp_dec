@@ -56,6 +56,13 @@ async def run():
     check("flagi: dokładne dziś i jutro, klucz ustawiony", pl["exact_today"] and pl["exact_tomorrow"] and pl["token_set"] and "Pstryka" in (pl["note"] or ""), pl["note"])
     check("klucz nie wycieka w payloadzie", "sekret" not in repr(pl))
     check("cena bieżąca = godzina 14", abs(pl["now"] - pr[14]) < 1e-9, pl["now"])
+    # jutro jeszcze nieopublikowane: z kluczem NIE wyliczamy ceny z PSE
+    rce_tom = [0.4] * 24
+    rt.pricefeed_state()["rce"] = {d.isoformat(): [0.4] * 24, tom.isoformat(): rce_tom}
+    rt.pricefeed_state()["fit"] = {"a": 1.23, "b": [0.2] * 24, "bw": None, "rmse": 0.0, "quality": "idealne", "days": 9, "pairs": 200}
+    rt.pricefeed_state()["pstryk"] = {d.isoformat(): pr}
+    pl = rt.pricefeed_payload()
+    check("z kluczem: jutro bez ceny od Pstryka = brak cen (bez modelu z PSE)", pl["prices_tomorrow"] == [] and not pl["tomorrow_available"] and len(pl["prices_today"]) == 24, (len(pl["prices_tomorrow"]), pl["tomorrow_available"]))
     # błąd Pstryka → komunikat, bez wymyślania cen
     async def boom(day): raise RuntimeError("Pstryk odrzucił klucz API")
     rt._pstryk_fetch_day = boom; rt.pricefeed_state()["pstryk_ts"] = 0.0; rt.pricefeed_state()["pstryk"] = {}

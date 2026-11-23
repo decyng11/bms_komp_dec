@@ -2176,14 +2176,15 @@ class BmsRuntime:
         e1 = e1 if isinstance(e1, list) and len(e1) == 24 else None
         token_set = bool(st.get("token"))
         # dokładne ceny z API Pstryka mają pierwszeństwo; model z PSE tylko tam, gdzie ich brak (np. jutro przed publikacją)
-        p0 = e0 or pricefeed_mod.predict(rce.get(today.isoformat()), fit, today)
-        p1 = e1 or pricefeed_mod.predict(rce.get(tom.isoformat()), fit, tom)
+        # z kluczem Pstryka: tylko prawdziwe ceny od Pstryka, bez żadnego wyliczania (brak ceny = brak ceny)
+        p0 = e0 if token_set else pricefeed_mod.predict(rce.get(today.isoformat()), fit, today)
+        p1 = e1 if token_set else pricefeed_mod.predict(rce.get(tom.isoformat()), fit, tom)
         cur = p0[now.hour] if p0 else None
         note = None
         if token_set and st.get("pstryk_err"):
             note = f"Pstryk API: {st['pstryk_err']}"
         elif token_set and e0:
-            note = "Ceny dokładnie z API Pstryka (price_gross, jak w aplikacji)" + ("" if e1 else "; jutro Pstryk jeszcze nie opublikował cen")
+            note = "Ceny dokładnie z API Pstryka (price_gross, jak w aplikacji), bez wyliczania" + ("" if e1 else "; jutro Pstryk jeszcze nie opublikował cen")
         elif not enabled:
             note = "Włącz przełącznik „Własne ceny z PSE (RCE)”."
         elif st.get("err"):
