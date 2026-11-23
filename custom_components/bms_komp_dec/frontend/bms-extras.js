@@ -758,7 +758,8 @@
         const hzTable = hz.length ? `<div style="font-size:11px;color:var(--muted);margin-top:12px;">Prognoza PV: błąd osobno dla każdego dnia do przodu</div>
           <div style="overflow-x:auto;"><table data-role="pv-horizon" style="width:100%;border-collapse:collapse;font-size:12px;margin-top:4px;">
             <thead><tr style="color:var(--muted);text-align:right;"><th style="text-align:left;font-weight:600;">Dzień</th><th style="font-weight:600;">Dni danych</th><th style="font-weight:600;">Błąd surowej</th><th style="font-weight:600;">Błąd po korekcie</th><th style="font-weight:600;">Korekta</th><th style="font-weight:600;">Zakres</th></tr></thead>
-            <tbody>${hzRows}</tbody></table></div>` : '';
+            <tbody>${hzRows}</tbody></table></div>
+          <div data-role="pv-wape" style="font-size:11px;color:var(--muted);margin-top:4px;line-height:1.4;">Błąd ważony (WAPE, nie zawyżają go słabe dni): ${hz.filter((r) => r.wape !== null && r.wape !== undefined).map((r) => `${hzName(r.h)} ${exPct(r.wape, 0)}`).join(' · ') || 'za mało danych'}. Korekta dalszego dnia włącza się tylko wtedy, gdy w teście na wcześniejszych dniach zmniejsza błąd.</div>` : '';
         const hzTune = (() => {
           const tn = hz.filter((r) => r.tune && r.tune.mae != null);
           if (!tn.length) return '';

@@ -1,5 +1,14 @@
 # EMS komp-dec 0.9.6.0
 
+## Stabilniejsze planowanie (mniej zmian bez sensu)
+Nowe godziny okna ładowania z sieci / sprzedaży zastępują poprzednie dopiero wtedy, gdy ma to sens: (1) okno, które trwa albo zaczyna się w ciągu 2 godzin, nie zmienia godzin; (2) inna propozycja musi utrzymać się w 2 kolejnych przeliczeniach planu; (3) wyraźnie lepszy wynik (zysk wyższy o 1 zł) wchodzi od razu; pojawienie się albo pominięcie okna nie czeka. Każda zmiana i każde wstrzymanie zmiany trafia do dziennika („Plan: … zostaje … — powód”). Ustawień użytkownika (sprawność cyklu, rezerwa SOC) nie zmieniono.
+
+## Prognoza PV: korekta dalszych dni tylko tam, gdzie pomaga
+Dla dni +1…+6 korekta jest stosowana tylko wtedy, gdy w teście „na przód” (liczona wyłącznie z wcześniejszych dni) zmniejsza średni błąd względem surowej prognozy; w przeciwnym razie współczynnik wynosi 1,0. Przy tabeli błędów dodano miarę WAPE (nie zawyżają jej słabe zimowe dni).
+
+## Ustawienia: lista podstron
+Dolny pasek ma tylko: Główny, Plan, Zysk, Ustawienia. „EMS”, „Urządzenia”, „Wygląd panelu” i „Serwis i diagnostyka” (tylko administrator) są podstronami listy w Ustawieniach, z przyciskiem „‹ Ustawienia” do powrotu.
+
 ## Wykres produkcji PV z historią (karta: Wykresy → Produkcja PV)
 Nad wykresem pojawił się wybór przedziału: „‹ Wczoraj · Dziś · Jutro · 7 dni · 30 dni · wybór daty ›”. Wczoraj i dowolny dzień do 62 dni wstecz pokazuje godziny: rzeczywista produkcja (z zapisów EMS) obok porannej prognozy tamtego dnia. Jutro pokazuje prognozę, której używa planer. 7 i 30 dni to słupki dobowe z sumą, prognozą i średnim błędem prognozy za okres (najeżdżając na słupek, widzisz wartości). Wybór zostaje zapamiętany na urządzeniu; „Dziś” działa jak dotąd. Nowa usługa `pv_chart_get`.
 

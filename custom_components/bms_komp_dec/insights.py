@@ -177,6 +177,12 @@ def _mape(pairs: list[tuple[float, float]], min_actual: float) -> float | None:
     return round(100.0 * sum(vals) / len(vals), 1) if vals else None
 
 
+def _wape(pairs: list[tuple[float, float]]) -> float | None:
+    """Σ|prognoza − wykonanie| / Σ wykonanie: nie dominują go słabe zimowe dni (w przeciwieństwie do MAPE)."""
+    sa = sum(a for _f_, a in pairs)
+    return round(100.0 * sum(abs(f_ - a) for f_, a in pairs) / sa, 1) if sa > 0 else None
+
+
 def _bias(pairs: list[tuple[float, float]]) -> float | None:
     sf = sum(f_ for f_, _a in pairs)
     sa = sum(a for _f_, a in pairs)
@@ -554,6 +560,26 @@ class Insights:
         cache[key] = res
         return res
 
+    def pv_correction_helps(self, h: int, today: date, window: int, mode: str) -> bool | None:
+        """Uczciwy test „na przód”: czy korekta horyzontu h, liczona tylko z dni wcześniejszych, zmniejsza średni błąd bezwzględny
+        względem surowej prognozy. None = za mało dni do oceny (wtedy korekta działa jak dotąd)."""
+        dated = self._pv_pairs_dated(h, today)
+        if len(dated) < PV_MODEL_MIN_DAYS + PV_TUNE_MIN_EVAL:
+            return None
+        prior_all = self._pv_pooled_prior(today)
+        raw_err: list[float] = []
+        adj_err: list[float] = []
+        for idx, (age, f_, a_) in enumerate(dated):
+            prior = [(pf, pa) for page, pf, pa in dated[idx + 1:] if page - age <= window]
+            r = self._pv_factor_from(prior, mode, prior_all)
+            if r is None:
+                continue
+            raw_err.append(abs(f_ - a_))
+            adj_err.append(abs(f_ * r[0] - a_))
+        if len(raw_err) < PV_TUNE_MIN_EVAL:
+            return None
+        return sum(adj_err) < 0.98 * sum(raw_err)
+
     def pv_horizon_factor(self, h: int, today: date | None = None) -> tuple[float, int, float | None]:
         """(współczynnik, liczba dni, typowy stosunek wykonanie/prognoza) dla prognozy na h dni do przodu. Brak danych dla h → h−1.
         Okno i sposób liczenia wybiera samostrojenie (pv_tuning)."""
@@ -568,6 +594,8 @@ class Insights:
                 pairs = self._pv_pairs(hh, today)
                 r = self._pv_factor_from(pairs, "median", prior)
             if r is not None:
+                if h > 0 and self.pv_correction_helps(hh, today, tun["window"], tun["mode"]) is False:
+                    return 1.0, len(pairs), round(r[1], 3)     # korekta tego horyzontu w teście „na przód” nie poprawia błędu
                 return round(r[0], 3), len(pairs), round(r[1], 3)
         return 1.0, 0, None
 
@@ -695,7 +723,7 @@ class Insights:
             raw = self._pv_pairs(h, today)
             adj = self._pv_pairs(h, today, "adj")
             fac, n, med = self.pv_horizon_factor(h, today)
-            out.append({"h": h, "n": len(raw), "mape": _mape(raw, 0.5), "bias": _bias(raw),
+            out.append({"h": h, "n": len(raw), "mape": _mape(raw, 0.5), "wape": _wape(raw), "wape_adj": _wape(adj), "bias": _bias(raw),
                         "n_adj": len(adj), "mape_adj": _mape(adj, 0.5), "factor": fac, "ratio": med,
                         "tune": {k: v for k, v in self.pv_tuning(h, today).items()},
                         "spread": self.pv_spread(h, today)})

@@ -21,6 +21,7 @@ from .const import (
     DEFAULT_BATTERY_CAPACITY_KWH, DEFAULT_PRICE_BUY_ENTITY, DEFAULT_PRICE_SELL_ENTITY, WEEKDAY_SWITCH_KEYS,
 )
 from . import inbox
+from . import planhold
 from .gridlimit import GridLimiter
 from . import brands
 from . import inverter_ctl as ictl
@@ -176,6 +177,7 @@ class BmsRuntime:
         self._reserve_cache: tuple[float, dict[str, Any]] | None = None
         self._plan: dict[str, Any] | None = None           # ostatni plan (krzywa SOC) z optymalizatora
         self._plan_ts = 0.0
+        self._plan_hold: dict[str, Any] = {}
         self._plan_lock = asyncio.Lock()
         self._report_cache: tuple[str, dict[str, Any]] | None = None
         self._state_store = ThrottledStore(hass, 1, "bms_komp_dec_runtime", delay=30)
@@ -2304,6 +2306,7 @@ class BmsRuntime:
                 _LOGGER.warning("EMS: plan 24 h niedostępny: %s", err, exc_info=True)
                 return self._plan
             self._plan_ts = dt_util.now().timestamp()
+            prev_plan = self._plan
             self._plan = {
                 "generated_at": res.get("generated_at"), "mode": res.get("mode"),
                 "error": res.get("error"), "curve": res.get("curve"), "assumptions": res.get("assumptions"),
@@ -2312,6 +2315,12 @@ class BmsRuntime:
                                   **{x: p[x] for x in ("gain_pln", "required", "confidence", "sale_kwh", "sale_gross_pln", "sale_day") if x in p}}
                               for k, p in (res.get("proposals") or {}).items()},
             }
+            try:
+                loc_now = dt_util.as_local(dt_util.now())
+                for line in planhold.stabilize(prev_plan, self._plan, self._plan_hold, loc_now.hour * 60 + loc_now.minute, force):
+                    self.log.add("plan", line, "info")
+            except Exception as err:  # noqa: BLE001
+                _LOGGER.debug("EMS: stabilizacja planu nieudana: %s", err)
             for kind, why in self.blocked_kinds().items():
                 pref = {"sell": ("bateria_sprzedaz_",), "grid": ("start_grid_charge", "stop_grid_charge")}[kind]
                 for k, p in self._plan["proposals"].items():

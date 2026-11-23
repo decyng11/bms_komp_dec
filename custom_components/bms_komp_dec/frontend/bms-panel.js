@@ -662,6 +662,13 @@
     .sm-auto { display: grid; gap: 4px; font-size: 13px; color: var(--text2); margin: 8px 0 12px; }
     .sm-auto .ok { color: var(--green); } .sm-auto .off { color: var(--muted); }
     .sm-foot { font-size: 11px; color: var(--muted); line-height: 1.5; text-align: center; margin: 4px 0 10px; }
+    .tab.sub { display: none !important; }
+    .set-hub { display: flex; flex-direction: column; margin: 6px 0; }
+    .hub-item { display: flex; align-items: center; gap: 12px; padding: 14px 8px; background: none; border: none; border-bottom: 1px solid var(--tab-line, rgba(128,128,128,.25)); color: var(--text); text-align: left; cursor: pointer; font: inherit; }
+    .hub-ic { font-size: 22px; width: 30px; text-align: center; }
+    .hub-tx { flex: 1; min-width: 0; } .hub-tx b { display: block; font-size: 15px; } .hub-tx small { color: var(--muted); font-size: 12px; }
+    .hub-ar { color: var(--muted); font-size: 22px; }
+    .set-back { background: none; border: none; color: var(--accent, #0a84ff); font: inherit; font-size: 14px; padding: 6px 2px; cursor: pointer; }
     .app.simple .tab[data-tab="charts"], .app.simple .tab[data-tab="log"], .app.simple .tab[data-tab="dev"] { display: none !important; }
     .app.simple .weather-global { display: none; }
     .app.simple [data-tab-content="ems"] > :not(#simpleWrap) { display: none !important; }
@@ -3815,10 +3822,11 @@
         <nav class="tabs bottom" id="tabsNav">
           <button class="tab active" data-tab="main" title="Główny" aria-label="Główny"><span class="ti">${TAB_SVG.main}</span><span class="tl">Główny</span><span class="tls">Główny</span></button>
           <button class="tab" data-tab="charts" title="Plan i wykresy" aria-label="Plan i wykresy"><span class="ti">${TAB_SVG.charts}</span><span class="tl">Plan</span><span class="tls">Plan</span></button>
-          <button class="tab" data-tab="ems" title="Ustawienia EMS (sprzedaż, ładowanie, harmonogram)" aria-label="EMS"><span class="ti">${TAB_SVG.ems}</span><span class="tl">EMS</span><span class="tls">EMS</span></button>
           <button class="tab" data-tab="log" title="Zysk i log" aria-label="Zysk i log"><span class="ti">${TAB_SVG.log}</span><span class="tl">Zysk i log</span><span class="tls">Zysk</span></button>
-          <button class="tab" data-tab="dev" id="tabDev" title="Urządzenia" aria-label="Urządzenia"><span class="ti">${TAB_SVG.dev}</span><span class="tl">Urządzenia</span><span class="tls">Urządz.</span></button>
-          <button class="tab" data-tab="diag" id="tabDiag" style="display:none;" title="Ustawienia panelu i diagnostyka" aria-label="Ustawienia"><span class="ti">${TAB_SVG.diag}</span><span class="tl">Ustawienia</span><span class="tls">Ustaw.</span></button>
+          <button class="tab" data-tab="settings" id="tabSettings" title="Ustawienia" aria-label="Ustawienia"><span class="ti">${TAB_SVG.diag}</span><span class="tl">Ustawienia</span><span class="tls">Ustaw.</span></button>
+          <button class="tab sub" data-tab="ems" title="Ustawienia EMS (sprzedaż, ładowanie, harmonogram)" aria-label="EMS"><span class="ti">${TAB_SVG.ems}</span><span class="tl">EMS</span><span class="tls">EMS</span></button>
+          <button class="tab sub" data-tab="dev" id="tabDev" title="Urządzenia" aria-label="Urządzenia"><span class="ti">${TAB_SVG.dev}</span><span class="tl">Urządzenia</span><span class="tls">Urządz.</span></button>
+          <button class="tab sub" data-tab="diag" id="tabDiag" style="display:none;" title="Ustawienia panelu i diagnostyka" aria-label="Ustawienia"><span class="ti">${TAB_SVG.diag}</span><span class="tl">Ustawienia</span><span class="tls">Ustaw.</span></button>
         </nav>
 
         <div class="price-bar" id="priceBar" style="display:none;"></div>
@@ -3971,10 +3979,19 @@
           <div id="logTabBody"><div class="chart-empty">Ładowanie…</div></div>
         </div>
 
-        <div class="tab-content" data-tab-content="diag" style="display:none;"><div id="diagRoot"></div></div>
-        <div class="tab-content" data-tab-content="dev" style="display:none;"><div id="devRoot"></div></div>
+        <div class="tab-content" data-tab-content="settings" style="display:none;">
+          <div class="set-hub" id="setHub" role="list">
+            <button type="button" class="hub-item" data-hub="ems" role="listitem"><span class="hub-ic">⚡</span><span class="hub-tx"><b>EMS: sprzedaż i ładowanie</b><small>profile, harmonogram, sprzedaż, ładowanie z sieci, ochrona przyłącza</small></span><span class="hub-ar">›</span></button>
+            <button type="button" class="hub-item" data-hub="dev" id="hubDev" role="listitem"><span class="hub-ic">🔌</span><span class="hub-tx"><b>Urządzenia</b><small>bojler, EV, pompa ciepła, flota</small></span><span class="hub-ar">›</span></button>
+            <button type="button" class="hub-item" data-hub="look" role="listitem"><span class="hub-ic">🎨</span><span class="hub-tx"><b>Wygląd panelu</b><small>styl karty, motyw, układ kafelków</small></span><span class="hub-ar">›</span></button>
+            <button type="button" class="hub-item" data-hub="diag" id="hubDiag" role="listitem" style="display:none;"><span class="hub-ic">🛠</span><span class="hub-tx"><b>Serwis i diagnostyka</b><small>tylko administrator</small></span><span class="hub-ar">›</span></button>
+          </div>
+        </div>
+        <div class="tab-content" data-tab-content="diag" style="display:none;"><button type="button" class="set-back" data-hub-back>‹ Ustawienia</button><div id="diagRoot"></div></div>
+        <div class="tab-content" data-tab-content="dev" style="display:none;"><button type="button" class="set-back" data-hub-back>‹ Ustawienia</button><div id="devRoot"></div></div>
 
         <div class="tab-content" data-tab-content="ems" style="display:none;">
+          <button type="button" class="set-back" data-hub-back>‹ Ustawienia</button>
           <div class="simple-wrap" id="simpleWrap" style="display:none;"></div>
           <div class="section" data-tile="ems-profiles">
             <div class="section-title">🎛 Profile pracy</div>
@@ -4191,10 +4208,20 @@
         btn.addEventListener('click', () => {
           const tab = btn.dataset.tab;
           this._activeTab = tab;
-          wrap.querySelectorAll('.tab').forEach(b => b.classList.toggle('active', b === btn));
+          const subTab = tab === 'ems' || tab === 'dev' || tab === 'diag';
+          wrap.querySelectorAll('.tab').forEach(b => b.classList.toggle('active', b === btn || (subTab && b.dataset.tab === 'settings')));
           wrap.querySelectorAll('.tab-content').forEach(c => c.style.display = c.dataset.tabContent === tab ? '' : 'none');
           this._tabEnter(tab);
         });
+      });
+
+      // Ustawienia: lista podstron (EMS, Urządzenia, Wygląd, Serwis) i powrót
+      wrap.addEventListener('click', (ev) => {
+        const it = ev.target && ev.target.closest ? ev.target.closest('[data-hub],[data-hub-back]') : null; if (!it) return;
+        if (it.hasAttribute('data-hub-back')) { const t = wrap.querySelector('.tab[data-tab="settings"]'); if (t) t.click(); return; }
+        const h = it.dataset.hub;
+        if (h === 'look') { const lb = wrap.querySelector('#lookBtn'); if (lb) lb.click(); return; }
+        const t = wrap.querySelector(`.tab[data-tab="${h}"]`); if (t) t.click();
       });
 
       // Ustawienia: sekcje zwijane kliknięciem w tytuł (stan w localStorage, domyślnie rozwinięte)
@@ -6282,6 +6309,7 @@
       const hide = !!st && st.state === 'on';
       const b = this._el('tabDev'); if (!b) return;
       b.style.display = hide ? 'none' : '';
+      const hd = this._el('hubDev'); if (hd) hd.style.display = hide ? 'none' : '';
       if (hide && this._activeTab === 'dev') { const m = this.shadowRoot && this.shadowRoot.querySelector('.tab[data-tab="main"]'); if (m) m.click(); }
     },
     _tabsPosSync() {           // przełącznik z Ustawień → Tryby: pasek zakładek na górze zamiast na dole
@@ -6329,6 +6357,7 @@
       const b = this._el('tabDiag');
       if (b) {
         b.style.display = this._dgIsAdmin() ? '' : 'none';
+        const hg = this._el('hubDiag'); if (hg) hg.style.display = this._dgIsAdmin() ? '' : 'none';
         // alarm z integracji widać na zakładce, zanim załaduje się moduł Diagnostyki
         const ms = this._hass && this._hass.states[this._eid('sensor', 'monitor_status')];
         const be = ms && ms.attributes && Array.isArray(ms.attributes.alarms) ? ms.attributes.alarms.length : 0;
@@ -6336,6 +6365,8 @@
         const lb = b.querySelector('.tl');
         if (lb && lb.textContent !== want) lb.textContent = want;
         b.classList.toggle('warn', !!be);
+        const sb = this._el('tabSettings');
+        if (sb) { sb.classList.toggle('warn', !!be && this._dgIsAdmin()); const sl = sb.querySelector('.tl'); const w2 = 'Ustawienia' + (be && this._dgIsAdmin() ? ' ⚠' : ''); if (sl && sl.textContent !== w2) sl.textContent = w2; }
       }
     },
     _dgTick() { /* bez modułu nic do odświeżania */ },

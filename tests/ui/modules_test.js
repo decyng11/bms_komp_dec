@@ -8,7 +8,7 @@ const diagBox = (q) => q(() => (__el.shadowRoot.getElementById('diagRoot') || {}
   let e = await openCard(b, { ver: CARD + '.777' });
   let { page: p, q, reqs, errs } = e;
   ok(!reqs.some(r => r.includes('bms-diag.js')), 'rdzeń nie pobiera Diagnostyki przy starcie');
-  ok(await q(() => getComputedStyle(__el.shadowRoot.getElementById('tabDiag')).display !== 'none'), 'zakładka Diagnostyka widoczna dla admina (zaślepka, bez modułu)');
+  ok(await q(() => getComputedStyle(__el.shadowRoot.getElementById('tabSettings')).display !== 'none'), 'zakładka Diagnostyka widoczna dla admina (zaślepka, bez modułu)');
   ok(typeof await q(() => window.__bmsDiagInstall) === 'undefined', 'moduł nie jest jeszcze załadowany');
   await q(() => __el.shadowRoot.querySelector('[data-tab="diag"]').click());
   await p.waitForFunction(() => !!__el.shadowRoot.querySelector('.dg-gate, #dgBody'), null, { timeout: 8000 }).catch(() => {});

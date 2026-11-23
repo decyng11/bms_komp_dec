@@ -59,7 +59,7 @@ let fails=0; const ok=(c,m)=>{if(!c){fails++;console.log('FAIL',m)}else console.
   const q=(f,a)=>p.evaluate(f,a);
   await q(()=>{window.__BMS_DG_PW=true;});   // ten test sprawdza bramkę z hasłem (domyślnie wyłączoną)
   // --- tab widoczny dla admina
-  ok(await q(()=>getComputedStyle(__el.shadowRoot.getElementById('tabDiag')).display!=='none'),tag+' zakładka widoczna dla admina');
+  ok(await q(()=>getComputedStyle(__el.shadowRoot.getElementById('tabSettings')).display!=='none'),tag+' zakładka widoczna dla admina');
   // --- brak admina
   await q(()=>{__admin=false;__el.hass=__mk();});
   ok(await q(()=>getComputedStyle(__el.shadowRoot.getElementById('tabDiag')).display==='none'),tag+' zakładka ukryta dla nie-admina');

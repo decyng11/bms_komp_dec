@@ -14,11 +14,11 @@ const sleep = (ms) => new Promise(r => setTimeout(r, ms));
       const r = __el.shadowRoot, nav = r.getElementById('tabsNav'), app = r.querySelector('.app');
       const lbl = r.querySelector('.tab[data-tab="charts"] .tl');
       return { bottom: nav.classList.contains('bottom'), last: app.lastElementChild === nav,
-               svgs: [...r.querySelectorAll('.tab .ti svg')].length, lblDisp: getComputedStyle(lbl).display,
+               svgs: [...r.querySelectorAll('.tab:not(.sub) .ti svg')].length, lblDisp: getComputedStyle(lbl).display,
                pos: getComputedStyle(nav).position, h: document.documentElement.scrollHeight, vh: innerHeight };
     });
     ok(info.bottom && info.last, tag + 'pasek jest na dole (ostatni element karty)');
-    ok(info.svgs === 6, tag + 'każda zakładka ma ikonę SVG: ' + info.svgs);
+    ok(info.svgs === 4, tag + 'każda zakładka ma ikonę SVG: ' + info.svgs);
     ok(info.pos === 'sticky', tag + 'pasek przyklejony (sticky)');
     ok(mobile ? info.lblDisp === 'none' : info.lblDisp !== 'none', tag + 'nazwy ' + (mobile ? 'ukryte' : 'widoczne') + ' (display=' + info.lblDisp + ')');
     if (info.h > info.vh + 300) {
