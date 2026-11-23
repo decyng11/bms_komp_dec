@@ -122,3 +122,10 @@ sunny_part()
 adviser_part()
 expand_part()
 print(f"TOOLS_PURE PASS={common.PASS} FAIL={common.FAIL}")
+
+# --- porady z „Zastosuj”: sprawność cyklu 100% i bardzo wysoka rezerwa
+_a = AD.advise({"cycle_eff": 100, "reserve_pct": 55, "soc_min": 40, "soc_days": 10})
+_ids = {x["id"]: x for x in _a}
+print(("ok   " if "cycle_eff_100" in _ids and _ids["cycle_eff_100"]["apply"]["to"] == 90 else "FAIL ") + "porada: sprawność cyklu 100% → 90%")
+print(("ok   " if "reserve_very_high" in _ids and _ids["reserve_very_high"]["apply"]["key"] == "reserve_floor_soc" else "FAIL ") + "porada: rezerwa 55% → propozycja 40%")
+print(("ok   " if not AD.advise({"cycle_eff": 90, "reserve_pct": 30}) else "FAIL ") + "porada: rozsądne ustawienia bez uwag")

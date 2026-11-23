@@ -1,5 +1,14 @@
 # EMS komp-dec 0.9.6.0
 
+## Porady do ustawień z jednym kliknięciem
+W „Zysk i log → Trafność prognoz” porady mają teraz przycisk „Zastosuj” (administrator) i „Cofnij”. Nowe porady: sprawność cyklu baterii 100% (proponowane 90%) oraz bardzo wysoka rezerwa SOC (proponowane 40%); istniejąca porada o rezerwie też da się zastosować kliknięciem. Nic nie zmienia się samo; cofnięcie działa tylko wtedy, gdy ustawienie nie zostało w międzyczasie zmienione ręcznie. Usługi: advice_apply, advice_revert.
+
+## Zużycie baterii w złotówkach i oś decyzji planu
+W „Zysk i log → Oszczędności”: tabela z ostatnich dni (rozładowana energia × koszt zużycia 1 kWh, bilans przed i po zużyciu) oraz oś decyzji planu zapisywana o 6:00, 12:00 i 18:00 wraz z miarą stabilności (ile okien zmieniło godziny w ciągu doby).
+
+## Wyszukiwarka w Ustawieniach
+Pole „Szukaj opcji” na liście Ustawień przeszukuje podstronę EMS (sekcje, nazwy przełączników i pól); kliknięcie wyniku otwiera sekcję, przewija do pola i je podświetla.
+
 ## Stabilniejsze planowanie (mniej zmian bez sensu)
 Nowe godziny okna ładowania z sieci / sprzedaży zastępują poprzednie dopiero wtedy, gdy ma to sens: (1) okno, które trwa albo zaczyna się w ciągu 2 godzin, nie zmienia godzin; (2) inna propozycja musi utrzymać się w 2 kolejnych przeliczeniach planu; (3) wyraźnie lepszy wynik (zysk wyższy o 1 zł) wchodzi od razu; pojawienie się albo pominięcie okna nie czeka. Każda zmiana i każde wstrzymanie zmiany trafia do dziennika („Plan: … zostaje … — powód”). Ustawień użytkownika (sprawność cyklu, rezerwa SOC) nie zmieniono.
 

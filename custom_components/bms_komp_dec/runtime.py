@@ -22,6 +22,7 @@ from .const import (
 )
 from . import inbox
 from . import planhold
+from . import planstory
 from .gridlimit import GridLimiter
 from . import brands
 from . import inverter_ctl as ictl
@@ -1384,6 +1385,8 @@ class BmsRuntime:
         ("blokada ładowania z PV", ("pv_export_start", "pv_export_stop")),
     )
 
+    PLAN_LOG_GROUPS_FLAT = tuple((n, k[0], k[1]) for n, k in PLAN_LOG_GROUPS)
+
     def _log_plan_decisions(self, plan: dict[str, Any] | None) -> None:
         """Dziennik decyzji: wpis „Plan: …” tylko wtedy, gdy decyzja planu się zmieniła (zaplanowano / pominięto / inne godziny).
         Dzięki temu widać, DLACZEGO plan coś zrobił albo nie zrobił i o której godzinie zmienił zdanie."""
@@ -2317,6 +2320,9 @@ class BmsRuntime:
             }
             try:
                 loc_now = dt_util.as_local(dt_util.now())
+                if not self._plan.get("error") and planstory.take(self.state.setdefault("plan_snaps", {}), loc_now.date(), loc_now.hour,
+                                                                  self._plan.get("proposals") or {}, self.PLAN_LOG_GROUPS_FLAT):
+                    self._save_state()
                 for line in planhold.stabilize(prev_plan, self._plan, self._plan_hold, loc_now.hour * 60 + loc_now.minute, force):
                     self.log.add("plan", line, "info")
             except Exception as err:  # noqa: BLE001
@@ -2383,11 +2389,67 @@ class BmsRuntime:
         except Exception:  # noqa: BLE001
             pass
         try:
+            facts["cycle_eff"] = number_value(self.hass, "cycle_efficiency", 90.0)
+        except Exception:  # noqa: BLE001
+            pass
+        try:
             facts["battery_price"] = number_value(self.hass, "battery_price_pln", 0.0)
             facts["sell_windows_on"] = switch_on(self.hass, "bateria_sprzedaz_1", False) or switch_on(self.hass, "bateria_sprzedaz_2", False)
         except Exception:  # noqa: BLE001
             pass
         return adviser_mod.advise(facts)
+
+    def plan_story(self) -> dict[str, Any]:
+        return planstory.view(self.state.get("plan_snaps") or {}, dt_util.now().date())
+
+    def wear_view(self) -> dict[str, Any]:
+        try:
+            wear = float(self.optimizer.wear_cost()) if hasattr(self.optimizer, "wear_cost") else 0.0
+        except Exception:  # noqa: BLE001
+            wear = 0.0
+        return planstory.wear_days(self.ledger.days, self.stats.days, dt_util.now().date(), wear)
+
+    def advice_done(self) -> list[dict[str, Any]]:
+        """Porady zastosowane z panelu, które można cofnąć (ustawienie nadal ma wartość, jaką nadał EMS)."""
+        out = []
+        for aid, rec in (self.state.get("advice_applied") or {}).items():
+            try:
+                key, frm, to = rec["key"], float(rec["from"]), float(rec["to"])
+                cur = self._profile_read(key)
+            except (KeyError, TypeError, ValueError):
+                continue
+            if rec.get("reverted") or cur is None or abs(float(cur) - to) > 1e-6:
+                continue
+            out.append({"id": aid, "label": prof_mod.label(key), "from": frm, "to": to, "date": rec.get("date")})
+        return out
+
+    async def advice_apply(self, aid: str) -> dict[str, Any]:
+        item = next((a for a in self.advice() if a.get("id") == aid and isinstance(a.get("apply"), dict)), None)
+        if not item:
+            raise ValueError("Ta porada nie jest już aktualna (ustawienie się zmieniło)")
+        ap = item["apply"]
+        key, to = ap["key"], float(ap["to"])
+        cur = self._profile_read(key)
+        if not await self._profile_write(key, to) or abs(float(self._profile_read(key) or -1e9) - to) > 1e-6:
+            raise ValueError("Nie udało się ustawić wartości (sprawdź encję w ustawieniach)")
+        self.state.setdefault("advice_applied", {})[aid] = {"key": key, "from": cur, "to": to, "date": dt_util.now().date().isoformat(), "reverted": False}
+        self._plan_ts = 0.0
+        self._save_state()
+        self.log.add("mode", f"Porada „{item.get('title')}”: {prof_mod.label(key)} {cur:g} → {to:g} (zatwierdzone w panelu)", "ok")
+        return {"ok": True, "key": key, "from": cur, "to": to}
+
+    async def advice_revert(self, aid: str) -> dict[str, Any]:
+        rec = (self.state.get("advice_applied") or {}).get(aid)
+        done = next((d for d in self.advice_done() if d["id"] == aid), None)
+        if not rec or not done:
+            raise ValueError("Nie ma czego cofnąć: ustawienie zostało już zmienione inaczej albo wcześniej cofnięte")
+        if not await self._profile_write(rec["key"], float(rec["from"])):
+            raise ValueError("Nie udało się przywrócić poprzedniej wartości")
+        rec["reverted"] = True
+        self._plan_ts = 0.0
+        self._save_state()
+        self.log.add("mode", f"Cofnięto poradę: {done['label']} {done['to']:g} → {done['from']:g}", "ok")
+        return {"ok": True, "key": rec["key"], "from": done["to"], "to": done["from"]}
 
     def fleet_set(self, raw: Any) -> dict[str, Any]:
         cfg = fleet_mod.sanitize(raw)

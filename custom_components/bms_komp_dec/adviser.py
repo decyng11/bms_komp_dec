@@ -11,7 +11,7 @@ RESERVE_GAP = 25.0       # rezerwa „za wysoka”: najniższy SOC z dni jest o 
 MIN_SOC_DAYS = 7         # tyle dób z odczytem SOC potrzeba do oceny rezerwy
 CAP_DEVIATION = 0.20     # pojemność zmierzona różni się od ustawionej o więcej niż 20%
 CAP_MIN_SAMPLES = 5
-MAX_ADVICE = 5
+MAX_ADVICE = 6
 
 
 def _num(v: Any) -> float | None:
@@ -24,8 +24,11 @@ def _num(v: Any) -> float | None:
     return x if math.isfinite(x) else None
 
 
-def _item(aid: str, level: str, title: str, text: str) -> dict[str, str]:
-    return {"id": aid, "level": level, "title": title, "text": text}
+def _item(aid: str, level: str, title: str, text: str, apply: dict[str, Any] | None = None) -> dict[str, Any]:
+    out: dict[str, Any] = {"id": aid, "level": level, "title": title, "text": text}
+    if apply:
+        out["apply"] = apply         # {"key", "to", "from", "label"}: jedno kliknięcie „Zastosuj” w panelu (administrator), z możliwością cofnięcia
+    return out
 
 
 def advise(facts: Any) -> list[dict[str, str]]:
@@ -38,7 +41,19 @@ def advise(facts: Any) -> list[dict[str, str]]:
         out.append(_item("reserve_high", "info", "Rezerwa baterii nigdy nie była użyta",
                          f"Rezerwa jest ustawiona na {res:.0f}%, a przez ostatnie {sd:.0f} dób bateria nie spadła poniżej {smin:.0f}%. "
                          f"Jeśli chcesz, by plan częściej korzystał z baterii (np. do sprzedaży), możesz obniżyć rezerwę o 10 pkt, do {sug:.0f}%. "
-                         "Zostaw ją, jeśli zależy Ci na zapasie na wypadek zaniku sieci."))
+                         "Zostaw ją, jeśli zależy Ci na zapasie na wypadek zaniku sieci.",
+                         {"key": "reserve_floor_soc", "to": sug, "from": res, "label": "Rezerwa SOC minimum"}))
+    elif res is not None and res >= 50:
+        out.append(_item("reserve_very_high", "info", "Rezerwa baterii jest bardzo wysoka",
+                         f"Rezerwa minimum to {res:.0f}% — plan może używać tylko górnej części baterii, więc rzadziej sprzedaje i częściej zmienia decyzje przy drobnych wahaniach prognozy. "
+                         "Typowo wystarcza 30–40%. Zostaw, jeśli zależy Ci na dużym zapasie na wypadek zaniku sieci.",
+                         {"key": "reserve_floor_soc", "to": 40.0, "from": res, "label": "Rezerwa SOC minimum"}))
+    ce_ = _num(f.get("cycle_eff"))
+    if ce_ is not None and ce_ >= 98:
+        out.append(_item("cycle_eff_100", "warn", "Sprawność cyklu baterii ustawiona na 100%",
+                         f"Przy {ce_:.0f}% plan uważa, że ładowanie i rozładowanie nic nie kosztują, więc opłaca mu się kręcić baterią dla minimalnej różnicy cen. "
+                         "Realnie bateria z falownikiem oddaje ok. 88–92% energii. Proponuję 90%.",
+                         {"key": "cycle_efficiency", "to": 90.0, "from": ce_, "label": "Sprawność cyklu baterii"}))
     ce, cc, cs = _num(f.get("cap_est")), _num(f.get("cap_conf")), _num(f.get("cap_samples"))
     if ce is not None and cc is not None and cc > 0 and cs is not None and cs >= CAP_MIN_SAMPLES and abs(ce / cc - 1.0) > CAP_DEVIATION:
         out.append(_item("capacity_mismatch", "warn", "Pojemność baterii w ustawieniach nie zgadza się z pomiarem",

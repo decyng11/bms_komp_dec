@@ -522,3 +522,23 @@ fleet_set:
       required: true
       selector:
         object:
+
+advice_apply:
+  name: Zastosuj poradę do ustawień
+  description: Ustawia wartość proponowaną przez poradę (np. sprawność cyklu baterii 90%). Administrator; zmianę można cofnąć.
+  fields:
+    id:
+      name: Identyfikator porady
+      required: true
+      selector:
+        text:
+
+advice_revert:
+  name: Cofnij zastosowaną poradę
+  description: Przywraca wartość sprzed zastosowania porady, o ile nie zmieniono jej ręcznie w międzyczasie (administrator).
+  fields:
+    id:
+      name: Identyfikator porady
+      required: true
+      selector:
+        text:

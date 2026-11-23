@@ -42,7 +42,7 @@ _SERVICES = (
     "diag_store_get_all", "diag_store_set", "diag_store_delete",
     "notify_settings_get", "notify_settings_set", "notify_test", "inbox_action", "devices_get", "devices_set", "devices_discover", "insights_get", "pv_chart_get", "self_test", "diagnostic_report",
     "override_set", "override_clear", "analysis_get", "analysis_set", "control_test", "settings_log_get",
-    "profiles_get", "profile_apply", "profile_revert", "profile_save", "profile_delete", "profile_schedule", "profile_schedule_clear", "pv_caution_apply", "pv_caution_revert", "pv_caution_dismiss",
+    "profiles_get", "profile_apply", "profile_revert", "profile_save", "profile_delete", "profile_schedule", "profile_schedule_clear", "pv_caution_apply", "pv_caution_revert", "pv_caution_dismiss", "advice_apply", "advice_revert",
     "grid_outage_test", "expand_estimate", "fleet_get", "fleet_set",
 )
 _SUGGEST_HOUR = 16   # RCE na jutro jest publikowane po południu — wcześniej propozycja bazowała na starych danych
@@ -453,7 +453,7 @@ def _register_services(hass: HomeAssistant) -> None:
         reviews = rt.day_reviews(14)
         return {"savings": rt.insights.savings(), "accuracy": rt.insights.accuracy(lf),
                 "reviews": reviews, "reviews_tally": tally(reviews), "arb_proof": rt.arb_proof(14),
-                "pv_caution": rt.pv_caution(), "bill": rt.bill(), "deeds": rt.deeds_summary(), "advice": rt.advice(), "price_views": rt.price_views(),
+                "pv_caution": rt.pv_caution(), "bill": rt.bill(), "deeds": rt.deeds_summary(), "advice": rt.advice(), "advice_done": rt.advice_done(), "plan_story": rt.plan_story(), "wear_view": rt.wear_view(), "price_views": rt.price_views(),
                 "pv_correction_on": switch_on(hass, "pv_forecast_correction", True), "cost_forecast": rt.cost_forecast(),
                 "wear_cost": round(float(rt.optimizer.wear_cost()), 4) if hasattr(rt.optimizer, "wear_cost") else 0.0}
 
@@ -582,6 +582,24 @@ def _register_services(hass: HomeAssistant) -> None:
         res = rt.pv_caution_dismiss()
         return {**res, "pv_caution": rt.pv_caution()}
 
+    async def handle_advice_apply(call):
+        await _require_admin(hass, call)
+        rt = _need_runtime(hass)
+        try:
+            res = await rt.advice_apply(str(call.data.get("id") or ""))
+        except ValueError as err:
+            raise HomeAssistantError(str(err)) from err
+        return {**res, "advice": rt.advice(), "advice_done": rt.advice_done()}
+
+    async def handle_advice_revert(call):
+        await _require_admin(hass, call)
+        rt = _need_runtime(hass)
+        try:
+            res = await rt.advice_revert(str(call.data.get("id") or ""))
+        except ValueError as err:
+            raise HomeAssistantError(str(err)) from err
+        return {**res, "advice": rt.advice(), "advice_done": rt.advice_done()}
+
     async def handle_override_clear(call):
         await _require_admin(hass, call)
         rt = _need_runtime(hass)
@@ -641,6 +659,8 @@ def _register_services(hass: HomeAssistant) -> None:
         ("pv_caution_apply", handle_pv_caution_apply, SupportsResponse.OPTIONAL),
         ("pv_caution_revert", handle_pv_caution_revert, SupportsResponse.OPTIONAL),
         ("pv_caution_dismiss", handle_pv_caution_dismiss, SupportsResponse.OPTIONAL),
+        ("advice_apply", handle_advice_apply, SupportsResponse.OPTIONAL),
+        ("advice_revert", handle_advice_revert, SupportsResponse.OPTIONAL),
         ("devices_set", handle_devices_set, SupportsResponse.OPTIONAL),
         ("notify_settings_get", handle_notify_get, SupportsResponse.ONLY),
         ("notify_settings_set", handle_notify_set, SupportsResponse.OPTIONAL),

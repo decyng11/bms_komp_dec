@@ -668,6 +668,9 @@
     .hub-ic { font-size: 22px; width: 30px; text-align: center; }
     .hub-tx { flex: 1; min-width: 0; } .hub-tx b { display: block; font-size: 15px; } .hub-tx small { color: var(--muted); font-size: 12px; }
     .hub-ar { color: var(--muted); font-size: 22px; }
+    .set-search { width: 100%; box-sizing: border-box; margin: 6px 0; padding: 10px 12px; border-radius: 12px; border: 1px solid var(--tab-line, rgba(128,128,128,.3)); background: var(--card-bg, rgba(128,128,128,.12)); color: var(--text); font: inherit; font-size: 14px; }
+    .set-found .hub-item { padding: 10px 8px; } .set-found .hub-item small { display: block; }
+    .set-flash { outline: 2px solid var(--accent, #0a84ff); outline-offset: 2px; border-radius: 6px; transition: outline-color .6s; }
     .set-back { background: none; border: none; color: var(--accent, #0a84ff); font: inherit; font-size: 14px; padding: 6px 2px; cursor: pointer; }
     .app.simple .tab[data-tab="charts"], .app.simple .tab[data-tab="log"], .app.simple .tab[data-tab="dev"] { display: none !important; }
     .app.simple .weather-global { display: none; }
@@ -3980,6 +3983,8 @@
         </div>
 
         <div class="tab-content" data-tab-content="settings" style="display:none;">
+          <input type="search" class="set-search" id="setSearch" placeholder="🔍 Szukaj opcji, np. marża, rezerwa, ładowanie…" aria-label="Szukaj w ustawieniach" autocomplete="off">
+          <div class="set-found" id="setFound" hidden></div>
           <div class="set-hub" id="setHub" role="list">
             <button type="button" class="hub-item" data-hub="ems" role="listitem"><span class="hub-ic">⚡</span><span class="hub-tx"><b>EMS: sprzedaż i ładowanie</b><small>profile, harmonogram, sprzedaż, ładowanie z sieci, ochrona przyłącza</small></span><span class="hub-ar">›</span></button>
             <button type="button" class="hub-item" data-hub="dev" id="hubDev" role="listitem"><span class="hub-ic">🔌</span><span class="hub-tx"><b>Urządzenia</b><small>bojler, EV, pompa ciepła, flota</small></span><span class="hub-ar">›</span></button>
@@ -4223,6 +4228,37 @@
         if (h === 'look') { const lb = wrap.querySelector('#lookBtn'); if (lb) lb.click(); return; }
         const t = wrap.querySelector(`.tab[data-tab="${h}"]`); if (t) t.click();
       });
+
+      // Ustawienia: wyszukiwarka opcji (sekcje, nazwy przełączników i pól w podstronie EMS)
+      {
+        const inp = wrap.querySelector('#setSearch'), out = wrap.querySelector('#setFound'), hub = wrap.querySelector('#setHub');
+        const norm = (t) => String(t || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/ł/g, 'l');
+        let found = [];
+        if (inp && out && hub) {
+          inp.addEventListener('input', () => {
+            const q = norm(inp.value).trim();
+            if (q.length < 2) { out.hidden = true; out.innerHTML = ''; hub.hidden = false; found = []; return; }
+            const pane = wrap.querySelector('[data-tab-content="ems"]');
+            const seen = new Set(); found = [];
+            if (pane) pane.querySelectorAll('.section-title, .name, .label, summary').forEach((el) => {
+              const txt = (el.textContent || '').trim().replace(/\s+/g, ' ');
+              if (txt.length < 3 || txt.length > 90 || !norm(txt).includes(q) || seen.has(txt)) return;
+              seen.add(txt); found.push({ el, txt, sec: (el.closest('.section') && el.closest('.section').querySelector(':scope > .section-title') || { textContent: '' }).textContent.trim() });
+            });
+            hub.hidden = true; out.hidden = false;
+            const esc = (t) => String(t).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+            out.innerHTML = found.length ? found.slice(0, 12).map((f, i) => `<button type="button" class="hub-item" data-found="${i}"><span class="hub-tx"><b>${esc(f.txt)}</b><small>EMS${f.sec && f.sec !== f.txt ? ' › ' + esc(f.sec) : ''}</small></span><span class="hub-ar">›</span></button>`).join('')
+              : '<div style="padding:12px 4px;color:var(--muted);font-size:13px;">Nic nie znaleziono. Spróbuj krótszego słowa (szuka w podstronie EMS).</div>';
+          });
+          out.addEventListener('click', (ev) => {
+            const b = ev.target && ev.target.closest ? ev.target.closest('[data-found]') : null; if (!b) return;
+            const f = found[+b.dataset.found]; if (!f) return;
+            const tab = wrap.querySelector('.tab[data-tab="ems"]'); if (tab) tab.click();
+            const sec = f.el.closest('.section'); if (sec && sec.classList.contains('collapsed')) { const t = sec.querySelector(':scope > .section-title'); if (t) t.click(); }
+            setTimeout(() => { try { f.el.scrollIntoView({ block: 'center', behavior: 'smooth' }); f.el.classList.add('set-flash'); setTimeout(() => f.el.classList.remove('set-flash'), 2200); } catch (e) { /* bez przewijania */ } }, 120);
+          });
+        }
+      }
 
       // Ustawienia: sekcje zwijane kliknięciem w tytuł (stan w localStorage, domyślnie rozwinięte)
       {

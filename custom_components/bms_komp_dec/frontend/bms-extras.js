@@ -532,14 +532,27 @@
             if (b.dataset.exi === 'period') { s.period = b.dataset.p; this._exInsights(); }
             else if (b.dataset.exi === 'reload') { s.at = 0; this._exInsights(); }
             else if (b.dataset.exi === 'outage' || b.dataset.exi === 'expand') this._exToolsAct(b.dataset.exi);
+            else if (b.dataset.exi === 'adv-apply' || b.dataset.exi === 'adv-revert') this._exAdviceAct(b.dataset.exi === 'adv-apply' ? 'advice_apply' : 'advice_revert', b.dataset.aid);
             else if (b.dataset.exi === 'cau-apply') this._exCautionAct('pv_caution_apply');
             else if (b.dataset.exi === 'cau-revert') this._exCautionAct('pv_caution_revert');
             else if (b.dataset.exi === 'cau-dismiss') this._exCautionAct('pv_caution_dismiss');
           });
         });
-        const key = JSON.stringify([s.at, s.err, s.period, !!s.data, TC('text'), s.cbusy, s.cmsg, this._dgIsAdmin(), JSON.stringify((s.data && s.data.pv_caution) || null), JSON.stringify((s.data && s.data.bill) || null), JSON.stringify(s.tools ? [s.tools.out, s.tools.exp, s.tools.busy, s.tools.err] : null), JSON.stringify((s.data && [s.data.deeds, s.data.advice, s.data.price_views]) || null)]);
+        const key = JSON.stringify([s.at, s.err, s.period, !!s.data, TC('text'), s.cbusy, s.cmsg, this._dgIsAdmin(), JSON.stringify((s.data && s.data.pv_caution) || null), JSON.stringify((s.data && s.data.bill) || null), JSON.stringify(s.tools ? [s.tools.out, s.tools.exp, s.tools.busy, s.tools.err] : null), JSON.stringify((s.data && [s.data.deeds, s.data.advice, s.data.advice_done, s.data.price_views]) || null)]);
         if (sb && sb.dataset.exKey !== key) { sb.dataset.exKey = key; sb.innerHTML = this._exSavHtml(); }
         if (ab && ab.dataset.exKey !== key) { ab.dataset.exKey = key; ab.innerHTML = this._exAccHtml(); }
+      },
+      async _exAdviceAct(service, id) {
+        const s = this._exS().ins;
+        if (s.cbusy || !id) return;
+        s.cbusy = true; s.cmsg = ''; this._exInsights();
+        try {
+          const r = exResp(await exCall(this, service, { id })) || {};
+          if (s.data) { if (Array.isArray(r.advice)) s.data.advice = r.advice; if (Array.isArray(r.advice_done)) s.data.advice_done = r.advice_done; }
+          s.cmsg = service === 'advice_apply' ? `ok:Ustawiono ${exFmt(r.to, 0)}. Plan przeliczy się przy najbliższej okazji; możesz to cofnąć.` : `ok:Przywrócono ${exFmt(r.to, 0)}.`;
+        } catch (e) { s.cmsg = 'err:' + exErr(e); }
+        s.cbusy = false;
+        this._exInsights();
       },
       async _exCautionAct(service) {
         const s = this._exS().ins;
@@ -603,7 +616,15 @@
         const de = d.deeds && typeof d.deeds === 'object' ? d.deeds : null;
         if (de && typeof de.text === 'string' && de.text) parts.push(`<div data-role="deeds" style="font-size:12px;margin-bottom:8px;">🤖 <b>Co EMS zrobił za Ciebie:</b> ${exEsc(de.text)}</div>`);
         const ad = (Array.isArray(d.advice) ? d.advice : []).filter((a) => a && typeof a === 'object' && typeof a.title === 'string');
-        if (ad.length) parts.push(`<div data-role="advice" style="margin-bottom:8px;"><div style="font-size:12px;font-weight:600;margin-bottom:2px;">🧭 Porady do ustawień</div>${ad.map((a) => `<div data-role="advice-item" style="font-size:12px;border-top:1px solid var(--border,rgba(128,128,128,.25));padding:4px 0;"><b>${exEsc(a.title)}</b><div style="color:var(--muted);">${exEsc(a.text || '')}</div></div>`).join('')}</div>`);
+        const adDone = (Array.isArray(d.advice_done) ? d.advice_done : []).filter((a) => a && typeof a === 'object' && typeof a.id === 'string');
+        if (ad.length || adDone.length) {
+          const adm = this._dgIsAdmin(), bdis = s.cbusy ? 'disabled' : '';
+          const abtn = (act, id, label, primary) => `<button class="btn" data-exi="${act}" data-aid="${exEsc(id)}" ${bdis} style="padding:5px 12px;font-size:12px;margin-top:4px;${primary ? 'background:var(--accent,#0a84ff);color:#fff;' : ''}">${label}</button>`;
+          parts.push(`<div data-role="advice" style="margin-bottom:8px;"><div style="font-size:12px;font-weight:600;margin-bottom:2px;">🧭 Porady do ustawień</div>${ad.map((a) => {
+            const ap = a.apply && typeof a.apply === 'object' && typeof a.apply.to === 'number' ? a.apply : null;
+            return `<div data-role="advice-item" style="font-size:12px;border-top:1px solid var(--border,rgba(128,128,128,.25));padding:4px 0;"><b>${exEsc(a.title)}</b><div style="color:var(--muted);">${exEsc(a.text || '')}</div>${ap ? (adm ? abtn('adv-apply', a.id, `Zastosuj: ${exEsc(ap.label || '')} ${exFmt(ap.to, 0)}%`, true) : '<div style="color:var(--muted);">Zmienić może administrator.</div>') : ''}</div>`;
+          }).join('')}${adDone.map((a) => `<div data-role="advice-done" style="font-size:12px;border-top:1px solid var(--border,rgba(128,128,128,.25));padding:4px 0;">✅ ${exEsc(a.label || '')}: ${exFmt(a.from, 0)} → ${exFmt(a.to, 0)} (zastosowano z porady)${adm ? '<br>' + abtn('adv-revert', a.id, `Cofnij do ${exFmt(a.from, 0)}`, false) : ''}</div>`).join('')}</div>`);
+        }
         const pv = d.price_views && typeof d.price_views === 'object' ? d.price_views : null;
         const cal = pv && Array.isArray(pv.calendar) ? pv.calendar.filter((r) => r && typeof r.date === 'string' && n(r.avg) !== null) : [];
         if (cal.length >= 5) {
@@ -696,6 +717,29 @@
             + '</div>'
             + `<div class="ex-note" style="margin-bottom:8px;">${exEsc(cf.note || '')} Prognoza do końca miesiąca jest w „Rachunek i cel”.</div>`;
         }
+        const wv = s.data.wear_view && typeof s.data.wear_view === 'object' ? s.data.wear_view : null;
+        const ps = s.data.plan_story && typeof s.data.plan_story === 'object' ? s.data.plan_story : null;
+        const zl = (v) => { const n = exNum(v); return n === null ? '—' : (n < 0 ? '−' : '') + exFmt(Math.abs(n), 2) + ' zł'; };
+        let wearHtml = '';
+        if (wv && Array.isArray(wv.days) && wv.days.length) {
+          wearHtml = `<div data-role="wear" style="margin:8px 0;"><div style="font-size:12px;font-weight:600;margin-bottom:2px;">🔋 Zużycie baterii w złotówkach (ostatnie dni)</div>`
+            + (exNum(wv.wear_per_kwh) > 0
+              ? `<div class="ex-note">Koszt zużycia ${exFmt(wv.wear_per_kwh, 2)} zł na każdą rozładowaną kWh. Zysk dnia „po zużyciu” to bilans z sieci minus ten koszt: pokazuje, czy ładowanie i sprzedaż naprawdę się opłaciły.</div>`
+                + `<div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-size:12px;margin-top:4px;"><thead><tr style="color:var(--muted);text-align:right;"><th style="text-align:left;font-weight:600;">Dzień</th><th style="font-weight:600;">Rozładowano</th><th style="font-weight:600;">Zużycie</th><th style="font-weight:600;">Bilans</th><th style="font-weight:600;">Po zużyciu</th></tr></thead><tbody>${wv.days.map((r) => `<tr><td>${exEsc(String(r.date).slice(5))}</td><td style="text-align:right;">${exFmt(r.dis_kwh, 1)} kWh</td><td style="text-align:right;">${zl(r.wear_pln)}</td><td style="text-align:right;">${zl(r.net)}</td><td style="text-align:right;color:${exNum(r.net_after) === null ? 'inherit' : (r.net_after >= 0 ? 'var(--green)' : 'var(--red)')}">${zl(r.net_after)}</td></tr>`).join('')}</tbody></table></div>`
+              : '<div class="ex-note">Cena baterii jest ustawiona na 0, więc koszt zużycia się nie liczy. Wpisz cenę baterii w Ustawieniach, żeby zobaczyć, ile kosztuje każdy cykl.</div>')
+            + '</div>';
+        }
+        let storyHtml = '';
+        if (ps && typeof ps.text === 'string') {
+          const rowsS = (Array.isArray(ps.rows) ? ps.rows : []).slice(-5).map((r) => {
+            const names = [...new Set(['6', '12', '18'].flatMap((h) => Object.keys((r.slots && r.slots[h]) || {})))];
+            return names.map((nm, i) => `<tr><td>${i === 0 ? exEsc(String(r.date).slice(5)) : ''}</td><td>${exEsc(nm)}</td>${['6', '12', '18'].map((h) => `<td style="text-align:right;">${exEsc(((r.slots && r.slots[h]) || {})[nm] || '—')}</td>`).join('')}</tr>`).join('');
+          }).join('');
+          storyHtml = `<div data-role="plan-story" style="margin:8px 0;"><div style="font-size:12px;font-weight:600;margin-bottom:2px;">🕑 Decyzje planu w ciągu doby</div><div class="ex-note">${exEsc(ps.text)}</div>`
+            + (rowsS ? `<div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-size:11px;margin-top:4px;"><thead><tr style="color:var(--muted);text-align:right;"><th style="text-align:left;font-weight:600;">Dzień</th><th style="text-align:left;font-weight:600;">Okno</th><th style="font-weight:600;">6:00</th><th style="font-weight:600;">12:00</th><th style="font-weight:600;">18:00</th></tr></thead><tbody>${rowsS}</tbody></table></div>` : '')
+            + '</div>';
+        }
+        cfHtml += wearHtml + storyHtml;
         if (!p.days) {
           return `<div class="ex-nav" style="justify-content:flex-start;flex-wrap:wrap;gap:6px;">${pills}</div>${cfHtml}
             <div class="chart-empty">Brak danych za ten okres. Oszczędności liczą się od dnia instalacji wersji 0.8.5 — pierwszy pełny dzień pojawi się jutro.</div>`;
