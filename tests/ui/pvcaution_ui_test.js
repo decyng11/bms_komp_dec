@@ -71,7 +71,7 @@ const click = (e, a) => e.q((a) => __el.shadowRoot.querySelector(`#exAccBox [dat
   e = await mk(b, { current: 0, proposal: PROP, last: null, can_revert: false }, { fail: true });
   await click(e, 'cau-apply'); await sleep(500);
   t = await box(e);
-  ok(/Nie udało się: .*Nie udało się ustawić ostrożności/.test(t) && await e.q(() => !__el.shadowRoot.querySelector('#exAccBox b')), 'błąd usługi: komunikat bez interpretacji HTML');
+  ok(/Nie udało się: .*Nie udało się ustawić ostrożności/.test(t) && await e.q(() => !__el.shadowRoot.querySelector('#exAccBox [data-role="pv-caution-msg"] b')), 'błąd usługi: komunikat bez interpretacji HTML');
   ok(await e.q(() => !!__el.shadowRoot.querySelector('#exAccBox [data-exi="cau-apply"]')), 'po błędzie propozycja zostaje (można spróbować ponownie)');
 
   // ---------- zwykły użytkownik: widzi, nie zatwierdza

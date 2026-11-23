@@ -2248,8 +2248,132 @@
     }
 
     // ===== PRODUKCJA PV DZIŚ =====
+    // --- wybór przedziału wykresu produkcji PV: wczoraj / dziś / jutro / data / 7 / 30 dni
+    _pvSelGet() {
+      if (!this._pvSel) { let v = null; try { v = localStorage.getItem('bms_pv_sel'); } catch (e) { v = null; } this._pvSel = v && /^(today|yesterday|tomorrow|r7|r30|\d{4}-\d{2}-\d{2})$/.test(v) ? v : 'today'; }
+      return this._pvSel;
+    }
+    _pvDayOf(sel) {
+      const d = new Date(); d.setHours(12, 0, 0, 0);
+      if (sel === 'yesterday') d.setDate(d.getDate() - 1);
+      else if (sel === 'tomorrow') d.setDate(d.getDate() + 1);
+      else if (/^\d{4}-/.test(sel)) return sel;
+      const p = (n) => String(n).padStart(2, '0');
+      return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+    }
+    _pvSelSet(sel) {
+      this._pvSel = sel; this._lastPvProdKey = null;
+      try { localStorage.setItem('bms_pv_sel', sel); } catch (e) { /* storage niedostępny */ }
+      this._renderPvProductionChart();
+    }
+    _pvBarSync() {
+      const bar = this._el('pvRangeBar'); if (!bar) return;
+      const sel = this._pvSelGet();
+      if (!bar._bound) {
+        bar._bound = true;
+        bar.addEventListener('click', (ev) => {
+          const b = ev.target && ev.target.closest ? ev.target.closest('[data-pvr]') : null; if (!b) return;
+          const k = b.dataset.pvr, cur = this._pvSelGet();
+          if (k === '7' || k === '30') return this._pvSelSet('r' + k);
+          if (k === 'prev' || k === 'next') {
+            const step = k === 'prev' ? -1 : 1;
+            if (cur === 'r7' || cur === 'r30') return;   // zakres liczy się zawsze do wczoraj
+            const dd = new Date(this._pvDayOf(cur) + 'T12:00:00'); dd.setDate(dd.getDate() + step);
+            const p = (n) => String(n).padStart(2, '0');
+            const iso = `${dd.getFullYear()}-${p(dd.getMonth() + 1)}-${p(dd.getDate())}`;
+            const t = new Date(); t.setHours(12, 0, 0, 0); const lim = new Date(t); lim.setDate(lim.getDate() + 1);
+            if (dd > lim) return;
+            return this._pvSelSet(iso === this._pvDayOf('today') ? 'today' : iso === this._pvDayOf('yesterday') ? 'yesterday' : iso === this._pvDayOf('tomorrow') ? 'tomorrow' : iso);
+          }
+          this._pvSelSet(k);
+        });
+        const di = bar.querySelector('#pvDate');
+        if (di) di.addEventListener('change', () => { if (di.value) this._pvSelSet(di.value); });
+      }
+      const day = this._pvDayOf(sel);
+      bar.querySelectorAll('[data-pvr]').forEach((b) => {
+        const k = b.dataset.pvr;
+        const on = k === sel || (k === '7' && sel === 'r7') || (k === '30' && sel === 'r30');
+        b.style.opacity = on ? '1' : '.65'; b.style.outline = on ? '2px solid var(--accent,#60a5fa)' : 'none';
+      });
+      const di = bar.querySelector('#pvDate'); if (di && di.value !== (sel === 'r7' || sel === 'r30' ? '' : day)) di.value = (sel === 'r7' || sel === 'r30') ? '' : day;
+    }
+    _renderPvOther(sel) {
+      const canvas = this._el('chartPvProd24h'); if (!canvas || !this._hass) return;
+      const range = sel === 'r7' || sel === 'r30';
+      const key = range ? sel : this._pvDayOf(sel);
+      const title = this._el('pvProdTitle');
+      if (title) title.textContent = range ? `Produkcja PV — ostatnie ${sel === 'r7' ? 7 : 30} dni, rzeczywista vs prognoza (kWh/dzień)` : `Produkcja PV ${sel === 'yesterday' ? 'wczoraj' : sel === 'tomorrow' ? 'jutro' : key} — rzeczywista vs prognoza (kWh/h)`;
+      const cache = this._pvCache || (this._pvCache = {});
+      const cached = cache[key];
+      const fresh = cached && Date.now() - cached.at < 60000;
+      if (!fresh && !(this._pvFetching === key)) {
+        this._pvFetching = key;
+        const data = range ? { mode: 'range', days: sel === 'r7' ? 7 : 30 } : { mode: 'day', date: key };
+        Promise.resolve(this._hass.callWS({ type: 'call_service', domain: 'bms_komp_dec', service: 'pv_chart_get', service_data: data, return_response: true }))
+          .then((r) => { cache[key] = { at: Date.now(), res: (r && r.response !== undefined ? r.response : r) || {} }; })
+          .catch(() => { cache[key] = { at: Date.now(), res: { error: true } }; })
+          .then(() => { this._pvFetching = null; if (this._pvSelGet() === sel) this._renderPvOther(sel); });
+      }
+      const res = cached ? cached.res : null;
+      const sub = this._el('pvProdSub'), parent = canvas.parentElement;
+      const oldNote = parent && parent.querySelector('.chart-note'); if (oldNote) oldNote.remove();
+      const emp = parent && parent.querySelector('.chart-empty'); if (emp) emp.remove();
+      const showMsg = (txt) => { canvas.style.display = 'none'; const m = document.createElement('div'); m.className = 'chart-empty'; m.textContent = txt; parent.appendChild(m); };
+      if (!res) { if (sub) sub.textContent = 'ładowanie…'; return; }
+      if (res.error) { if (sub) sub.textContent = '—'; return showMsg('Nie udało się wczytać danych.'); }
+      const f1 = (v) => (typeof v === 'number' ? v.toFixed(1).replace('.', ',') : '—');
+      if (range) {
+        const rows = Array.isArray(res.rows) ? res.rows : [];
+        if (sub) sub.textContent = `Rzeczywista: ${f1(res.sum_act)} kWh · Prognoza: ${f1(res.sum_fc)} kWh` + (res.err_pct != null ? ` · błąd prognozy ${f1(res.err_pct)}%` : '');
+        if (!rows.some((r) => r.pv_act != null || r.pv_fc != null)) return showMsg('Brak zapisanych danych z tego okresu.');
+        canvas.style.display = 'block';
+        this._drawPvDailyChart(canvas, rows);
+        return;
+      }
+      if (sub) sub.textContent = [res.sum_act != null ? `Rzeczywista: ${f1(res.sum_act)} kWh` : null, res.sum_fc != null ? `Prognoza: ${f1(res.sum_fc)} kWh` : null].filter(Boolean).join(' · ') || '—';
+      if (!res.actual && !res.forecast) return showMsg(res.note || 'Brak danych z tego dnia.');
+      canvas.style.display = 'block';
+      this._drawPvProductionChart(canvas, res.actual || null, res.forecast || null, false);
+      if (res.note) { const n = document.createElement('div'); n.className = 'chart-note'; n.textContent = res.note; canvas.parentElement.insertBefore(n, canvas.nextSibling); }
+    }
+    _drawPvDailyChart(canvas, rows) {
+      const dpr = window.devicePixelRatio || 1, w = canvas.clientWidth || 400, h = canvas.clientHeight || 280;
+      if (canvas.width !== Math.round(w * dpr) || canvas.height !== Math.round(h * dpr)) { canvas.width = Math.round(w * dpr); canvas.height = Math.round(h * dpr); }
+      const ctx = canvas.getContext('2d'); ctx.setTransform(dpr, 0, 0, dpr, 0, 0); ctx.clearRect(0, 0, w, h);
+      const padL = 40, padR = 10, padT = 14, padB = 30, plotW = w - padL - padR, plotH = h - padT - padB, n = rows.length;
+      const vals = []; rows.forEach((r) => { if (typeof r.pv_act === 'number') vals.push(r.pv_act); if (typeof r.pv_fc === 'number') vals.push(r.pv_fc); });
+      const maxV = (Math.max(1, ...vals)) * 1.1;
+      ctx.strokeStyle = TC('grid'); ctx.lineWidth = 1;
+      for (let g = 0; g <= 4; g++) { const y = padT + (g / 4) * plotH; ctx.beginPath(); ctx.moveTo(padL, y); ctx.lineTo(w - padR, y); ctx.stroke(); }
+      ctx.fillStyle = TC('muted'); ctx.font = '10px -apple-system, sans-serif'; ctx.textAlign = 'right'; ctx.textBaseline = 'middle';
+      for (let g = 0; g <= 4; g++) ctx.fillText((maxV - (g / 4) * maxV).toFixed(0), padL - 4, padT + (g / 4) * plotH);
+      const groupW = plotW / n, barW = Math.max(2, Math.min(18, groupW * 0.4)), baseY = padT + plotH;
+      const tipR = canvas._tipR = [];
+      rows.forEach((r, i) => {
+        const cx = padL + (i + 0.5) * groupW;
+        const bar = (v, x, c0, c1) => { if (typeof v !== 'number') return; const bh = Math.max(2, (v / maxV) * plotH); const gr = ctx.createLinearGradient(0, baseY - bh, 0, baseY); gr.addColorStop(0, c0); gr.addColorStop(1, c1); ctx.fillStyle = gr; this._roundRect(ctx, x, baseY - bh, barW, bh, 2); ctx.fill(); };
+        bar(r.pv_act, cx - barW - 1, COLORS.pv, '#d97706'); bar(r.pv_fc, cx + 1, 'rgba(96,165,250,0.75)', 'rgba(37,99,235,0.75)');
+        const fmt = (v) => (typeof v === 'number' ? v.toFixed(1).replace('.', ',') + ' kWh' : '—');
+        tipR.push({ x: padL + i * groupW, y: 0, w: groupW, h: h, text: [r.date, 'Wykonanie: ' + fmt(r.pv_act), 'Prognoza: ' + fmt(r.pv_fc)].join('\n') });
+      });
+      ctx.fillStyle = TC('muted'); ctx.font = '10px -apple-system, sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'top';
+      const step = Math.max(1, Math.ceil(n / (w < 380 ? 5 : 8)));
+      rows.forEach((r, i) => { if (i % step === 0) ctx.fillText(r.date.slice(8, 10) + '.' + r.date.slice(5, 7), padL + (i + 0.5) * groupW, baseY + 6); });
+      ctx.font = '11px -apple-system, sans-serif'; ctx.textAlign = 'left'; ctx.textBaseline = 'middle'; const lY = h - 7;
+      ctx.fillStyle = COLORS.pv; ctx.fillRect(padL, lY - 5, 10, 10); ctx.fillStyle = TC('text2'); ctx.fillText('rzeczywista', padL + 14, lY);
+      ctx.fillStyle = 'rgba(96,165,250,0.75)'; ctx.fillRect(padL + 100, lY - 5, 10, 10); ctx.fillStyle = TC('text2'); ctx.fillText('prognoza', padL + 114, lY);
+    }
+
     _renderPvProductionChart() {
       const canvas = this._el('chartPvProd24h');
+      if (canvas) {
+        this._pvBarSync();
+        const sel = this._pvSelGet();
+        if (sel !== 'today') { this._renderPvOther(sel); return; }
+        const tt = this._el('pvProdTitle'); if (tt) tt.textContent = 'Produkcja PV dziś — rzeczywista vs prognoza (kWh/h)';
+        canvas.style.display = '';
+      }
       if (!canvas || !this._history24h) return;
       const { dayStart, historyArr } = this._history24h;
       const actual = this._processEnergyHistoryToHourly(historyArr || [], dayStart);
@@ -2316,7 +2440,7 @@
       this._drawPvProductionChart(canvas, actual, forecast);
     }
 
-    _drawPvProductionChart(canvas, actual, forecast) {
+    _drawPvProductionChart(canvas, actual, forecast, isToday = true) {
       const dpr = window.devicePixelRatio || 1;
       const w = canvas.clientWidth || 400;
       const h = canvas.clientHeight || 280;
@@ -2378,7 +2502,7 @@
           const aH = Math.max(2, (actual[i] / maxV) * plotH);
           const x = cx - barW - 1;
           const grad = ctx.createLinearGradient(0, baseY - aH, 0, baseY);
-          if (i === nowH) {
+          if (isToday && i === nowH) {
             grad.addColorStop(0, COLORS.tomorrow);
             grad.addColorStop(1, COLORS.tomorrowDark);
           } else {
@@ -3073,6 +3197,26 @@
         ['auto_apply_max_shift_h', 'Auto-stosowanie: maks. przesunięcie (h, 0 = bez limitu)', 1],
       ];
 
+      // opisy: co robi funkcja i kiedy ją włączać (pod nazwą przełącznika / pola)
+      const DESC = {
+        negative_price_reaction: 'Gdy cena sprzedaży RCE spada poniżej progu (lub jest ujemna), EMS nie sprzedaje z baterii i ogranicza oddawanie do sieci, żebyś nie dopłacał do eksportu. Próg ustawiasz niżej.',
+        price_feed: 'EMS pobiera ceny RCE z PSE i przelicza je na cenę zakupu dopasowaną do Twojej taryfy dynamicznej (sensor „bms_buy_rce”), także na jutro, bez integracji sprzedawcy. Uczy się z Twoich zapisanych cen; ocena dopasowania jest pod tabelą cen.',
+        full_charge: 'Co kilka dni (pole niżej) ładuje baterię do 100%, żeby BMS skalibrował SOC i wyrównał ogniwa. Dojście do ~98% z PV zalicza cykl; jeśli się nie uda, planer dobije z sieci w najtańszych godzinach nocy.',
+        profit_check: 'Przed sprzedażą z baterii sprawdza, czy po sprawności cyklu, zużyciu baterii i minimalnej marży to się opłaca. Jeśli nie, sprzedaż jest pomijana.',
+        dynamic_reserve: 'Rezerwa SOC liczona z prognozy zużycia i PV: tyle, ile dom potrzebuje, zanim PV znów pokryje zużycie. Wyłączona = tylko stały próg „Rezerwa SOC — minimum”.',
+        auto_apply: 'EMS sam wpisuje do falownika okna ładowania i sprzedaży z planu (gdy plan jest stabilny ≥ 30 min, nie częściej niż co godzinę). Wyłączone: propozycje czekają na Twoje „Zastosuj”.',
+        readback_verify: 'Po każdej komendzie odczytuje wartość z falownika i porównuje ją z wysłaną; przy rozbieżności ponawia i ostrzega.',
+        recurring_schedule: 'Codziennie powtarza zapisany harmonogram startów w dniach wybranych niżej.',
+        holidays_as_sunday: 'W święta ustawowe harmonogram działa jak w niedzielę (wg ustawień dla niedzieli).',
+      };
+      const NDESC = {
+        low_price_threshold: 'Poniżej tej ceny RCE (zł/kWh) uznajemy cenę za niską i, przy włączonej reakcji, wstrzymujemy sprzedaż z baterii.',
+        full_charge_days: 'Co ile dni wymusić pełne ładowanie do 100% (działa po włączeniu „Pełne ładowanie baterii”).',
+        min_sell_margin: 'Najmniejszy zysk na 1 kWh (zł), przy którym planer w ogóle sprzedaje z baterii. Wyższa wartość = rzadsze, pewniejsze sprzedaże.',
+        cycle_efficiency: 'Ile energii wraca z baterii po naładowaniu (typowo 88–95%). Planer używa jej do liczenia opłacalności; zbyt wysoka wartość (np. 100%) sprawia, że opłacają się nawet drobne zmiany.',
+        reserve_floor_soc: 'Najniższy poziom naładowania, poniżej którego plan nie schodzi (poza progiem odcięcia falownika). Wyższa wartość = bezpieczniej, ale mniej energii do sprzedaży.',
+        auto_apply_max_shift_h: 'O ile godzin auto-stosowanie może przesunąć istniejące okno naraz (0 = bez limitu). Chroni przed dużymi skokami.',
+      };
       const swState = (k) => { const s = st('switch', k); return s ? s.state : 'unavailable'; };
       const numState = (k) => { const s = st('number', k); return s ? s.state : ''; };
       const key = JSON.stringify([
@@ -3107,14 +3251,17 @@
       const bars = hist.length ? this._balanceSvg(hist, `Bilans dzienny (eksport × RCE − import × cena zakupu), ostatnie ${hist.length} dni`) :
         `<div class="chart-empty">Bilans zacznie się liczyć od teraz — dane pojawią się po kilku minutach.</div>`;
 
-      const toggle = (eid, label, state) => {
+      const toggle = (eid, label, state, desc) => {
         const on = state === 'on';
         const dis = state === 'unavailable' || state === 'unknown';
         return `<button class="btn${on ? ' active' : ''}" data-switch="${this._esc(eid)}" ${dis ? 'disabled' : ''}
           style="padding:10px 12px;flex-direction:row;gap:8px;justify-content:flex-start;text-align:left;">
           <span>${on ? '✅' : '⬜'}</span><span class="label" style="font-size:12px;">${this._esc(label)}</span></button>`;
       };
-      const featureBtns = FEATURES.map(f => toggle(this._eid('switch', f[0]), f[1], swState(f[0]))).join('');
+      const featureBtns = FEATURES.map(f => toggle(this._eid('switch', f[0]), f[1], swState(f[0]))).join('')
+        + `<details class="fx-help" style="grid-column:1/-1;flex-basis:100%;margin-top:4px;"><summary style="cursor:pointer;font-size:12px;color:var(--muted);">ℹ️ Co robi każda funkcja</summary>`
+        + FEATURES.map(f => `<div class="fx-desc" data-fx="${this._esc(f[0])}" style="font-size:11.5px;color:var(--muted);line-height:1.45;padding:5px 0;border-bottom:1px solid var(--line);"><b style="color:var(--text);">${this._esc(f[1])}</b><br>${this._esc(DESC[f[0]] || '')}</div>`).join('')
+        + `</details>`;
       const dayBtns = DAYS.map(d => {
         const on = swState(d[0]) === 'on';
         return `<button class="btn${on ? ' active' : ''}" data-switch="${this._esc(this._eid('switch', d[0]))}"
@@ -3122,7 +3269,7 @@
       }).join('');
       const numInputs = NUMS.map(n => `
         <label style="display:flex;justify-content:space-between;align-items:center;gap:10px;font-size:12px;color:#c7c7cc;padding:4px 0;">
-          <span>${this._esc(n[1])}</span>
+          <span>${this._esc(n[1])}<small class="fx-ndesc" style="display:block;font-size:11px;color:var(--muted);line-height:1.4;margin-top:2px;max-width:420px;">${this._esc(NDESC[n[0]] || '')}</small></span>
           <input type="number" step="${n[2]}" data-number="${this._esc(this._eid('number', n[0]))}" value="${this._esc(numState(n[0]))}"
             style="width:90px;background:var(--input-bg);color:var(--text);border:1px solid var(--line);border-radius:8px;padding:6px 8px;">
         </label>`).join('');
@@ -3795,9 +3942,19 @@
             </div>
           </div>
           <div class="section" data-tile="ch-pvprod">
-            <div class="section-title">Produkcja PV dziś — rzeczywista vs prognoza (kWh/h)</div>
+            <div class="section-title" id="pvProdTitle">Produkcja PV dziś — rzeczywista vs prognoza (kWh/h)</div>
             <div class="chart-card full">
               <div class="chart-head"><span>☀️ Produkcja PV</span><span class="sub" id="pvProdSub">—</span></div>
+              <div id="pvRangeBar" style="display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin:2px 0 8px;">
+                <button class="btn" data-pvr="prev" style="padding:5px 10px;" aria-label="Wcześniej">‹</button>
+                <button class="btn" data-pvr="yesterday" style="padding:5px 10px;">Wczoraj</button>
+                <button class="btn" data-pvr="today" style="padding:5px 10px;">Dziś</button>
+                <button class="btn" data-pvr="tomorrow" style="padding:5px 10px;">Jutro</button>
+                <button class="btn" data-pvr="7" style="padding:5px 10px;">7 dni</button>
+                <button class="btn" data-pvr="30" style="padding:5px 10px;">30 dni</button>
+                <input type="date" id="pvDate" aria-label="Wybierz dzień" style="padding:4px 6px;border-radius:8px;border:1px solid var(--border,#444);background:var(--surface,#222);color:inherit;" />
+                <button class="btn" data-pvr="next" style="padding:5px 10px;" aria-label="Później">›</button>
+              </div>
               <canvas id="chartPvProd24h"></canvas>
             </div>
           </div>

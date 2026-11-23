@@ -1982,6 +1982,69 @@ class BmsRuntime:
         self._save_state()
         return self.state["analysis_cfg"]
 
+    # --------------------------------------------- wykres produkcji PV z historią (wczoraj / jutro / zakres dni)
+    def pv_chart(self, mode: str = "day", date_iso: str | None = None, days: int = 7) -> dict[str, Any]:
+        """Dane do wykresu „Produkcja PV”: doba godzina po godzinie (rzeczywista z koszyków EMS, prognoza z porannego zapisu
+        albo — dla jutra — bieżąca z planera) albo zakres dni (wykonanie vs prognoza dobowa)."""
+        from .insights import PV as _PV
+        today = dt_util.now().date()
+        ins = self.insights
+
+        def num(v: Any) -> float | None:
+            try:
+                x = float(v)
+            except (TypeError, ValueError):
+                return None
+            return x if x == x and abs(x) != float("inf") else None
+
+        def actual_for(d: date) -> list[float | None]:
+            return [None if b is None or num(b[_PV]) is None else round(float(b[_PV]), 3) for b in ins._buckets(d.isoformat())]  # noqa: SLF001
+
+        if mode == "range":
+            n = max(2, min(90, int(days or 7)))
+            rows: list[dict[str, Any]] = []
+            for i in range(n, 0, -1):
+                d = today - timedelta(days=i)
+                rec = ins.fc.get(d.isoformat()) or {}
+                fc, act = num(rec.get("pv_fc")), num(rec.get("pv_act"))
+                if act is None:
+                    hrs = [v for v in actual_for(d) if v is not None]
+                    act = round(sum(hrs), 2) if len(hrs) >= 8 else None
+                rows.append({"date": d.isoformat(), "pv_fc": fc, "pv_act": act})
+            pairs = [(r["pv_fc"], r["pv_act"]) for r in rows if r["pv_fc"] is not None and r["pv_act"] and r["pv_act"] > 0.3]
+            err = round(sum(abs(f - a) / a for f, a in pairs) / len(pairs) * 100.0, 1) if pairs else None
+            return {"mode": "range", "days": n, "rows": rows, "err_pct": err,
+                    "sum_act": round(sum(r["pv_act"] for r in rows if r["pv_act"] is not None), 1),
+                    "sum_fc": round(sum(r["pv_fc"] for r in rows if r["pv_fc"] is not None), 1)}
+        try:
+            d = date.fromisoformat(str(date_iso)[:10]) if date_iso else today
+        except ValueError:
+            d = today
+        kind = "past" if d < today else ("today" if d == today else "future")
+        if d > today + timedelta(days=1) or d < today - timedelta(days=62):
+            return {"mode": "day", "date": d.isoformat(), "kind": kind, "actual": None, "forecast": None,
+                    "note": "Dane godzinowe są dostępne od 62 dni wstecz do jutra."}
+        actual = actual_for(d) if d <= today else None
+        forecast = None
+        if d == today + timedelta(days=1):
+            try:
+                forecast = self.optimizer._read_pv_hourly(1)  # noqa: SLF001
+            except Exception:  # noqa: BLE001
+                forecast = None
+        else:
+            fh = (ins.fc.get(d.isoformat()) or {}).get("pv_fc_h")
+            forecast = fh if isinstance(fh, list) and len(fh) == 24 else None
+        fc24 = [None if num(v) is None else round(float(v), 3) for v in forecast] if isinstance(forecast, list) else None
+        act_has = bool(actual) and any(v is not None for v in actual)
+        note = None
+        if not act_has and kind == "past":
+            note = "Brak zapisanej produkcji z tej doby (EMS zapisuje godziny z ostatnich 62 dni)."
+        elif fc24 is None and kind != "today":
+            note = "Brak prognozy z tego dnia."
+        return {"mode": "day", "date": d.isoformat(), "kind": kind, "actual": actual if act_has else None, "forecast": fc24,
+                "sum_act": round(sum(v for v in (actual or []) if v is not None), 2) if act_has else None,
+                "sum_fc": round(sum(v for v in (fc24 or []) if v is not None), 2) if fc24 else None, "note": note}
+
     # --------------------------------------------- pełne ładowanie co N dni (kalibracja SOC, wyrównanie ogniw)
     FULL_SOC = 98.0
 

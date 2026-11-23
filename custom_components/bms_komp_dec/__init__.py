@@ -40,7 +40,7 @@ _SERVICES = (
     "test_schedule", "suggest_schedule", "apply_schedule_times", "undo_auto_apply", "auto_apply_now",
     "watch_write", "watch_status", "watch_clear", "health_check", "monthly_report", "get_plan",
     "diag_store_get_all", "diag_store_set", "diag_store_delete",
-    "notify_settings_get", "notify_settings_set", "notify_test", "inbox_action", "devices_get", "devices_set", "devices_discover", "insights_get", "self_test", "diagnostic_report",
+    "notify_settings_get", "notify_settings_set", "notify_test", "inbox_action", "devices_get", "devices_set", "devices_discover", "insights_get", "pv_chart_get", "self_test", "diagnostic_report",
     "override_set", "override_clear", "analysis_get", "analysis_set", "control_test", "settings_log_get",
     "profiles_get", "profile_apply", "profile_revert", "profile_save", "profile_delete", "profile_schedule", "profile_schedule_clear", "pv_caution_apply", "pv_caution_revert", "pv_caution_dismiss",
     "grid_outage_test", "expand_estimate", "fleet_get", "fleet_set",
@@ -457,6 +457,10 @@ def _register_services(hass: HomeAssistant) -> None:
                 "pv_correction_on": switch_on(hass, "pv_forecast_correction", True), "cost_forecast": rt.cost_forecast(),
                 "wear_cost": round(float(rt.optimizer.wear_cost()), 4) if hasattr(rt.optimizer, "wear_cost") else 0.0}
 
+    async def handle_pv_chart_get(call):
+        rt = _need_runtime(hass)
+        return rt.pv_chart(str(call.data.get("mode") or "day"), call.data.get("date"), int(call.data.get("days") or 7))
+
     async def handle_self_test(call):
         await _require_admin(hass, call)
         rt = _need_runtime(hass)
@@ -618,6 +622,7 @@ def _register_services(hass: HomeAssistant) -> None:
         ("devices_get", handle_devices_get, SupportsResponse.ONLY),
         ("devices_discover", handle_devices_discover, SupportsResponse.ONLY),
         ("insights_get", handle_insights_get, SupportsResponse.ONLY),
+        ("pv_chart_get", handle_pv_chart_get, SupportsResponse.ONLY),
         ("self_test", handle_self_test, SupportsResponse.ONLY),
         ("diagnostic_report", handle_diagnostic_report, SupportsResponse.ONLY),
         ("override_set", handle_override_set, SupportsResponse.OPTIONAL),

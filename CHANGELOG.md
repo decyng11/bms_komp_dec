@@ -1,5 +1,11 @@
 # EMS komp-dec 0.9.6.0
 
+## Wykres produkcji PV z historią (karta: Wykresy → Produkcja PV)
+Nad wykresem pojawił się wybór przedziału: „‹ Wczoraj · Dziś · Jutro · 7 dni · 30 dni · wybór daty ›”. Wczoraj i dowolny dzień do 62 dni wstecz pokazuje godziny: rzeczywista produkcja (z zapisów EMS) obok porannej prognozy tamtego dnia. Jutro pokazuje prognozę, której używa planer. 7 i 30 dni to słupki dobowe z sumą, prognozą i średnim błędem prognozy za okres (najeżdżając na słupek, widzisz wartości). Wybór zostaje zapamiętany na urządzeniu; „Dziś” działa jak dotąd. Nowa usługa `pv_chart_get`.
+
+## Opisy w Ustawieniach (Funkcje automatyczne) i przy „Czy opłaca się rozbudowa?”
+Pod nazwami wszystkich funkcji automatycznych (rozwijane „Co robi każda funkcja”) i przy każdym polu liczbowym jest opis, co robi i na co wpływa. Narzędzie „Czy opłaca się rozbudowa?” ma instrukcję: co wpisać w każde pole, co oznacza wynik i jakie są ograniczenia szacunku.
+
 ## Ładowanie z sieci: wieczór tańszy niż po północy
 Przy taryfie dynamicznej okno ładowania zaczynało się dopiero po wieczornym „szczycie” wyliczonym z cen, więc tańsze godziny wieczorem (np. 0,60 zł o 20:00 wobec 0,90 zł po północy) w ogóle nie brały udziału w wyborze. Teraz, gdy PV już nie produkuje, okno obejmuje też wcześniejsze godziny wieczorne i wygrywa najtańszy blok.
 
