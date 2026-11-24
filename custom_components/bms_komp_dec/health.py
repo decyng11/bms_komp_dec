@@ -18,7 +18,7 @@ from .const import (
     CONF_SOC, DEFAULT_BATTERY_CAPACITY_KWH, DEFAULT_PRICE_BUY_ENTITY, DEFAULT_PRICE_SELL_ENTITY,
     DEFAULT_PV_FORECAST_TODAY, DEFAULT_PV_FORECAST_TOMORROW, BUTTONS, TIMES, VERSION,
 )
-from .helpers import find_eid, switch_on
+from .helpers import find_eid, number_value, switch_on
 from .runtime import COMMAND_LABELS
 from .tariff import get_profile
 
@@ -202,6 +202,26 @@ def health_check(rt) -> dict[str, Any]:
                            "włączony — komendy trafiają tylko do dziennika jako „ustawiłbym …”" if test
                            else "wyłączony — EMS zapisuje ustawienia do falownika",
                            "Sprawdź w dzienniku, czy kroki komend są właściwe, i dopiero wtedy wyłącz switch.bms_brand_test_mode." if test else ""))
+        if brand == brands.GOODWE:
+            lim = brands.goodwe_export_limit(hass, cfg)
+            sale_w = number_value(hass, "sell_export_power_w", 6000.0)
+            if lim and lim[1] < sale_w - 1:
+                checks.append(_chk("goodwe_export_limit", "GoodWe: limit eksportu do sieci", "warn",
+                                   f"{lim[0]} = {lim[1]:.0f} W, a moc sprzedaży w EMS to {sale_w:.0f} W — falownik nie odda do sieci więcej niż limit.",
+                                   "EMS niczego tu nie zmienia. Jeśli limit nie jest celowy (np. wymóg operatora), podnieś go w falowniku albo obniż „Moc sprzedaży”."))
+            elif lim:
+                checks.append(_chk("goodwe_export_limit", "GoodWe: limit eksportu do sieci", "ok", f"{lim[0]} = {lim[1]:.0f} W"))
+        errs = [c for c in checks if c["id"].startswith(("ctl_", "opt_")) and c["status"] == "error"]
+        direct_ok = switch_on(hass, "readback_verify", True)
+        steps = [
+            ("1. Encje i opcje trybów znalezione", not errs),
+            ("2. Próba na sucho: komendy tylko w dzienniku (sprawdź kroki w zakładce Dziennik)", True),
+            ("3. Zapis włączony na 10 min: wyłącz tryb próbny, wydaj jedną komendę i obserwuj falownik", not test),
+            ("4. Porównanie z odczytem zwrotnym: dziennik pokazuje „potwierdzony”", direct_ok and not test),
+        ]
+        checks.append(_chk("brand_guide", "Wdrożenie marki: kroki", "ok" if all(ok for _t, ok in steps[:1]) and not test else "warn",
+                           " · ".join(("✓ " if ok else "○ ") + t for t, ok in steps),
+                           "Po kroku 3 przywróć tryb próbny, jeśli coś wygląda źle (switch.bms_brand_test_mode)." if test else ""))
     else:
         for role in ("work_mode", "charge_current", "export_surplus", "tou_select"):
             eid = rt.eid(role)
@@ -250,6 +270,12 @@ def health_check(rt) -> dict[str, Any]:
                                "Jeśli to trwa — sprawdź logger Solarman."))
         else:
             checks.append(_chk(f"sensor_{key}", label, "ok", f"{eid} = {st.state} {st.attributes.get('unit_of_measurement', '')}".strip()))
+
+    # --- podejrzane czujniki (sensorfault.py)
+    sf = getattr(rt, "sensor_faults", None) or []
+    checks.append(_chk("sensor_faults", "Wiarygodność czujników (PV, SOC)", "warn" if sf else "ok",
+                       " ".join(f["text"] for f in sf) if sf else "bez zastrzeżeń",
+                       "Do czasu naprawy plan nie ufa bieżącej korekcie PV z dzisiejszych godzin." if sf else ""))
 
     # --- ceny i prognozy
     for key, default, label, must in (

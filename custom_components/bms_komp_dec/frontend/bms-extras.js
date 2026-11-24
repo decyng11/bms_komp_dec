@@ -1138,6 +1138,7 @@
       .px-neg { color:var(--green); } .px-pos { color:var(--red); }
       .px-hist svg { width:100%; height:auto; display:block; }
       .px-best td { font-weight:600; color:var(--green) !important; }
+      .mp-today { padding:10px 14px; margin-bottom:10px; border-radius:14px; background:var(--card); border:1px solid var(--line); font-size:14px; color:var(--text); }
       .mp-bill { display:grid; grid-template-columns:repeat(auto-fit,minmax(120px,1fr)); gap:8px; margin-bottom:10px; }
       .mp-bill > div { padding:9px 12px; border-radius:14px; background:var(--card); border:1px solid var(--line); }
       .mp-bill small { display:block; font-size:11px; color:var(--muted); }
@@ -1184,7 +1185,8 @@
         const day = (pa.sums && pa.sums.day) || null;
         const sv = pa.extras && pa.extras.day && pa.extras.day.savings;
         const ovr = Array.isArray(a.overrides) ? a.overrides : [];
-        const key = JSON.stringify([day, sv, ovr.map(o => o.id)]);
+        const todayText = String(a.today_text || '');
+        const key = JSON.stringify([day, sv, ovr.map(o => o.id), todayText]);
         if (box.dataset.exKey === key) return;
         box.dataset.exKey = key;
         const zl = (v) => { const n = exNum(v); return n === null ? '—' : (n < 0 ? '−' : '') + Math.abs(n).toFixed(2).replace('.', ',') + ' zł'; };
@@ -1200,7 +1202,8 @@
             + '</div>';
         }
         const chips = ovr.length ? '<div class="mp-chips">' + ovr.map(o => `<span class="mp-chip">🧭 ${exEsc(o.text || pxKind[o.kind] || o.kind)}<button type="button" data-mp-del="${exEsc(o.id)}" aria-label="Usuń nadpisanie" title="Usuń">✕</button></span>`).join('') + '</div>' : '';
-        box.innerHTML = bill + chips;
+        const sentence = todayText ? `<div class="mp-today" data-role="plan-today">🗓️ ${exEsc(todayText)}</div>` : '';
+        box.innerHTML = sentence + bill + chips;
         if (!box.dataset.exBound) {
           box.dataset.exBound = '1';
           box.addEventListener('click', async (ev) => {

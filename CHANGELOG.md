@@ -1,5 +1,12 @@
 # EMS komp-dec 0.9.6.0
 
+## Podejrzane czujniki i zdanie „plan na dziś”
+- **Wykrywanie usterek czujników**: PV na zerze od ponad 90 min w południe mimo słonecznej prognozy albo SOC niezmienny przez 3 h przy realnym przepływie mocy baterii. Pokazuje się w Sprawdzeniu, przychodzi powiadomienie „Podejrzany czujnik”, a plan na czas usterki PV nie ufa bieżącej korekcie prognozy z dzisiejszych godzin.
+- **Ekran główny**: jedno zdanie, co plan zrobi do końca dnia, np. „Ładuję 02:00–04:00 do 80%, sprzedaję 18:00–20:00.”
+- **Sprawdzenie (GoodWe)**: ostrzeżenie, gdy limit eksportu do sieci w falowniku jest niższy niż moc sprzedaży w EMS (EMS niczego nie zmienia, tylko informuje).
+- **Sprawdzenie (Sofar, GoodWe)**: lista kroków wdrożenia nowej marki (encje, próba na sucho, zapis na próbę, odczyt zwrotny).
+- Odczyt zwrotny po komendzie z jednym ponowieniem działał już wcześniej dla wszystkich marek.
+
 ## Nowa marka falownika: GoodWe (tryby EMS)
 EMS steruje teraz także GoodWe (serie ET/EH i pokrewne) przez encje integracji GoodWe: „EMS mode” i „EMS power limit”. Praca normalna = auto, ładowanie z sieci = import_ac (gdy firmware go nie ma: charge_battery), sprzedaż = export_ac, blokada ładowania z PV = discharge_pv. Przed trybem EMS EMS ustawia tryb pracy falownika „general” (tryby EMS działają tylko w nim), a moc zapisuje po zmianie trybu i przycina do zakresu encji. Nazwy opcji są rozpoznawane niezależnie od zapisu („export_ac” = „Export AC”). Marka wykrywa się po opcjach trybu EMS. Kod napisany od zera według dokumentacji trybów EMS integracji (bez kopiowania cudzego kodu). Sterowanie NIE było sprawdzone na prawdziwym falowniku, więc jak przy Sofarze działa tryb próbny („Sofar i GoodWe: tryb próbny”, domyślnie włączony): komendy trafiają tylko do dziennika. Tryby EMS wymagają nowszego oprogramowania falownika; przy starszym „Sprawdzenie” pokaże brakujące opcje.
 

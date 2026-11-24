@@ -199,3 +199,35 @@ def why_now(rt: Any, now: datetime) -> dict[str, Any]:
     if nxt:
         add(nxt)
     return {"kind": kind, "text": text, "details": parts[:5], "soc": None if soc is None else round(float(soc), 1)}
+
+
+def _runs(rows: list[dict[str, Any]], action: str) -> list[tuple[int, int, float]]:
+    """Ciągłe serie godzin z daną akcją: (godzina startu, godzina końca wyłącznie, SOC po ostatniej godzinie)."""
+    out: list[tuple[int, int, float]] = []
+    cur: list[dict[str, Any]] = []
+    for r in rows:
+        if r.get("action") == action and (not cur or r["h"] == (cur[-1]["h"] + 1) % 24):
+            cur.append(r)
+            continue
+        if cur:
+            out.append((cur[0]["h"], (cur[-1]["h"] + 1) % 24, cur[-1]["soc"]))
+        cur = [r] if r.get("action") == action else []
+    if cur:
+        out.append((cur[0]["h"], (cur[-1]["h"] + 1) % 24, cur[-1]["soc"]))
+    return out
+
+
+def day_sentence(rows: list[dict[str, Any]] | None, today_iso: str, hour: int) -> str:
+    """Jedno zdanie „co plan zrobi dziś” (od bieżącej godziny do końca doby), np. „Ładuję 02:00–04:00 do 80%, sprzedaję 18:00–20:00”."""
+    mine = [r for r in (rows or []) if r.get("day") == today_iso and isinstance(r.get("h"), int) and r["h"] >= hour]
+    if not mine:
+        return ""
+    fmt = lambda a, b: f"{a:02d}:00–{b:02d}:00"  # noqa: E731
+    parts = [f"ładuję {fmt(a, b)} do {round(s)}%" for a, b, s in _runs(mine, "grid")]
+    sells = _runs(mine, "sell")
+    if sells:
+        parts.append("sprzedaję " + ", ".join(fmt(a, b) for a, b, _s in sells))
+    if not parts:
+        return "Reszta dnia bez ładowania z sieci i sprzedaży — dom na PV i baterii."
+    text = ", ".join(parts)
+    return text[0].upper() + text[1:] + "."

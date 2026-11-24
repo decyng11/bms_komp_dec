@@ -668,7 +668,7 @@ class Insights:
         live = 1.0
         mult = list(base)
         loc = dt_util.as_local(now)
-        if offset == 0 and tot > 0:
+        if offset == 0 and tot > 0 and not getattr(self, "pv_live_off", False):
             live, mult = self._pv_live(loc, vals, base)
         return {"mult": mult, "factor": fac, "days": n, "shape_days": shape_days, "live": round(live, 3)}
 

@@ -22,6 +22,7 @@ from . import autonomy as autonomy_mod
 from . import tomorrowplan as tomorrowplan_mod
 from . import pricewin as pricewin_mod
 from . import sunny as sunny_mod
+from . import sensorfault
 from . import notify_cfg as ncfg
 from .const import CONF_BATTERY_TEMPERATURE, CONF_GRID_POWER, CONF_GRID_VOLTAGE_L1
 from .helpers import switch_on
@@ -190,7 +191,7 @@ class Monitor:
                           ("ładowanie z sieci stoi", self._grid_charge_stalled), 
                           ("pobór z sieci", self._high_import), ("ceny jutro", self._prices_tomorrow),
                           ("źródła danych", self._sources), ("zużycie", self._load_above),
-                          ("nocny pobór", self._night_draw), ("PV jutro", self._weak_pv), ("plan na jutro", self._plan_tomorrow), ("ostrożność PV", self._pv_caution), ("cel miesięczny", self._bill_goal), ("słoneczny dzień", self._sunny_day), ("flota", self._fleet), ("plan a próg", self._plan_floor), ("trafność prognoz", self._accuracy), ("zdrowie baterii", self._health),
+                          ("nocny pobór", self._night_draw), ("PV jutro", self._weak_pv), ("plan na jutro", self._plan_tomorrow), ("ostrożność PV", self._pv_caution), ("cel miesięczny", self._bill_goal), ("słoneczny dzień", self._sunny_day), ("flota", self._fleet), ("czujniki", self._sensor_fault), ("plan a próg", self._plan_floor), ("trafność prognoz", self._accuracy), ("zdrowie baterii", self._health),
                           ("podsumowania", self._summaries), ("autoodczyt", self._inbox_auto_read)):
             try:
                 await chk(now)
@@ -788,6 +789,31 @@ class Monitor:
         if not res or not self._once("sunny_day", loc.date().isoformat()):
             return
         await self.notifier.send("sunny_day", "☀️ EMS: jutro słonecznie", res["text"], level="info")
+
+    async def _sensor_fault(self, now: datetime) -> None:
+        """PV = 0 w słoneczny dzień albo SOC „zamarznięty” przy przepływie mocy (sensorfault.py); plan przestaje ufać korekcie PV na żywo."""
+        rt = self.rt
+        loc = dt_util.as_local(now)
+        data = rt.coordinator.data or {}
+
+        def num(v):
+            try:
+                return float(v)
+            except (TypeError, ValueError):
+                return None
+        try:
+            fc = rt.optimizer._read_pv_forecast_kwh("pv_forecast_today", "")  # noqa: SLF001
+        except Exception:  # noqa: BLE001
+            fc = None
+        st = getattr(rt, "_sf_state", None)
+        if st is None:
+            st = rt._sf_state = sensorfault.new_state()  # noqa: SLF001
+        faults = sensorfault.update(st, now.timestamp(), loc.hour, num(data.get("pv_power")), rt.soc(), num(data.get("battery_power")),
+                                    num(fc))
+        rt.sensor_faults = faults
+        rt.insights.pv_live_off = sensorfault.pv_untrusted(faults)
+        for f in faults:
+            await self.notifier.send("sensor_fault", "⚠ EMS: podejrzany czujnik", f["text"], key=f"sf:{f['kind']}", level="warn")
 
     async def _health(self, now: datetime) -> None:
         if now.hour != 12:

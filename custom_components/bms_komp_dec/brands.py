@@ -338,3 +338,24 @@ def powers(hass: HomeAssistant, cfg: dict[str, Any]) -> tuple[float, float, floa
     except (TypeError, ValueError):
         dis = 5000.0
     return float(sell), chg, dis
+
+
+def goodwe_export_limit(hass: HomeAssistant, cfg: dict[str, Any]) -> tuple[str, float] | None:
+    """(encja, wartość W) limitu eksportu do sieci w GoodWe (number „grid export limit”), jeśli integracja go udostępnia."""
+    mode = role_eid(hass, cfg, GOODWE, "mode")
+    prefix = mode.partition(".")[2][: -len("ems_mode")].rstrip("_") if mode and mode.endswith("ems_mode") else None
+    tails = ("grid_export_limit", "export_limit")
+    cands = [f"number.{prefix}_{t}" if prefix else f"number.{t}" for t in tails]
+    try:
+        cands += [e for e in hass.states.async_entity_ids("number") if any(e.partition(".")[2].endswith(t) for t in tails)]
+    except Exception:  # noqa: BLE001
+        pass
+    for eid in cands:
+        st = hass.states.get(eid)
+        if st is None:
+            continue
+        try:
+            return eid, float(st.state)
+        except (TypeError, ValueError):
+            continue
+    return None

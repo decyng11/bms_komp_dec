@@ -15,6 +15,7 @@ from .const import DOMAIN, RUNTIME_SENSORS, SENSORS
 from . import accuracy as acc
 from . import buyestimate as buyest_mod
 from . import money as money_mod
+from . import planview
 from . import inverter_ctl as ictl
 from .entity import BmsBaseEntity
 from .monitor import FAULT_NOTE, fault_text
@@ -389,6 +390,7 @@ class BmsRuntimeSensor(BmsBaseEntity, SensorEntity):
             now = dt_util.now()
             pt = rt.plan_table()
             return {"why": rt.why_now(now), "table": pt["rows"], "table_totals": pt["totals"],
+                    "today_text": planview.day_sentence(pt["rows"], now.date().isoformat(), now.hour),
                     "overrides": [dict(o, text=rt.override_text(o)) for o in rt.override_list(now)],
                     "soc_history": rt.soc_history(7), "control_test": rt.state.get("control_test"),
                     "generated_at": (rt.plan() or {}).get("generated_at")}

@@ -29,6 +29,7 @@ CATALOG: dict[str, tuple] = {
     "grid_outage": ("Falownik", "Zanik i powrót sieci", "Napięcie sieci L1 spadło poniżej progu (praca z baterii) i wróciło.", True, True, 15, True,
                     ("próg napięcia", "V", 100.0, 50.0, 200.0, 5.0)),
     "command_unconfirmed": ("Falownik", "Falownik nie potwierdził komendy", "Po komendzie i jej ponowieniu stan falownika się nie zgadza.", True, True, 60, False, None),
+    "sensor_fault": ("Falownik", "Podejrzany czujnik", "PV stoi na zerze mimo słonecznej prognozy albo SOC nie zmienia się mimo przepływu mocy baterii. Plan wtedy nie ufa bieżącej korekcie PV.", True, True, 360, False, None),
     "drift": ("Falownik", "Parametr zmienił wartość po zapisie", "Wartość zapisana do falownika zmieniła się po kilku minutach.", True, True, 30, False, None),
     "guard_action": ("Falownik", "Zadziałało zabezpieczenie", "Zabezpieczenie zatrzymało sprzedaż albo odblokowało ładowanie z PV.", True, True, 60, False, None),
     "grid_charge_stalled": ("Falownik", "Okno ładowania trwa, a bateria się nie ładuje", "Trwa zaplanowane ładowanie z sieci, SOC jest poniżej celu planu, ale bateria nie przyjmuje energii (np. próg startu SOC albo prąd ładowania w falowniku).", True, True, 180, False, None),
@@ -90,7 +91,7 @@ GROUPS = ("Bateria", "Falownik", "Ceny i plan", "Działanie", "Urządzenia", "Po
 # ważności wysyłamy na telefon i do powiadomień HA; skrzynka panelu (dzwonek) dostaje ZAWSZE wszystko, więc nic nie ginie.
 PRIORITY: dict[str, int] = {
     "low_soc": 1, "alarm": 1, "comm_loss": 1, "grid_outage": 1, "island_overload": 1, "battery_temp_high": 1, "battery_temp_low": 1,
-    "command_unconfirmed": 1, "drift": 1, "guard_action": 1, "grid_limit": 1, "grid_charge_stalled": 1, "plan_floor": 1, "set_off": 1,
+    "command_unconfirmed": 1, "sensor_fault": 1, "drift": 1, "guard_action": 1, "grid_limit": 1, "grid_charge_stalled": 1, "plan_floor": 1, "set_off": 1,
     "morning_guard": 1, "grid_charge_target": 1,
     "rce_missing": 2, "data_repair": 2, "buy_prices_missing": 2, "pv_forecast_missing": 2, "plan_error": 2, "auto_apply": 2, "storm": 2, "battery_health": 2,
     "device_anomaly": 2, "device_shed": 2, "profile_plan": 2, "night_draw": 2, "weak_pv": 2, "rce_negative": 2, "summary_daily": 2, "summary_weekly": 2, "summary_monthly": 2,

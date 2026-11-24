@@ -179,6 +179,8 @@ class BmsRuntime:
         self._plan: dict[str, Any] | None = None           # ostatni plan (krzywa SOC) z optymalizatora
         self._plan_ts = 0.0
         self._plan_hold: dict[str, Any] = {}
+        self.sensor_faults: list[dict[str, str]] = []
+        self._sf_state: dict[str, Any] | None = None
         self._plan_lock = asyncio.Lock()
         self._report_cache: tuple[str, dict[str, Any]] | None = None
         self._state_store = ThrottledStore(hass, 1, "bms_komp_dec_runtime", delay=30)
