@@ -69,7 +69,7 @@ OPTIONS = {
     "passive": ("Passive", "Passive Mode"),
     "auto": ("Auto", "Self Use", "Self-Use"),
     "timed": ("Timed", "Timing", "Timed Mode"),
-    "import_ac": ("Import AC",),
+    "import_ac": ("Import AC", "Charge Battery"),      # gdy firmware nie ma Import AC: wymuszone ładowanie (PV, brakującą część z sieci)
     "export_ac": ("Export AC",),
     "discharge_pv": ("Discharge PV",),
 }
@@ -77,8 +77,13 @@ _CACHE: dict[int, tuple[float, str]] = {}
 _CACHE_S = 60.0
 
 
+def _norm(o: Any) -> str:
+    """Opcja do porównań: małe litery, „_” i „-” jak spacja („export_ac” = „Export AC”, „Self-Use” = „self use”)."""
+    return " ".join(str(o).strip().lower().replace("_", " ").replace("-", " ").split())
+
+
 def _opts(hass: HomeAssistant, eid: str | None) -> list[str]:
-    return [o.lower() for o in (ictl.options_of(hass, eid) or [])] if eid else []
+    return [_norm(o) for o in (ictl.options_of(hass, eid) or [])] if eid else []
 
 
 def detect(hass: HomeAssistant, cfg: dict[str, Any]) -> str:
@@ -102,7 +107,7 @@ def detect(hass: HomeAssistant, cfg: dict[str, Any]) -> str:
         if "import ac" in o or "export ac" in o or ("battery standby" in o and "auto" in o):
             brand = GOODWE
             break
-        if "passive" in o and ("self use" in o or "self-use" in o):
+        if "passive" in o and "self use" in o:
             brand = SOFAR_G3
             break
         if "auto" in o and ("timed" in o or "passive" in o):
@@ -157,10 +162,27 @@ def pick(hass: HomeAssistant, eid: str, kind: str) -> str | None:
     opts = ictl.options_of(hass, eid)
     if opts is None:
         return None
-    low = {o.strip().lower(): o for o in opts}
+    low = {_norm(o): o for o in opts}
     for c in OPTIONS[kind]:
-        if c.lower() in low:
-            return low[c.lower()]
+        if _norm(c) in low:
+            return low[_norm(c)]            # zwracamy nazwę dokładnie tak, jak ją podaje encja (np. „export_ac”)
+    return None
+
+
+def _goodwe_operation_mode(hass: HomeAssistant, ems_mode_eid: str) -> str | None:
+    """Encja „operation mode” integracji GoodWe stojąca obok „EMS mode” (ten sam prefiks), jeśli istnieje."""
+    obj = ems_mode_eid.partition(".")[2]
+    if obj.endswith("ems_mode"):
+        guess = "select." + obj[: -len("ems_mode")] + "operation_mode"
+        if hass.states.get(guess) is not None:
+            return guess
+    return None
+
+
+def pick_general(hass: HomeAssistant, eid: str) -> str | None:
+    for o in ictl.options_of(hass, eid) or []:
+        if _norm(o) == "general":
+            return o
     return None
 
 
@@ -196,9 +218,15 @@ def steps(hass: HomeAssistant, cfg: dict[str, Any], brand: str, key: str, *, sel
         need("mode", "power")
         normal = lambda: [("select", r["mode"], opt("auto"))]  # noqa: E731
 
+        def general() -> list[tuple[str, str, Any]]:
+            # tryby EMS działają tylko przy trybie pracy falownika „general” (select „operation mode” tej samej integracji)
+            eid = _goodwe_operation_mode(hass, r["mode"])
+            g = pick_general(hass, eid) if eid else None
+            return [("select", eid, g)] if eid and g and _norm(state_str(hass, eid) or "") != "general" else []
+
         def ems(kind: str, w: float) -> list[tuple[str, str, Any]]:
-            # moc najpierw, tryb na końcu — falownik nie wchodzi w tryb ze starą mocą
-            return [("number", r["power"], clamp("power", w)), ("select", r["mode"], opt(kind))]
+            # najpierw tryb pracy i tryb EMS, potem moc (po zmianie trybu falownik przyjmuje nową moc)
+            return general() + [("select", r["mode"], opt(kind)), ("number", r["power"], clamp("power", w))]
 
         table = {
             "sprzedaz_6000w": lambda: ems("export_ac", sell_w),
@@ -265,8 +293,8 @@ def _f(hass: HomeAssistant, eid: str | None) -> float | None:
 
 
 def _mode_is(hass: HomeAssistant, eid: str | None, kind: str) -> bool:
-    s = (state_str(hass, eid) or "").strip().lower() if eid else ""
-    return bool(s) and s in {c.lower() for c in OPTIONS[kind]}
+    s = _norm(state_str(hass, eid) or "") if eid else ""
+    return bool(s) and s in {_norm(c) for c in OPTIONS[kind]}
 
 
 def state(hass: HomeAssistant, cfg: dict[str, Any], brand: str) -> dict[str, Any]:
