@@ -1,5 +1,9 @@
 # EMS komp-dec 0.9.6.0
 
+## Rok do roku i „Nowości po aktualizacji”
+- **Rok do roku** (Zysk i log → Oszczędności): ostatnie 30 dni wobec tych samych 30 dni rok wcześniej: sprzedaż, zakup, saldo, pobór i oddanie energii, z różnicą w zł i procentach. Gdy księga nie sięga jeszcze roku wstecz, panel podaje przybliżoną datę, od której porównanie się pojawi.
+- **Nowości po aktualizacji**: po zmianie wersji karty na ekranie głównym pojawia się krótka lista nowych funkcji i miejsc do sprawdzenia. „Rozumiem” zapamiętuje wersję w tej przeglądarce.
+
 ## Kopia ustawień (EMS → Kopia ustawień)
 - **Pobierz plik / Wczytaj z pliku** (tylko administrator): zapis wszystkich przełączników i liczb EMS, własnych profili oraz ustawień powiadomień i analiz do pliku JSON. Przed wczytaniem widać listę zmian („25% → 40%”), którą trzeba zatwierdzić. Błędne lub nieznane wartości są pomijane, a tryb próbny marki falownika nie jest przenoszony. Usługi: `settings_export`, `settings_import`.
 

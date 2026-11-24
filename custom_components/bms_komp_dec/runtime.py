@@ -24,6 +24,7 @@ from . import inbox
 from . import planhold
 from . import planstory
 from . import settingsio
+from . import yoy as yoy_mod
 from .gridlimit import GridLimiter
 from . import brands
 from . import inverter_ctl as ictl
@@ -2404,6 +2405,14 @@ class BmsRuntime:
 
     def plan_story(self) -> dict[str, Any]:
         return planstory.view(self.state.get("plan_snaps") or {}, dt_util.now().date())
+
+    def yoy_view(self) -> dict[str, Any]:
+        """Porównanie ostatnich 30 dni z tym samym okresem rok temu (yoy.py)."""
+        try:
+            return yoy_mod.compare(self.ledger.days, dt_util.now().date())
+        except Exception:  # noqa: BLE001
+            _LOGGER.debug("EMS: porównanie rok do roku nieudane", exc_info=True)
+            return {"available": False, "note": "Porównanie rok do roku jest chwilowo niedostępne."}
 
     def wear_view(self) -> dict[str, Any]:
         try:

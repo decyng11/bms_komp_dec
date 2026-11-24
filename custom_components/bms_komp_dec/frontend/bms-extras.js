@@ -7,6 +7,21 @@
   const install = function (BmsPanel, shared) {
     const TC = shared.TC;
     const BMS_INFO = { card: shared.version || '', url: shared.urlVersion || '' };
+    // Co nowego po aktualizacji: pokazywane raz na przeglądarkę, po zmianie wersji karty. Dopisuj nową wersję na górze.
+    const WHATS_NEW = {
+      '0.9.6.0': {
+        items: [
+          ['Stabilniejszy plan', 'Plan nie zmienia decyzji bez wyraźnego zysku. Zmiany widać na osi decyzji w Zysk i log.'],
+          ['Porady z jednym kliknięciem', 'Zysk i log → Porady: „Zastosuj” i „Cofnij” przy ustawieniach, które warto zmienić.'],
+          ['Kopia ustawień', 'EMS → Kopia ustawień: zapis do pliku i wczytanie z podglądem zmian.'],
+          ['Nowa marka: GoodWe', 'Domyślnie w trybie próbnym (komendy tylko w dzienniku). Sprawdź kroki w Sprawdzeniu, zanim wyłączysz tryb próbny.'],
+          ['Czujniki pod kontrolą', 'EMS ostrzega, gdy PV stoi na zerze w słoneczny dzień albo SOC się zawiesił.'],
+          ['Rok do roku', 'Zysk i log → Oszczędności: ostatnie 30 dni wobec tego samego okresu rok temu.'],
+        ],
+        check: 'Warto zajrzeć: Ustawienia → Sprawdzenie (nowe pozycje) oraz Wyszukiwarka w Ustawieniach.',
+      },
+    };
+    const WN_KEY = 'bms_whatsnew_seen';
     // =====================================================================
     //  DODATKI: wspólne narzędzia, style i rysowanie (plan 24 h, raport, zdrowie baterii, kreator instalacji)
     //  Dane liczy integracja (sensory plan_curve / monthly_report / battery_health, usługi health_check,
@@ -741,7 +756,29 @@
             + (rowsS ? `<div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-size:11px;margin-top:4px;"><thead><tr style="color:var(--muted);text-align:right;"><th style="text-align:left;font-weight:600;">Dzień</th><th style="text-align:left;font-weight:600;">Okno</th><th style="font-weight:600;">6:00</th><th style="font-weight:600;">12:00</th><th style="font-weight:600;">18:00</th></tr></thead><tbody>${rowsS}</tbody></table></div>` : '')
             + '</div>';
         }
-        cfHtml += wearHtml + storyHtml;
+        const yo = s.data.yoy && typeof s.data.yoy === 'object' ? s.data.yoy : null;
+        let yoyHtml = '';
+        if (yo) {
+          const head = '<div style="font-size:12px;font-weight:600;margin-bottom:2px;">📆 Rok do roku</div>';
+          if (!yo.available) {
+            yoyHtml = `<div data-role="yoy" style="margin:8px 0;">${head}<div class="ex-note">${exEsc(yo.note || '')}</div></div>`;
+          } else {
+            const rowY = (label, k, money, goodUp) => {
+              const a = yo.cur && yo.cur[k], b = yo.prev && yo.prev[k], d = yo.diff && yo.diff[k], pc = yo.pct && yo.pct[k];
+              const fmt = (v) => money ? zl(v) : exFmt(v, 1) + ' kWh';
+              const better = d === null || d === undefined || Math.abs(d) < 0.005 ? null : (goodUp ? d > 0 : d < 0);
+              const colr = better === null ? 'inherit' : (better ? 'var(--green)' : 'var(--red)');
+              const dTxt = (d >= 0 ? '+' : '−') + (money ? zl(Math.abs(d)) : exFmt(Math.abs(d), 1) + ' kWh') + (pc === null || pc === undefined ? '' : ` (${pc >= 0 ? '+' : '−'}${exFmt(Math.abs(pc), 0)}%)`);
+              return `<tr><td>${exEsc(label)}</td><td style="text-align:right;">${fmt(a)}</td><td style="text-align:right;">${fmt(b)}</td><td style="text-align:right;color:${colr}">${exEsc(dTxt)}</td></tr>`;
+            };
+            yoyHtml = `<div data-role="yoy" style="margin:8px 0;">${head}<div class="ex-note">${exEsc(yo.note || '')}</div>`
+              + '<div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-size:12px;margin-top:4px;"><thead><tr style="color:var(--muted);text-align:right;"><th style="text-align:left;font-weight:600;"></th><th style="font-weight:600;">Teraz</th><th style="font-weight:600;">Rok temu</th><th style="font-weight:600;">Różnica</th></tr></thead><tbody>'
+              + rowY('Sprzedałeś za', 'revenue', true, true) + rowY('Kupiłeś za', 'cost', true, false) + rowY('Saldo', 'net', true, true)
+              + rowY('Pobór z sieci', 'import_kwh', false, false) + rowY('Oddano do sieci', 'export_kwh', false, true)
+              + '</tbody></table></div></div>';
+          }
+        }
+        cfHtml += wearHtml + storyHtml + yoyHtml;
         if (!p.days) {
           return `<div class="ex-nav" style="justify-content:flex-start;flex-wrap:wrap;gap:6px;">${pills}</div>${cfHtml}
             <div class="chart-empty">Brak danych za ten okres. Oszczędności liczą się od dnia instalacji wersji 0.8.5 — pierwszy pełny dzień pojawi się jutro.</div>`;
@@ -1204,6 +1241,8 @@
       .px-neg { color:var(--green); } .px-pos { color:var(--red); }
       .px-hist svg { width:100%; height:auto; display:block; }
       .px-best td { font-weight:600; color:var(--green) !important; }
+      .mp-whatsnew { padding:12px 14px; margin-bottom:10px; border-radius:14px; background:var(--card); border:1px solid var(--accent,#0a84ff); font-size:13px; color:var(--text); }
+      .mp-whatsnew ul { margin:6px 0; padding-left:18px; }
       .mp-today { padding:10px 14px; margin-bottom:10px; border-radius:14px; background:var(--card); border:1px solid var(--line); font-size:14px; color:var(--text); }
       .mp-bill { display:grid; grid-template-columns:repeat(auto-fit,minmax(120px,1fr)); gap:8px; margin-bottom:10px; }
       .mp-bill > div { padding:9px 12px; border-radius:14px; background:var(--card); border:1px solid var(--line); }
@@ -1252,7 +1291,10 @@
         const sv = pa.extras && pa.extras.day && pa.extras.day.savings;
         const ovr = Array.isArray(a.overrides) ? a.overrides : [];
         const todayText = String(a.today_text || '');
-        const key = JSON.stringify([day, sv, ovr.map(o => o.id), todayText]);
+        let wnSeen = '';
+        try { wnSeen = localStorage.getItem(WN_KEY) || ''; } catch (e) { /* brak pamięci przeglądarki */ }
+        const wn = WHATS_NEW[BMS_INFO.card] && wnSeen !== BMS_INFO.card ? WHATS_NEW[BMS_INFO.card] : null;
+        const key = JSON.stringify([day, sv, ovr.map(o => o.id), todayText, !!wn]);
         if (box.dataset.exKey === key) return;
         box.dataset.exKey = key;
         const zl = (v) => { const n = exNum(v); return n === null ? '—' : (n < 0 ? '−' : '') + Math.abs(n).toFixed(2).replace('.', ',') + ' zł'; };
@@ -1269,10 +1311,13 @@
         }
         const chips = ovr.length ? '<div class="mp-chips">' + ovr.map(o => `<span class="mp-chip">🧭 ${exEsc(o.text || pxKind[o.kind] || o.kind)}<button type="button" data-mp-del="${exEsc(o.id)}" aria-label="Usuń nadpisanie" title="Usuń">✕</button></span>`).join('') + '</div>' : '';
         const sentence = todayText ? `<div class="mp-today" data-role="plan-today">🗓️ ${exEsc(todayText)}</div>` : '';
-        box.innerHTML = sentence + bill + chips;
+        const wnHtml = wn ? `<div class="mp-whatsnew" data-role="whatsnew"><b>Nowości w wersji ${exEsc(BMS_INFO.card)}</b><ul>${wn.items.map(([t, d]) => `<li><b>${exEsc(t)}.</b> ${exEsc(d)}</li>`).join('')}</ul><div>${exEsc(wn.check || '')}</div><button type="button" class="btn" data-mp-wn="1" style="margin-top:8px;padding:7px 14px;">Rozumiem</button></div>` : '';
+        box.innerHTML = wnHtml + sentence + bill + chips;
         if (!box.dataset.exBound) {
           box.dataset.exBound = '1';
           box.addEventListener('click', async (ev) => {
+            const w = ev.target.closest && ev.target.closest('[data-mp-wn]');
+            if (w) { try { localStorage.setItem(WN_KEY, BMS_INFO.card); } catch (e) { /* bez zapisu pokaże się ponownie */ } box.dataset.exKey = ''; this._exMain(); return; }
             const t = ev.target.closest && ev.target.closest('[data-mp-del]'); if (!t) return;
             try {
               await exCall(this, 'override_clear', { id: t.dataset.mpDel }); this._showToast('✅ Usunięto nadpisanie');

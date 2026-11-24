@@ -453,7 +453,7 @@ def _register_services(hass: HomeAssistant) -> None:
         reviews = rt.day_reviews(14)
         return {"savings": rt.insights.savings(), "accuracy": rt.insights.accuracy(lf),
                 "reviews": reviews, "reviews_tally": tally(reviews), "arb_proof": rt.arb_proof(14),
-                "pv_caution": rt.pv_caution(), "bill": rt.bill(), "deeds": rt.deeds_summary(), "advice": rt.advice(), "advice_done": rt.advice_done(), "plan_story": rt.plan_story(), "wear_view": rt.wear_view(), "price_views": rt.price_views(),
+                "pv_caution": rt.pv_caution(), "bill": rt.bill(), "deeds": rt.deeds_summary(), "advice": rt.advice(), "advice_done": rt.advice_done(), "plan_story": rt.plan_story(), "wear_view": rt.wear_view(), "yoy": rt.yoy_view(), "price_views": rt.price_views(),
                 "pv_correction_on": switch_on(hass, "pv_forecast_correction", True), "cost_forecast": rt.cost_forecast(),
                 "wear_cost": round(float(rt.optimizer.wear_cost()), 4) if hasattr(rt.optimizer, "wear_cost") else 0.0}
 
