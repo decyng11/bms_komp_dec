@@ -42,7 +42,7 @@ _SERVICES = (
     "diag_store_get_all", "diag_store_set", "diag_store_delete",
     "notify_settings_get", "notify_settings_set", "notify_test", "inbox_action", "devices_get", "devices_set", "devices_discover", "insights_get", "pv_chart_get", "self_test", "diagnostic_report",
     "override_set", "override_clear", "analysis_get", "analysis_set", "control_test", "settings_log_get",
-    "profiles_get", "profile_apply", "profile_revert", "profile_save", "profile_delete", "profile_schedule", "profile_schedule_clear", "pv_caution_apply", "pv_caution_revert", "pv_caution_dismiss", "advice_apply", "advice_revert",
+    "profiles_get", "profile_apply", "profile_revert", "profile_save", "profile_delete", "profile_schedule", "profile_schedule_clear", "pv_caution_apply", "pv_caution_revert", "pv_caution_dismiss", "advice_apply", "advice_revert", "settings_export", "settings_import",
     "grid_outage_test", "expand_estimate", "fleet_get", "fleet_set",
 )
 _SUGGEST_HOUR = 16   # RCE na jutro jest publikowane po południu — wcześniej propozycja bazowała na starych danych
@@ -582,6 +582,18 @@ def _register_services(hass: HomeAssistant) -> None:
         res = rt.pv_caution_dismiss()
         return {**res, "pv_caution": rt.pv_caution()}
 
+    async def handle_settings_export(call):
+        await _require_admin(hass, call)
+        return _need_runtime(hass).settings_export()
+
+    async def handle_settings_import(call):
+        await _require_admin(hass, call)
+        rt = _need_runtime(hass)
+        try:
+            return await rt.settings_import(call.data.get("data"), bool(call.data.get("apply", False)))
+        except ValueError as err:
+            raise HomeAssistantError(str(err)) from err
+
     async def handle_advice_apply(call):
         await _require_admin(hass, call)
         rt = _need_runtime(hass)
@@ -659,6 +671,8 @@ def _register_services(hass: HomeAssistant) -> None:
         ("pv_caution_apply", handle_pv_caution_apply, SupportsResponse.OPTIONAL),
         ("pv_caution_revert", handle_pv_caution_revert, SupportsResponse.OPTIONAL),
         ("pv_caution_dismiss", handle_pv_caution_dismiss, SupportsResponse.OPTIONAL),
+        ("settings_export", handle_settings_export, SupportsResponse.ONLY),
+        ("settings_import", handle_settings_import, SupportsResponse.OPTIONAL),
         ("advice_apply", handle_advice_apply, SupportsResponse.OPTIONAL),
         ("advice_revert", handle_advice_revert, SupportsResponse.OPTIONAL),
         ("devices_set", handle_devices_set, SupportsResponse.OPTIONAL),

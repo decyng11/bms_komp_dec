@@ -1,5 +1,8 @@
 # EMS komp-dec 0.9.6.0
 
+## Kopia ustawień (EMS → Kopia ustawień)
+- **Pobierz plik / Wczytaj z pliku** (tylko administrator): zapis wszystkich przełączników i liczb EMS, własnych profili oraz ustawień powiadomień i analiz do pliku JSON. Przed wczytaniem widać listę zmian („25% → 40%”), którą trzeba zatwierdzić. Błędne lub nieznane wartości są pomijane, a tryb próbny marki falownika nie jest przenoszony. Usługi: `settings_export`, `settings_import`.
+
 ## Podejrzane czujniki i zdanie „plan na dziś”
 - **Wykrywanie usterek czujników**: PV na zerze od ponad 90 min w południe mimo słonecznej prognozy albo SOC niezmienny przez 3 h przy realnym przepływie mocy baterii. Pokazuje się w Sprawdzeniu, przychodzi powiadomienie „Podejrzany czujnik”, a plan na czas usterki PV nie ufa bieżącej korekcie prognozy z dzisiejszych godzin.
 - **Ekran główny**: jedno zdanie, co plan zrobi do końca dnia, np. „Ładuję 02:00–04:00 do 80%, sprzedaję 18:00–20:00.”

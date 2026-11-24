@@ -48,6 +48,7 @@
       .ex-nav b { font-size:15px; }
       .ex-bars { display:flex; align-items:center; gap:2px; height:80px; margin-top:12px; }
       .ex-note { font-size:11px; color:var(--muted); margin-top:10px; line-height:1.5; }
+      .ex-note.bad { color:var(--red); }
       .ex-chk { display:flex; gap:10px; padding:8px 0; border-bottom:1px solid var(--line); font-size:12px; line-height:1.45; }
       .ex-chk:last-child { border-bottom:none; }
       .ex-chk .ic { flex:none; width:18px; text-align:center; }
@@ -77,6 +78,7 @@
         this._safe(() => this._exLog());
         this._safe(() => this._exWiz());
         this._safe(() => this._exProf());
+        this._safe(() => this._exBackup());
         this._safe(() => this._exPlus());
       },
       _exLog() {
@@ -848,6 +850,70 @@
           <div class="ex-note">Błąd to średnia różnica prognozy i wykonania w procentach (dni z co najmniej 0,5 kWh), z ostatnich 30 dni. Prognoza PV jest zapisywana rano (od 6:00) dla każdego z 7 dni do przodu, prognoza zużycia — dzień wcześniej.
             Korekta PV jest liczona osobno dla każdego dnia do przodu (mediana wykonania do prognozy z 30 dni, w granicach 0,5–1,4), uwzględnia stały wzorzec godzinowy i poprawia dzisiejszy dzień na podstawie godzin, które już minęły.
             Dni, w których bateria była pełna i falownik ucinał produkcję, nie uczą modelu. „Błąd po korekcie” liczony jest z prognoz faktycznie wydanych po korekcie, więc pokazuje, czy korekta pomaga. Zakres to typowy błąd tego dnia.</div>`;
+      },
+    });
+
+    // =====================================================================
+    //  KOPIA USTAWIEŃ: eksport do pliku JSON i wczytanie z podglądem zmian (administrator)
+    // =====================================================================
+    Object.assign(BmsPanel.prototype, {
+      _exBackup() {
+        const box = this._el('exBackupBox');
+        if (!box || !this._tabNeeds('ems')) return;
+        const s = this._bk || (this._bk = { busy: false, msg: '', prev: null, text: '' });
+        const adm = this._dgIsAdmin();
+        const key = JSON.stringify([adm, s.busy, s.msg, s.prev]);
+        if (box.dataset.exKey === key) return;
+        box.dataset.exKey = key;
+        const dis = adm && !s.busy ? '' : 'disabled';
+        const msg = s.msg ? `<div class="ex-note ${s.msg.startsWith('err:') ? 'bad' : ''}" data-role="bk-msg">${exEsc(s.msg.replace(/^(ok|err):/, ''))}</div>` : '';
+        let prev = '';
+        if (s.prev) {
+          const ch = s.prev.changes || [];
+          prev = `<div data-role="bk-prev"><b>${ch.length ? 'Import zmieni ' + ch.length + ' ustawień:' : 'Nic do zmiany: ustawienia z pliku są takie jak obecne.'}</b>`
+            + (ch.length ? '<ul>' + ch.map(c => `<li>${exEsc(c.label)}: ${exEsc(c.now)} → <b>${exEsc(c.to)}</b></li>`).join('') + '</ul>' : '')
+            + ((s.prev.extras || []).length ? `<div>Dodatkowo: ${exEsc(s.prev.extras.join(', '))}.</div>` : '')
+            + ((s.prev.skipped || []).length ? `<div style="color:var(--muted);">Pominięto nieznane lub błędne: ${exEsc(s.prev.skipped.slice(0, 8).join(', '))}.</div>` : '')
+            + `<div style="margin-top:8px;"><button class="btn" data-bk="apply" ${dis}>Wczytaj</button> <button class="btn" data-bk="cancel">Anuluj</button></div></div>`;
+        }
+        box.innerHTML = `<div style="color:var(--muted);font-size:13px;margin-bottom:8px;">Zapisz wszystkie ustawienia EMS do pliku albo wczytaj je z pliku (np. po przeinstalowaniu). Tryb próbny marki falownika nie jest przenoszony. ${adm ? '' : 'Tylko dla administratora.'}</div>`
+          + `<div><button class="btn" data-bk="export" ${dis}>Pobierz plik</button> <button class="btn" data-bk="import" ${dis}>Wczytaj z pliku…</button>`
+          + `<input type="file" accept="application/json,.json" data-bk="file" style="display:none"></div>` + msg + prev;
+        if (!box.dataset.exBound) {
+          box.dataset.exBound = '1';
+          const set = (o) => { Object.assign(this._bk, o); this._exBackup(); };
+          box.addEventListener('click', async (ev) => {
+            const b = ev.target.closest && ev.target.closest('[data-bk]'); if (!b || b.disabled || b.tagName === 'INPUT') return;
+            const a = b.dataset.bk, st = this._bk;
+            try {
+              if (a === 'export') {
+                set({ busy: true, msg: '' });
+                const r = exResp(await exCall(this, 'settings_export', {}));
+                const blob = new Blob([JSON.stringify(r, null, 2)], { type: 'application/json' });
+                const url = URL.createObjectURL(blob), el = document.createElement('a');
+                el.href = url; el.download = 'ems-ustawienia-' + String(r.exported_at || '').slice(0, 10) + '.json'; el.click();
+                setTimeout(() => URL.revokeObjectURL(url), 2000);
+                set({ busy: false, msg: 'ok:Zapisano plik z ustawieniami.' });
+              } else if (a === 'import') {
+                const f = box.querySelector('input[data-bk="file"]'); if (f) f.click();
+              } else if (a === 'cancel') set({ prev: null, text: '', msg: '' });
+              else if (a === 'apply') {
+                set({ busy: true });
+                const r = exResp(await exCall(this, 'settings_import', { data: JSON.parse(st.text), apply: true })) || {};
+                set({ busy: false, prev: null, text: '', msg: (r.failed || []).length ? 'err:Część ustawień nie została zapisana: ' + r.failed.join(', ') : 'ok:Wczytano ustawienia.' });
+              }
+            } catch (e) { set({ busy: false, msg: 'err:' + exErr(e) }); }
+          });
+          box.addEventListener('change', async (ev) => {
+            const f = ev.target; if (!f || f.dataset.bk !== 'file' || !f.files || !f.files[0]) return;
+            try {
+              const text = await f.files[0].text(); f.value = '';
+              const r = exResp(await exCall(this, 'settings_import', { data: JSON.parse(text), apply: false })) || {};
+              Object.assign(this._bk, { text, prev: r, msg: '' });
+            } catch (e) { Object.assign(this._bk, { prev: null, msg: 'err:' + exErr(e) }); }
+            this._exBackup();
+          });
+        }
       },
     });
 

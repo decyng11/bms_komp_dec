@@ -118,7 +118,7 @@
     { tab: 'charts', label: 'Plan', tiles: [['ch-plan24', 'Plan na najbliższe 24 h'], ['ch-hourly', 'Plan godzina po godzinie'], ['ch-override', 'Ręczne nadpisanie planu'], ['ch-history7', 'Historia poziomu baterii (7 dni)'],
       ['ch-energy', 'Historia energii i cen'], ['ch-loadcons', 'Zużycie domu — wczoraj / dziś / jutro'], ['ch-fc7d', 'Prognoza 7-dniowa zużycia domu'], ['ch-hourly-today', 'Profil godzinowy dziś'],
       ['ch-hourly-tomorrow', 'Profil godzinowy jutra'], ['ch-pvprod', 'Produkcja PV dziś — rzeczywista vs prognoza'], ['ch-prices', 'Ceny sprzedaży prądu — dziś vs jutro']] },
-    { tab: 'ems', label: 'EMS', tiles: [['ems-profiles', 'Profile pracy'], ['ems-schedule', 'Inteligentny harmonogram'], ['ems-sell', 'Przełączniki sprzedaży'], ['ems-pvblock', 'Blokada ładowania PV'], ['ems-export', 'Eksport z PV i blokada ładowania'],
+    { tab: 'ems', label: 'EMS', tiles: [['ems-profiles', 'Profile pracy'], ['ems-backup', 'Kopia ustawień'], ['ems-schedule', 'Inteligentny harmonogram'], ['ems-sell', 'Przełączniki sprzedaży'], ['ems-pvblock', 'Blokada ładowania PV'], ['ems-export', 'Eksport z PV i blokada ładowania'],
       ['ems-gridpower', 'Moc ładowania z sieci i ochrona przyłącza'], ['ems-gridcharge', 'Ładowanie z sieci']] },
     { tab: 'log', label: 'Zysk i log', tiles: [['log-bilans', 'Bilans w PLN'], ['log-today', 'Co EMS zrobił dziś'], ['log-savings', 'Oszczędności'], ['log-sim', 'Symulacja roczna i zwrot z inwestycji'],
       ['log-accuracy', 'Trafność prognoz'], ['log-report', 'Raport miesięczny'], ['log-health', 'Zdrowie i sprawność baterii'], ['log-auto', 'Funkcje automatyczne'], ['log-journal', 'Dziennik decyzji']] },
@@ -4001,6 +4001,10 @@
           <div class="section" data-tile="ems-profiles">
             <div class="section-title">🎛 Profile pracy</div>
             <div class="chart-card full" style="padding:14px 16px;"><div id="exProfBox"><div class="chart-empty">Ładowanie…</div></div></div>
+          </div>
+          <div class="section" data-tile="ems-backup">
+            <div class="section-title">💾 Kopia ustawień</div>
+            <div class="chart-card full" style="padding:14px 16px;"><div id="exBackupBox"></div></div>
           </div>
           <div class="section" data-tile="ems-schedule">
             <div class="section-title">🤖 Inteligentny harmonogram</div>

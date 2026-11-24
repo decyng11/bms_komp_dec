@@ -23,6 +23,7 @@ from .const import (
 from . import inbox
 from . import planhold
 from . import planstory
+from . import settingsio
 from .gridlimit import GridLimiter
 from . import brands
 from . import inverter_ctl as ictl
@@ -2808,6 +2809,35 @@ class BmsRuntime:
         self._save_state()
         self.log.add("mode", f"Zapisano własny profil „{rec['name']}” ({prof_mod.settings_word(len(rec['set']))})" + (" — nadpisano poprzedni o tej nazwie" if replaced else ""), "ok")
         return {"ok": True, "id": rec["id"], "replaced": replaced}
+
+    def settings_export(self) -> dict[str, Any]:
+        """Kopia ustawień EMS do pliku (settingsio.py)."""
+        from .const import VERSION
+        return settingsio.build(self._profile_read, self.state, VERSION, dt_util.now().isoformat(timespec="seconds"))
+
+    async def settings_import(self, data: Any, apply: bool) -> dict[str, Any]:
+        """Podgląd (apply=False) albo wczytanie (apply=True) pliku ustawień. ValueError z polskim opisem przy złym pliku."""
+        pl = settingsio.plan(settingsio.parse(data), self._profile_read, self.state)
+        out = {"changes": [{k: c[k] for k in ("key", "label", "now", "to")} for c in pl["changes"]],
+               "skipped": pl["skipped"], "extras": pl["extras"], "applied": False, "failed": []}
+        if not apply:
+            return out
+        failed = []
+        for c in pl["changes"]:
+            if not await self._profile_write(c["key"], c["value"]):
+                failed.append(c["key"])
+        if pl["profiles"]:
+            self.state["custom_profiles"] = pl["profiles"]
+        if pl["notify_cfg"]:
+            self.state["notify_cfg"] = pl["notify_cfg"]
+        if pl["analysis_cfg"]:
+            self.state["analysis_cfg"] = pl["analysis_cfg"]
+        self._save_state()
+        self.log.add("mode", f"Wczytano ustawienia z pliku: zmieniono {len(pl['changes']) - len(failed)}"
+                             + (f", nieudane: {', '.join(failed)}" if failed else "")
+                             + (f", {', '.join(pl['extras'])}" if pl["extras"] else ""), "warn" if failed else "ok")
+        out.update(applied=True, failed=failed)
+        return out
 
     def profile_delete(self, pid: Any) -> dict[str, Any]:
         if not prof_mod.is_custom_id(pid):

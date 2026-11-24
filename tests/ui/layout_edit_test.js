@@ -34,7 +34,7 @@ const sleep = (ms) => new Promise(r => setTimeout(r, ms));
   await sr(() => __el.shadowRoot.getElementById('lookBtn').click());
   await sr(() => __el.shadowRoot.querySelector('#lookOv [data-look="edit"]').click());
   ok(await sr(() => __el.shadowRoot.getElementById('lookOv').hidden && __el.shadowRoot.querySelector('.app').hasAttribute('data-edit') && !__el.shadowRoot.getElementById('editBar').hidden), 'edycja: okno zamknięte, pasek edycji widoczny');
-  ok(await ctlN() === 3 + 11 + 7 + 1, 'edycja: sterowanie na kafelkach (3 + 11 + 7 + pogoda) = ' + await ctlN());
+  ok(await ctlN() === 3 + 11 + 8 + 1, 'edycja: sterowanie na kafelkach (3 + 11 + 8 + pogoda) = ' + await ctlN());
   ok(await sr(() => getComputedStyle(__el.shadowRoot.querySelector('[data-tile="main-plan"] .section-title')).pointerEvents === 'none'), 'edycja: zawartość kafelków nieklikalna (nic nie przełączysz przez pomyłkę)');
   ok(await sr(() => __el.shadowRoot.querySelector('[data-tile="main-active"] [data-lay="up"]').disabled && !__el.shadowRoot.querySelector('[data-tile="main-active"] [data-lay="down"]').disabled), 'edycja: pierwszy kafelek bez ↑');
   // ↓ na pierwszym

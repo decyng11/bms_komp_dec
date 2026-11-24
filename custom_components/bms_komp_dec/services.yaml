@@ -542,3 +542,22 @@ advice_revert:
       required: true
       selector:
         text:
+
+settings_export:
+  name: Eksportuj ustawienia
+  description: Zwraca kopię ustawień EMS (przełączniki, liczby, własne profile, powiadomienia) do zapisania w pliku (administrator).
+
+settings_import:
+  name: Wczytaj ustawienia z pliku
+  description: Bez „apply” pokazuje tylko listę zmian; z „apply” zapisuje je (administrator). Tryb próbny marki nie jest importowany.
+  fields:
+    data:
+      name: Zawartość pliku
+      required: true
+      selector:
+        object:
+    apply:
+      name: Zapisz zmiany
+      default: false
+      selector:
+        boolean:
