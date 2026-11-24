@@ -201,7 +201,7 @@ SWITCHES = [
     ("sell_enabled", "Sprzedawaj energię z baterii (wyłączone = plan nie sprzedaje)", "mdi:battery-arrow-down-outline", True),
     ("grid_charge_enabled", "Ładuj baterię z sieci w tanich godzinach (wyłączone = nigdy)", "mdi:power-plug-battery-outline", True),
     ("tabs_top", "Pasek zakładek na górze (zamiast na dole)", "mdi:dock-top", False),
-    ("brand_test_mode", "Sofar: tryb próbny (komendy tylko w dzienniku)", "mdi:flask-outline", True),
+    ("brand_test_mode", "Sofar i GoodWe: tryb próbny (komendy tylko w dzienniku)", "mdi:flask-outline", True),
 ]
 
 WEEKDAY_SWITCH_KEYS = ["dzien_pn", "dzien_wt", "dzien_sr", "dzien_cz", "dzien_pt", "dzien_so", "dzien_nd"]

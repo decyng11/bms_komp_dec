@@ -12,7 +12,15 @@ i tryb pasywny (Passive) z trzema mocami: sieci, minimalną i maksymalną bateri
 Sofar hybrydowy (HYD 3–6K ES, ME3000SP; definicja sofar_hybrid): „Work Mode” Auto / Timed i okna ładowania
 i rozładowania z mocą, a blokada ładowania z PV — maksymalny prąd ładowania 0 (jak w Deye).
 
-Sterowanie Sofarem NIE było sprawdzone na prawdziwym falowniku. Dlatego dopóki włączony jest
+GoodWe (serie ET/EH i pokrewne, oficjalna integracja HA „goodwe” albo wersja HACS mletenay): select „EMS mode” i number
+„EMS power limit” (moc w W; Xset/Xmax w dokumentacji integracji):
+  • praca normalna → Auto (samokonsumpcja),
+  • ładowanie z sieci → Import AC (ładowanie baterii z sieci z wysokim priorytetem), moc = moc ładowania,
+  • sprzedaż z baterii → Export AC (sprzedaż do sieci z mocą EMS power, PV ma pierwszeństwo, bateria pokrywa braki),
+  • blokada ładowania z PV → Discharge PV (bateria tylko oddaje, nadwyżka PV nie ładuje jej).
+Tryby EMS wymagają nowszego oprogramowania falownika; na starszym nie ma ich na liście opcji i EMS zgłosi to w teście.
+
+Sterowanie Sofarem i GoodWe NIE było sprawdzone na prawdziwym falowniku. Dlatego dopóki włączony jest
 switch.bms_brand_test_mode (domyślnie włączony), komendy dla Sofara trafiają tylko do dziennika jako
 „ustawiłbym …” i niczego nie zapisują.
 """
@@ -29,7 +37,9 @@ from .helpers import number_value, state_float, state_str
 DEYE = "deye"
 SOFAR_G3 = "sofar_g3"
 SOFAR_HYBRID = "sofar_hybrid"
-LABELS = {DEYE: "Deye (i zgodne)", SOFAR_G3: "Sofar G3 (tryb pasywny)", SOFAR_HYBRID: "Sofar hybrydowy (Work Mode)"}
+GOODWE = "goodwe"
+LABELS = {DEYE: "Deye (i zgodne)", SOFAR_G3: "Sofar G3 (tryb pasywny)", SOFAR_HYBRID: "Sofar hybrydowy (Work Mode)",
+          GOODWE: "GoodWe (tryby EMS)"}
 
 # rola → (domena, końcówki nazwy encji)
 ROLES: dict[str, dict[str, tuple[str, tuple[str, ...]]]] = {
@@ -38,6 +48,10 @@ ROLES: dict[str, dict[str, tuple[str, tuple[str, ...]]]] = {
         "grid": ("number", ("passive_grid_power",)),
         "bat_min": ("number", ("passive_minimum_battery_power", "passive_min_battery_power")),
         "bat_max": ("number", ("passive_maximum_battery_power", "passive_max_battery_power")),
+    },
+    GOODWE: {
+        "mode": ("select", ("ems_mode",)),
+        "power": ("number", ("ems_power_limit", "ems_power", "ems_power_set", "ems_power_setting")),
     },
     SOFAR_HYBRID: {
         "mode": ("select", ("work_mode",)),
@@ -55,6 +69,9 @@ OPTIONS = {
     "passive": ("Passive", "Passive Mode"),
     "auto": ("Auto", "Self Use", "Self-Use"),
     "timed": ("Timed", "Timing", "Timed Mode"),
+    "import_ac": ("Import AC",),
+    "export_ac": ("Export AC",),
+    "discharge_pv": ("Discharge PV",),
 }
 _CACHE: dict[int, tuple[float, str]] = {}
 _CACHE_S = 60.0
@@ -75,13 +92,16 @@ def detect(hass: HomeAssistant, cfg: dict[str, Any]) -> str:
     cands = [ictl.resolve(hass, cfg, "work_mode")]
     try:
         cands += [e for e in hass.states.async_entity_ids("select")
-                  if e.endswith("_storage_control_mode") or e.endswith("_work_mode")]
+                  if e.endswith("_storage_control_mode") or e.endswith("_work_mode") or e.endswith("_ems_mode")]
     except Exception:  # noqa: BLE001
         pass
     for eid in dict.fromkeys(cands):
         o = set(_opts(hass, eid))
         if not o:
             continue
+        if "import ac" in o or "export ac" in o or ("battery standby" in o and "auto" in o):
+            brand = GOODWE
+            break
         if "passive" in o and ("self use" in o or "self-use" in o):
             brand = SOFAR_G3
             break
@@ -105,7 +125,7 @@ def role_eid(hass: HomeAssistant, cfg: dict[str, Any], brand: str, role: str) ->
     wm = ictl.resolve(hass, cfg, "work_mode")
     obj = wm.partition(".")[2]
     prefix = None
-    for t in ("storage_control_mode", "work_mode"):
+    for t in ("storage_control_mode", "work_mode", "ems_mode"):
         if obj.endswith(t):
             prefix = obj[: -len(t)].rstrip("_")
             break
@@ -172,7 +192,25 @@ def steps(hass: HomeAssistant, cfg: dict[str, Any], brand: str, key: str, *, sel
     def clamp(role: str, v: float) -> float:
         return _num(ictl.clamp_to_entity(hass, r[role], v))
 
-    if brand == SOFAR_G3:
+    if brand == GOODWE:
+        need("mode", "power")
+        normal = lambda: [("select", r["mode"], opt("auto"))]  # noqa: E731
+
+        def ems(kind: str, w: float) -> list[tuple[str, str, Any]]:
+            # moc najpierw, tryb na końcu — falownik nie wchodzi w tryb ze starą mocą
+            return [("number", r["power"], clamp("power", w)), ("select", r["mode"], opt(kind))]
+
+        table = {
+            "sprzedaz_6000w": lambda: ems("export_ac", sell_w),
+            "nadwyzka_9700w": normal,
+            "eksport_pv_blokada": lambda: ems("discharge_pv", discharge_w),
+            "przywroc_ladowanie": normal,
+            "zablokuj_ladowanie": lambda: ems("discharge_pv", discharge_w),
+            "odblokuj_ladowanie": normal,
+            "wlacz_ladowanie_siec": lambda: ems("import_ac", charge_w),
+            "wylacz_ladowanie_siec": normal,
+        }
+    elif brand == SOFAR_G3:
         need("mode", "grid", "bat_min", "bat_max")
         normal = lambda: [("select", r["mode"], opt("self_use"))]  # noqa: E731
 
@@ -236,7 +274,12 @@ def state(hass: HomeAssistant, cfg: dict[str, Any], brand: str) -> dict[str, Any
     r = {role: role_eid(hass, cfg, brand, role) for role in ROLES[brand]}
     mode = state_str(hass, r.get("mode")) if r.get("mode") else None
     out = {"selling": False, "grid_charging": False, "pv_blocked": False, "charge_current": None, "mode": mode}
-    if brand == SOFAR_G3:
+    if brand == GOODWE:
+        pw = _f(hass, r.get("power")) or 0
+        out["selling"] = _mode_is(hass, r.get("mode"), "export_ac") and pw > 0
+        out["grid_charging"] = _mode_is(hass, r.get("mode"), "import_ac") and pw > 0
+        out["pv_blocked"] = _mode_is(hass, r.get("mode"), "discharge_pv")
+    elif brand == SOFAR_G3:
         if _mode_is(hass, r.get("mode"), "passive"):
             bmin, bmax = _f(hass, r.get("bat_min")), _f(hass, r.get("bat_max"))
             out["selling"] = bmax is not None and bmax < -1

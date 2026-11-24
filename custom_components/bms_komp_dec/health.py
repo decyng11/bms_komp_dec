@@ -192,12 +192,13 @@ def health_check(rt) -> dict[str, Any]:
                 checks.append(_chk(f"ctl_{role}", label, "ok", f"{eid} = {st.state}"))
         mode = ctl.get("mode")
         if mode and hass.states.get(mode) is not None:
-            kinds = ("self_use", "passive") if brand == brands.SOFAR_G3 else ("auto", "timed")
+            kinds = (("auto", "import_ac", "export_ac", "discharge_pv") if brand == brands.GOODWE
+                     else ("self_use", "passive") if brand == brands.SOFAR_G3 else ("auto", "timed"))
             bad = [k for k in kinds if brands.pick(hass, mode, k) is None]
             checks.append(_chk("opt_mode", f"Opcje {mode}", "error" if bad else "ok",
                                f"brak: {', '.join(bad)}" if bad else ", ".join(f"{k}→{brands.pick(hass, mode, k)}" for k in kinds)))
         test = switch_on(hass, "brand_test_mode", True)
-        checks.append(_chk("brand_test", "Tryb próbny (Sofar)", "warn" if test else "ok",
+        checks.append(_chk("brand_test", "Tryb próbny (Sofar, GoodWe)", "warn" if test else "ok",
                            "włączony — komendy trafiają tylko do dziennika jako „ustawiłbym …”" if test
                            else "wyłączony — EMS zapisuje ustawienia do falownika",
                            "Sprawdź w dzienniku, czy kroki komend są właściwe, i dopiero wtedy wyłącz switch.bms_brand_test_mode." if test else ""))

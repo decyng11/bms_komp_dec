@@ -400,7 +400,7 @@ class BmsRuntime:
         return ictl.resolve(self.hass, self.cfg, role)
 
     def brand(self) -> str:
-        """Marka falownika (Deye / Sofar G3 / Sofar hybrydowy) — wykrywana po opcjach trybu pracy."""
+        """Marka falownika (Deye / Sofar G3 / Sofar hybrydowy / GoodWe) — wykrywana po opcjach trybu pracy."""
         return brands.detect(self.hass, self.cfg)
 
     def _brand_state(self) -> dict[str, Any]:

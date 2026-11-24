@@ -1,5 +1,8 @@
 # EMS komp-dec 0.9.6.0
 
+## Nowa marka falownika: GoodWe (tryby EMS)
+EMS steruje teraz także GoodWe (serie ET/EH i pokrewne) przez encje integracji GoodWe: „EMS mode” i „EMS power limit”. Praca normalna = Auto, ładowanie z sieci = Import AC, sprzedaż = Export AC, blokada ładowania z PV = Discharge PV; moc jest ustawiana przed trybem i przycinana do zakresu encji. Marka wykrywa się po opcjach trybu EMS. Kod napisany od zera według dokumentacji trybów EMS integracji (bez kopiowania cudzego kodu). Sterowanie NIE było sprawdzone na prawdziwym falowniku, więc jak przy Sofarze działa tryb próbny („Sofar i GoodWe: tryb próbny”, domyślnie włączony): komendy trafiają tylko do dziennika. Tryby EMS wymagają nowszego oprogramowania falownika; przy starszym „Sprawdzenie” pokaże brakujące opcje.
+
 ## Gotowe taryfy: G13 i G12r
 W polu „Godziny szczytu taryfy” można wpisać słowo zamiast okien: „g12w” (6-13,15-22), „g12r” (Energa: 7-13 i 16-22) albo „g13” (Tauron: 7-13 oraz 16-21 zimą 1.X–31.III lub 19-22 latem 1.IV–30.IX; przełącza się samo). Godziny sprawdzone w taryfach operatorów. Weekendy i święta nadal ustawiają dwa przełączniki obok (G13 i G12w: włączone; G12r: wyłączone). G13 ma w rzeczywistości trzy strefy cenowe, a EMS liczy szczyt jako jedną strefę (ceny uczy się z Twoich danych). G12n i G13s nie są dodane: godziny G13s nie są publicznie opisane tekstem, a G12n ma sobotę w szczycie i niedzielę całą tanią, czego obecny model (weekend = sobota + niedziela) nie odda.
 
