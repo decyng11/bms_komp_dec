@@ -105,13 +105,13 @@
   // Działa niezależnie od motywu jasny/ciemny. To wyłącznie warstwa stylów (zmienne i wygląd komponentów) — układ i dane
   // są te same, więc wyłączenie stylu przywraca dokładnie dotychczasowy wygląd.
   const SKIN_KEY = 'bms_panel_skin';
-  const SKINS = { classic: 'Klasyczny', m3: 'Material 3', glass: 'Szkło', matrix: 'Matryca', space: 'Przestrzeń', comfort: 'Komfort' };
-  const SKIN_HOME = { glass: 1, matrix: 1, space: 1, comfort: 1 };   // style z własnym ekranem głównym (_drawSkinHome)
+  const SKINS = { classic: 'Klasyczny', m3: 'Material 3', glass: 'Szkło', matrix: 'Matryca', space: 'Przestrzeń', comfort: 'Komfort', hero: 'Bohater' };
+  const SKIN_HOME = { glass: 1, matrix: 1, space: 1, comfort: 1, hero: 1 };   // style z własnym ekranem głównym (_drawSkinHome)
   // ---- Układ panelu (Ustawienia → Wygląd → Układ panelu): kolejność i ukrywanie kafelków, osobno dla każdej przeglądarki.
   // Kafelek to element z atrybutem data-tile w szablonie. Zmiana układu tylko przestawia / chowa istniejące elementy —
   // nie zmienia danych ani sterowania. Alerty (cena, próg falownika, status, „dlaczego”) nie są kafelkami i zawsze zostają.
   const LOOK_SKIN_SUB = { classic: 'dotychczasowy wygląd (domyślny)', m3: 'tonalne karty, pigułkowa nawigacja', glass: 'rozmyte szklane karty, pływający pasek', matrix: 'czerń lub papier, kwadratowe piksele, bursztyn',
-    space: 'duże szklane okno, boczny pasek na szerokim ekranie', comfort: 'duży nagłówek, bardzo zaokrąglone płaskie karty' };
+    space: 'duże szklane okno, boczny pasek na szerokim ekranie', comfort: 'duży nagłówek, bardzo zaokrąglone płaskie karty', hero: 'ciemnozielona karta baterii, białe karty, zielony akcent' };
   const LAYOUT_KEY = 'bms_panel_layout';
   const LAYOUT_TABS = [
     { tab: 'main', label: 'Główny', tiles: [['main-active', 'Aktywne funkcje'], ['main-flow', 'Schemat przepływu mocy (dom)'], ['main-plan', 'Plan dnia']] },
@@ -306,7 +306,7 @@
   // Każdy styl to zmienne kolorów + wygląd komponentów (jak Material 3) i własny ekran główny (_drawSkinHome). Znak „&” w CSS = selektor hosta stylu,
   // „&D” = ten sam styl w ciemnym motywie. Domyślnym pozostaje „Klasyczny”.
   const mkSkin = (n, css) => css.replace(/&D/g, `:host([data-skin="${n}"][data-theme="dark"])`).replace(/&/g, `:host([data-skin="${n}"])`);
-  const SK_ALL = ['glass', 'matrix', 'space', 'comfort'];
+  const SK_ALL = ['glass', 'matrix', 'space', 'comfort', 'hero'];
   const skSel = (s) => SK_ALL.map((n) => `:host([data-skin="${n}"]) ${s}`).join(', ');
   const SKIN_COMMON = `
     ${skSel('.chart-card.nodes-card')} { background: transparent; box-shadow: none; padding: 0; border: none; border-radius: 0; overflow: visible; backdrop-filter: none; container: sk / inline-size; }
@@ -461,6 +461,34 @@
     & .toggle-switch, & .sw { accent-color: var(--accent); }
     & .sk-flow { padding-bottom: 4px; }
     & .sk-big { font-weight: 600; }
+  `);
+
+
+  // „Bohater”: ciemnozielona karta baterii z miętowym pierścieniem, białe zaokrąglone karty, zielony akcent, pigułkowy dolny pasek
+  const SKIN_HERO = mkSkin('hero', `
+    & { --bg:#f0f1f4; --card:#fff; --surface:#fff; --line:rgba(23,28,38,0.08); --text:#171c26; --text2:#2f3644; --muted:#5a6373; --muted2:#808999; --accent:#0f7b57; --green:#0f7b57; --orange:#e8890c; --red:#d64545; --input-bg:#e9ebf0; --seg-bg:#e3e6ec; --seg-active:#fff; --shadow:none; --pf-bg:#fff; --tab-on:#0f7b57; --tab-on-fg:#fff; --tab-off:#5a6373; --tab-bg:#fff; --tab-line:transparent; --sk-pv:#e8890c; --sk-grid:#2b7be4; --sk-sell:#e8890c; --sk-batt:#17a673; --sk-idle:#e3e6ec; color-scheme: light; font-family: Manrope, "Segoe UI", Roboto, system-ui, sans-serif; }
+    &D { --bg:#0d1411; --card:#18211d; --surface:#18211d; --line:rgba(255,255,255,0.08); --text:#e6eee9; --text2:#c9d6cf; --muted:#9db0a6; --muted2:#7c8f85; --accent:#2fb583; --green:#2fb583; --orange:#f0a030; --red:#ff7a6e; --input-bg:#26332d; --seg-bg:#26332d; --seg-active:#33433b; --pf-bg:#18211d; --tab-on:#2fb583; --tab-on-fg:#08241a; --tab-off:#9db0a6; --tab-bg:#18211d; --sk-pv:#f0a030; --sk-grid:#4d94f0; --sk-sell:#f0a030; --sk-batt:#2fb583; --sk-idle:#26332d; color-scheme: dark; }
+    & .header { text-align: left; padding: 8px 6px 4px; }
+    & .header .title { font-weight: 800; }
+    & .chart-card, & .soc-card, & .pf-wrapper, & .sk-card, & .dg-card { background: var(--card); border: none; border-radius: 24px; box-shadow: none; }
+    & .weather-tile, & .ds-item, & .sk-kpi, & .suggest-item, & .why-box { background: var(--card); border: none; border-radius: 20px; box-shadow: none; }
+    & .btn { background: var(--seg-bg); border: none; border-radius: 16px; box-shadow: none; }
+    & .btn.active { background: var(--tab-on); color: var(--tab-on-fg); }
+    & .row { background: var(--card); border-bottom: 1px solid var(--line); }
+    & .section-title { text-transform: none; font-size: 13.5px; font-weight: 700; letter-spacing: 0; color: var(--accent); padding-left: 8px; }
+    & .bell, & .theme-seg { background: var(--card); }
+    & .tabs { border-radius: 999px; }
+    & .tabs.bottom { border: none; border-radius: 999px; padding: 6px; background: var(--tab-bg); box-shadow: 0 6px 22px rgba(23,28,38,0.12); }
+    & .tabs.bottom::before { display: none; }
+    & .tabs.bottom .tab { border-radius: 999px; }
+    & .tabs.bottom .tab.active { background: var(--tab-on); color: var(--tab-on-fg); box-shadow: none; }
+    & select, & input[type="time"], & input[type="number"] { border-radius: 14px; background: var(--input-bg); border: none; }
+    & .toggle-switch, & .sw { accent-color: var(--accent); }
+    & .sk-hero { background: #0b3b2c; border-radius: 32px; padding: 20px 22px; --text:#fff; --muted:#b9d9cb; --sk-idle:#1d5a46; --sk-batt:#5fe0a8; --sk-ring1:#5fe0a8; --sk-ring2:#5fe0a8; --card:#0b3b2c; color: #fff; }
+    &D .sk-hero { background: #12382b; --card:#12382b; --sk-idle:#1f5a46; }
+    & .sk-hero .sk-sub, & .sk-hero .sk-note, & .sk-hero .sk-lbl { color: #b9d9cb; }
+    & .sk-big { font-weight: 800; }
+    & .sk-strip i { border-radius: 8px; }
   `);
 
   const STYLES = `
@@ -3801,7 +3829,7 @@
 
     _renderShell() {
       const style = document.createElement('style');
-      style.textContent = STYLES + SKIN_M3 + SKIN_COMMON + SKIN_GLASS + SKIN_MATRIX + SKIN_SPACE + SKIN_COMFORT;
+      style.textContent = STYLES + SKIN_M3 + SKIN_COMMON + SKIN_GLASS + SKIN_MATRIX + SKIN_SPACE + SKIN_COMFORT + SKIN_HERO;
       this.shadowRoot.appendChild(style);
 
       const wrap = document.createElement('div');
@@ -5524,8 +5552,9 @@
       if (key === this._lastM3Key) return;
       this._lastM3Key = key;
       const f1 = (v) => (Math.round(v * 10) / 10).toFixed(1).replace('.', ','), zl = (v) => (isFinite(v) ? v.toFixed(2).replace('.', ',') : '—');
-      const ringKind = mx ? 'matrix' : (skin === 'comfort' ? 'flat' : 'grad'), flowKind = mx ? 'matrix' : (skin === 'comfort' ? 'tint' : 'sphere');
-      const g = mx ? ['□', '■'] : (skin === 'comfort' ? ['|', '○'] : ['|', '◆']);
+      const cf = skin === 'comfort' || skin === 'hero';
+      const ringKind = mx ? 'matrix' : (cf ? 'flat' : 'grad'), flowKind = mx ? 'matrix' : (cf ? 'tint' : 'sphere');
+      const g = mx ? ['□', '■'] : (cf ? ['|', '○'] : ['|', '◆']);
       const big = m.cap > 0 ? (mx ? this._skDots(f1(m.cap * m.soc / 100) + ' KWH', 3.4, 'var(--sk-on)').svg : `${f1(m.cap * m.soc / 100)} kWh`) : '';
       const hero = `<div class="sk-card sk-hero">${this._skRing(m, ringKind)}<div class="sk-htx"><div class="sk-lbl">Bateria</div>${big ? `<div class="sk-big">${big}</div>` : ''}
         <div class="sk-sub">${bmsEsc(m.battTxt)}</div>
@@ -6243,7 +6272,7 @@
   // =====================================================================
   // Wersja tego pliku (ustawiana skryptem pakującym z manifest.json). Każdy moduł niesie tę samą w install.version:
   // gdy się różnią, przeglądarka podała starą kopię modułu z pamięci podręcznej.
-  const CARD_VERSION = '0.9.6.0';
+  const CARD_VERSION = '0.9.6.1';
   const MOD_TIMEOUT_MS = 20000;
   const MODULES = {
     diag:   { file: 'bms-diag.js',   global: '__bmsDiagInstall',   contract: 1, label: 'Diagnostyki', p: null, ready: false, err: '', got: '' },
@@ -6492,7 +6521,7 @@
   let MINI_SHEET;
   const miniSheet = () => {
     if (MINI_SHEET !== undefined) return MINI_SHEET;
-    try { const sh = new CSSStyleSheet(); sh.replaceSync(STYLES + SKIN_M3 + SKIN_COMMON + SKIN_GLASS + SKIN_MATRIX + SKIN_SPACE + SKIN_COMFORT + MINI_CSS); MINI_SHEET = sh; } catch (e) { MINI_SHEET = null; }
+    try { const sh = new CSSStyleSheet(); sh.replaceSync(STYLES + SKIN_M3 + SKIN_COMMON + SKIN_GLASS + SKIN_MATRIX + SKIN_SPACE + SKIN_COMFORT + SKIN_HERO + MINI_CSS); MINI_SHEET = sh; } catch (e) { MINI_SHEET = null; }
     return MINI_SHEET;
   };
   class BmsMini extends BmsPanel {
@@ -6517,7 +6546,7 @@
         this._miniInit = true;
         const sh = miniSheet();
         if (sh) this.shadowRoot.adoptedStyleSheets = [sh];
-        else { const st = document.createElement('style'); st.textContent = STYLES + SKIN_M3 + SKIN_COMMON + SKIN_GLASS + SKIN_MATRIX + SKIN_SPACE + SKIN_COMFORT + MINI_CSS; this.shadowRoot.appendChild(st); }
+        else { const st = document.createElement('style'); st.textContent = STYLES + SKIN_M3 + SKIN_COMMON + SKIN_GLASS + SKIN_MATRIX + SKIN_SPACE + SKIN_COMFORT + SKIN_HERO + MINI_CSS; this.shadowRoot.appendChild(st); }
         const box = document.createElement('div'); box.id = 'miniBox'; this.shadowRoot.appendChild(box);
         box.addEventListener('click', () => {
           const p = this._config && this._config.navigation_path; if (!p || typeof p !== 'string') return;

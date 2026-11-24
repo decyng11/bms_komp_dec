@@ -1,4 +1,7 @@
-# EMS komp-dec 0.9.6.0
+# EMS komp-dec 0.9.6.1
+
+## Nowy styl „Bohater” (Ustawienia → Wygląd → Styl)
+Ciemnozielona karta baterii z miętowym pierścieniem, białe zaokrąglone karty, zielony akcent i pigułkowy dolny pasek; jasny i ciemny motyw. Tylko wygląd: dane i funkcje identyczne jak w pozostałych stylach (test zgodności stylów obejmuje „Bohatera”). Domyślnym nadal jest „Klasyczny”. Poniżej zmiany od tagu 0.9.6.0 (nowa wersja zbiera wszystko, co dodano po nim).
 
 ## Rok do roku i „Nowości po aktualizacji”
 - **Rok do roku** (Zysk i log → Oszczędności): ostatnie 30 dni wobec tych samych 30 dni rok wcześniej: sprzedaż, zakup, saldo, pobór i oddanie energii, z różnicą w zł i procentach. Gdy księga nie sięga jeszcze roku wstecz, panel podaje przybliżoną datę, od której porównanie się pojawi.

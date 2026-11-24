@@ -3,7 +3,7 @@
 const { openCard, chromium } = require('./ui_env');
 let fails = 0; const ok = (c, m) => { if (!c) { fails++; console.log('FAIL', m); } else console.log('ok  ', m); };
 const sleep = (ms) => new Promise(r => setTimeout(r, ms));
-const SK = ['classic', 'm3', 'glass', 'matrix', 'space', 'comfort'];
+const SK = ['classic', 'm3', 'glass', 'matrix', 'space', 'comfort', 'hero'];
 const D = (id, name, icon, p, kwh, cost, run, room) => ({ id, name, icon, category: 'x', room: room || '', power: p, today_kwh: kwh, today_cost: cost, running: run });
 const D3 = [D('hp', 'Pompa ciepła', '🔥', 412, 3.84, 3.1, true, 'Kotłownia'), D('ac', 'Klimatyzacja', '❄️', 255, 0.92, 0.74, true, 'Salon'), D('bo', 'Bojler CWU', '🚿', 0, 1.2, 0.96, false)];
 const D6 = D3.concat([D('ev', 'Ładowarka EV', '🚗', 0, 0, 0, false, 'Garaż'), D('pr', 'Pralka', '🧺', 0, 0.45, 0.36, false, 'Łazienka'), D('zm', 'Zmywarka', '🍽️', 1800, 0.3, 0.2, true, 'Kuchnia')]);

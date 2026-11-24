@@ -21,7 +21,7 @@ Integracja Home Assistanta, która pilnuje, kiedy falownik Deye ma ładować bat
 
 Na górze są bieżące ceny kupna i sprzedaży oraz prognoza pogody i produkcji paneli na 7 dni (z zakresem niepewności). Niżej przepływ energii na żywo (panele, dom, sieć, bateria), kafelka „Bateria” z informacją, kiedy będzie pełna albo kiedy dojdzie do progu odcięcia falownika, paski produkcji i zużycia oraz tabela „Sprzedaż i zakup energii” (dziś, miesiąc, razem) z szacunkiem, ile prądu kosztowałoby bez paneli i baterii.
 
-Karta działa tak samo na telefonie, ma jasny i ciemny motyw. Styl wyglądu (Klasyczny — domyślny, Material 3, Szkło, Matryca, Przestrzeń, Komfort) wybierasz przyciskiem 🎨 w nagłówku (każdy użytkownik, bez hasła) albo w Ustawienia → Wygląd.
+Karta działa tak samo na telefonie, ma jasny i ciemny motyw. Styl wyglądu (Klasyczny — domyślny, Material 3, Szkło, Matryca, Przestrzeń, Komfort, Bohater) wybierasz przyciskiem 🎨 w nagłówku (każdy użytkownik, bez hasła) albo w Ustawienia → Wygląd.
 
 **Własny układ.** W oknie 🎨 „Edytuj układ na panelu” włącza tryb edycji: kafelki wykresów, planów i ustawień przestawiasz przeciągnięciem (⠿) albo przyciskami ↑ ↓, zbędne ukrywasz („Ukryj”; ukryty kafelek zostaje jako pasek z „Pokaż”), a listą „⇄ Przenieś…” przenosisz kafelek na inną zakładkę — ląduje na jej końcu i działa tak samo jak na swojej (np. schemat przepływu mocy na zakładce Plan albo „Bilans w PLN” na Głównym). To samo zrobisz w Ustawienia → Wygląd → Układ panelu. Kafelek przeniesiony z innej zakładki ma dopisek „z: Plan”; „Przywróć tę zakładkę” i „Przywróć domyślny” cofają także przeniesienia. W trybie prostym przeniesienia są ignorowane (wracają po jego wyłączeniu). Pogoda zostaje na górze każdej zakładki. Alerty zawsze zostają widoczne.
 

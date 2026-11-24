@@ -91,7 +91,7 @@
     if (DG_ST.ready && !DG_ST.err) return '<div class="dg-muted" style="margin:6px 2px;">☁ Zapisuję w Home Assistant…</div>';
     return `<div class="dg-alarm" style="margin:6px 0;">⚠ Dane Ustawień (dziennik, kopie, profile) są teraz tylko w tej przeglądarce${DG_ST.err ? ' — ' + dgEsc(DG_ST.err) : ''}. Dziennik i kopie nie przetrwają czyszczenia danych witryny; próbuję ponownie automatycznie.</div>`;
   }
-  const SKINS_LABEL = { classic: 'Klasyczny', m3: 'Material 3', glass: 'Szkło', matrix: 'Matryca', space: 'Przestrzeń', comfort: 'Komfort' };
+  const SKINS_LABEL = { classic: 'Klasyczny', m3: 'Material 3', glass: 'Szkło', matrix: 'Matryca', space: 'Przestrzeń', comfort: 'Komfort', hero: 'Bohater' };
   const SKINS_SUB = {
     classic: 'dotychczasowy wygląd (domyślny)',
     m3: 'Material Design 3: tonalne karty, pigułkowa nawigacja',
@@ -99,6 +99,7 @@
     matrix: 'czerń lub papier, kwadratowe „piksele” zamiast linii, bursztynowy akcent, etykiety w czcionce monospace',
     space: 'duże szklane okno na tle zmierzchu; na szerokim ekranie pionowy pasek zakładek z boku',
     comfort: 'duży nagłówek, bardzo zaokrąglone płaskie karty, niebieski akcent, płaski dolny pasek',
+    hero: 'ciemnozielona karta baterii z miętowym pierścieniem, białe zaokrąglone karty, zielony akcent, pigułkowy dolny pasek',
   };
   const dgEsc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   const dgSleep = (ms) => new Promise(r => setTimeout(r, ms));
@@ -1892,6 +1893,6 @@
 
   };
   install.contract = 1;
-  install.version = '0.9.6.0';
+  install.version = '0.9.6.1';
   window.__bmsDiagInstall = install;
 })();

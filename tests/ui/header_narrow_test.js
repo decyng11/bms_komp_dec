@@ -3,7 +3,7 @@
 const { openCard, chromium } = require('./ui_env');
 let fails = 0; const ok = (c, m) => { if (!c) { fails++; console.log('FAIL', m); } else console.log('ok  ', m); };
 const sleep = (ms) => new Promise(r => setTimeout(r, ms));
-const SK = ['classic', 'm3', 'glass', 'matrix', 'space', 'comfort'];
+const SK = ['classic', 'm3', 'glass', 'matrix', 'space', 'comfort', 'hero'];
 (async () => {
   const b = await chromium.launch();
   for (const sk of SK) for (const w of [320, 360, 375, 390]) {

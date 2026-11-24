@@ -9,6 +9,13 @@
     const BMS_INFO = { card: shared.version || '', url: shared.urlVersion || '' };
     // Co nowego po aktualizacji: pokazywane raz na przeglądarkę, po zmianie wersji karty. Dopisuj nową wersję na górze.
     const WHATS_NEW = {
+      '0.9.6.1': {
+        items: [
+          ['Nowy styl „Bohater”', 'Ustawienia → Wygląd → Styl: ciemnozielona karta baterii, białe zaokrąglone karty, zielony akcent. Klasyczny nadal jest domyślny.'],
+          ['Przegląd kodu', 'Kopia ustawień, Rok do roku i wykrywanie usterek czujników po pełnym przeglądzie i testach.'],
+        ],
+        check: 'Warto zajrzeć: Ustawienia → Wygląd → Styl.',
+      },
       '0.9.6.0': {
         items: [
           ['Stabilniejszy plan', 'Plan nie zmienia decyzji bez wyraźnego zysku. Zmiany widać na osi decyzji w Zysk i log.'],
@@ -1529,6 +1536,6 @@
 
   };
   install.contract = 1;
-  install.version = '0.9.6.0';
+  install.version = '0.9.6.1';
   window.__bmsExtrasInstall = install;
 })();

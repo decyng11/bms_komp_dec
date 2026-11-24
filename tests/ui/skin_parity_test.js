@@ -4,7 +4,7 @@
 const { openCard, chromium } = require('./ui_env');
 let fails = 0; const ok = (c, m) => { if (!c) { fails++; console.log('FAIL', m); } else console.log('ok  ', m); };
 const sleep = (ms) => new Promise(r => setTimeout(r, ms));
-const SK = ['classic', 'm3', 'glass', 'matrix', 'space', 'comfort'];
+const SK = ['classic', 'm3', 'glass', 'matrix', 'space', 'comfort', 'hero'];
 const SC = {
   'ładowanie z PV i sprzedaż': { soc: 48, pv: 2100, load: 1240, grid: -800, batt: -403 },
   'import, bateria w spoczynku': { soc: 71, pv: 0, load: 1240, grid: 1240, batt: 0 },
@@ -124,7 +124,7 @@ const TOK = () => {
   }
 
   // teksty na schemacie nie nachodzą na siebie (telefon i szeroki ekran)
-  for (const mobile of [true, false]) for (const sk of ['glass', 'matrix', 'space', 'comfort']) {
+  for (const mobile of [true, false]) for (const sk of ['glass', 'matrix', 'space', 'comfort', 'hero']) {
     const e = await openCard(b, { admin: false, mobile });
     await e.q((sk) => { const S = (v, a) => ({ state: String(v), attributes: a || {}, last_updated: new Date().toISOString(), last_changed: new Date().toISOString() }); const st = window.__states;
       st['sensor.bms_soc'] = S(48); st['sensor.bms_pv_power'] = S(2100); st['sensor.bms_load_power'] = S(1240); st['sensor.bms_grid_power'] = S(-800); st['sensor.bms_battery_power'] = S(-403);

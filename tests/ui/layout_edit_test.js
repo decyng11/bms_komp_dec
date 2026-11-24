@@ -16,7 +16,7 @@ const sleep = (ms) => new Promise(r => setTimeout(r, ms));
   ok(await sr(() => getComputedStyle(__el.shadowRoot.getElementById('tabDiag')).display === 'none'), 'to nie administrator: zakładka Ustawienia ukryta');
   await sr(() => __el.shadowRoot.getElementById('lookBtn').click());
   ok(await sr(() => !__el.shadowRoot.getElementById('lookOv').hidden && __el.shadowRoot.getElementById('lookBtn').getAttribute('aria-expanded') === 'true'), 'klik 🎨 otwiera okno');
-  ok(await sr(() => __el.shadowRoot.querySelectorAll('#lookOv [data-look="skin"]').length === 6), 'okno: sześć stylów do wyboru');
+  ok(await sr(() => __el.shadowRoot.querySelectorAll('#lookOv [data-look="skin"]').length === 7), 'okno: siedem stylów do wyboru');
   ok(await sr(() => __el.shadowRoot.querySelector('#lookOv [data-look="skin"][data-skin="classic"]').getAttribute('aria-pressed') === 'true'), 'okno: aktywny styl klasyczny');
   ok(await sr(() => __el.shadowRoot.querySelector('#lookOv [data-look="reset-all"]').disabled), 'okno: „Przywróć domyślny” nieaktywne przy układzie domyślnym');
   ok(await sr(() => __el.shadowRoot.activeElement && __el.shadowRoot.activeElement.dataset.look === 'close'), 'okno: fokus na przycisku zamknięcia');
