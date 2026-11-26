@@ -38,6 +38,8 @@ const seed = () => {
   ok(await m.q(() => { const r = __el.shadowRoot.querySelector('.px-plan tr.peak td:first-child'); return !!r && /inset 3px/.test(getComputedStyle(r).boxShadow) || !!r && getComputedStyle(r).boxShadow !== 'none'; }), 'telefon: pomarańczowy znacznik godzin szczytu zachowany');
   const sum = await m.q(() => { const s = __el.shadowRoot.querySelector('#exTblBox .ps'); return s ? s.textContent.replace(/\s+/g, ' ') : ''; });
   ok(/Co EMS planuje na najbliższe 24 h/.test(sum) && /Ładowanie z PV: teraz–/.test(sum) && /Ładowanie z sieci:/.test(sum) && /Sprzedaż z baterii:/.test(sum), 'nad tabelą: opis „Co EMS planuje na najbliższe 24 h”');
+  const col = await m.q(async () => { const d = __el.shadowRoot.querySelector('#exTblBox details.ps'); if (!d) return null; const o1 = d.open; d.querySelector('summary').click(); await new Promise(r => setTimeout(r, 200)); const o2 = d.open, h2 = d.getBoundingClientRect().height; let ls = null; try { ls = localStorage.getItem('bms_ps_open'); } catch (e) {} return { o1, o2, h2, ls }; });
+  ok(col && col.o1 === true && col.o2 === false && col.ls === '0' && col.h2 < 60, 'opis planu zwija się po kliknięciu nagłówka i stan jest zapamiętany: ' + JSON.stringify(col));
   ok(m.errs.length === 0, 'telefon: brak błędów w konsoli: ' + JSON.stringify(m.errs));
   // ---- szeroki ekran: bez zmian
   const w = await openCard(b, { admin: true });

@@ -510,7 +510,11 @@
     [data-tile-off] { display: none !important; }
     /* „Co EMS planuje na najbliższe 24 h” (tabela planu i mała karta) */
     .ps { background: var(--surface); border-radius: 14px; padding: 10px 12px; margin: 0 0 12px; font-size: 13px; color: var(--text2); }
-    .ps-h { font-weight: 700; color: var(--text); margin-bottom: 4px; font-size: 13.5px; }
+    .ps-h { font-weight: 700; color: var(--text); margin-bottom: 4px; font-size: 13.5px; cursor: pointer; list-style: none; display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+    .ps-h::-webkit-details-marker { display: none; }
+    .ps-h::after { content: '▾'; color: var(--muted); }
+    .ps:not([open]) > .ps-h { margin-bottom: 0; }
+    .ps:not([open]) > .ps-h::after { content: '▸'; }
     .ps-l { display: flex; gap: 8px; align-items: baseline; padding: 2px 0; line-height: 1.4; }
     .ps-l i { font-style: normal; flex: none; width: 22px; text-align: center; }
     .ps-l b { color: var(--text); font-weight: 600; }
@@ -3752,6 +3756,7 @@
         const h = ev.target && ev.target.closest ? ev.target.closest('.tc-h') : null;
         if (h && this._layEdit) this._layDragStart(ev, h);
       });
+      this.shadowRoot.addEventListener('toggle', (ev) => { const d = ev.target; if (d && d.matches && d.matches('details[data-ps]')) { try { localStorage.setItem('bms_ps_open', d.open ? '1' : '0'); } catch (e) { /* ignorujemy */ } } }, true);
       this.shadowRoot.addEventListener('keydown', (ev) => { if (ev.key === 'Escape' && this._layEdit && !this._lookOpen) this._layEditOff(); });
     }
     // Pokaż kafelek w widocznej części ekranu: pod paskiem edycji i nad dolnym marginesem.
@@ -5299,10 +5304,11 @@
       };
       const soc = s.min ? `<div class="ps-l"><i aria-hidden="true">🔋</i><span><b>Bateria:</b> najniżej ${Math.round(s.min.soc)}% (${E(day(s.min.ts) + hh(s.min.ts))})${s.end ? `, na koniec okresu ${Math.round(s.end.soc)}% (${E(day(s.end.ts) + hh(s.end.ts))})` : ''}</span></div>` : '';
       const bil = s.cost > 0.005 ? 'koszt ' + fz(s.cost) : (s.cost < -0.005 ? 'przychód ' + fz(s.cost) : 'bilans około 0 zł');
-      return `<div class="ps" role="group" aria-label="Plan EMS na najbliższe 24 godziny"><div class="ps-h">🧭 Co EMS planuje na najbliższe 24 h</div>
+      let psOpen = true; try { psOpen = localStorage.getItem('bms_ps_open') !== '0'; } catch (e) { /* brak pamięci przeglądarki: domyślnie rozwinięte */ }
+      return `<details class="ps" data-ps${psOpen ? ' open' : ''} aria-label="Plan EMS na najbliższe 24 godziny"><summary class="ps-h">🧭 Co EMS planuje na najbliższe 24 h</summary>
         ${line('⚡', 'Ładowanie z sieci', 'grid', 'nie planuje')}${line('☀️', 'Ładowanie z PV', 'pv', 'brak')}${line('💰', 'Sprzedaż z baterii', 'sell', 'nie planuje')}${soc}
         <div class="ps-l"><i aria-hidden="true">💵</i><span><b>Szacunek:</b> ${E(bil)} · pobór ${s.imp.toFixed(1).replace('.', ',')} kWh, oddanie ${s.exp.toFixed(1).replace('.', ',')} kWh</span></div>
-        <div class="ps-n">To szacunek z prognoz — EMS przelicza plan na bieżąco i może go zmienić.</div></div>`;
+        <div class="ps-n">To szacunek z prognoz — EMS przelicza plan na bieżąco i może go zmienić.</div></details>`;
     }
     // bieżące moce i SOC (jak na ekranie głównym) — dla małej karty
     _flowNow() {
@@ -6272,7 +6278,7 @@
   // =====================================================================
   // Wersja tego pliku (ustawiana skryptem pakującym z manifest.json). Każdy moduł niesie tę samą w install.version:
   // gdy się różnią, przeglądarka podała starą kopię modułu z pamięci podręcznej.
-  const CARD_VERSION = '0.9.6.1';
+  const CARD_VERSION = '0.9.6.2';
   const MOD_TIMEOUT_MS = 20000;
   const MODULES = {
     diag:   { file: 'bms-diag.js',   global: '__bmsDiagInstall',   contract: 1, label: 'Diagnostyki', p: null, ready: false, err: '', got: '' },

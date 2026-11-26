@@ -9,6 +9,16 @@
     const BMS_INFO = { card: shared.version || '', url: shared.urlVersion || '' };
     // Co nowego po aktualizacji: pokazywane raz na przeglądarkę, po zmianie wersji karty. Dopisuj nową wersję na górze.
     const WHATS_NEW = {
+      '0.9.6.2': {
+        items: [
+          ['Moc ładowania z sieci dopasowana do celu', 'Ty ustalasz maksimum, a w oknie ładowania EMS sam dobiera niższą moc, żeby cel wypadł na końcu okna. Działa zawsze, gdy „Moc ładowania z sieci” jest większa od 0.'],
+          ['Zwijany opis planu', 'Plan → „Co EMS planuje na najbliższe 24 h”: klik w nagłówek zwija i rozwija opis.'],
+          ['Nowy styl „Bohater”', 'Ustawienia → Wygląd → Styl: ciemnozielona karta baterii i białe zaokrąglone karty.'],
+          ['Kopia ustawień', 'EMS → Kopia ustawień: zapis do pliku i wczytanie z podglądem zmian.'],
+          ['Czujniki pod kontrolą i Rok do roku', 'EMS ostrzega o zawieszonym PV lub SOC; Zysk i log → Oszczędności porównuje 30 dni z rokiem temu.'],
+        ],
+        check: 'Warto zajrzeć: Ustawienia → EMS → „Moc ładowania z sieci” (to jest maksimum; poniżej niego EMS dobiera moc sam).',
+      },
       '0.9.6.1': {
         items: [
           ['Nowy styl „Bohater”', 'Ustawienia → Wygląd → Styl: ciemnozielona karta baterii, białe zaokrąglone karty, zielony akcent. Klasyczny nadal jest domyślny.'],
@@ -1536,6 +1546,6 @@
 
   };
   install.contract = 1;
-  install.version = '0.9.6.1';
+  install.version = '0.9.6.2';
   window.__bmsExtrasInstall = install;
 })();

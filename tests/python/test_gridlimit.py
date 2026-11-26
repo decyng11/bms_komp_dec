@@ -124,6 +124,42 @@ async def main():
     opt.hass = mk(0.0, 0.0)
     check("plan: bez sufitu zostaje moc z konfiguracji", abs(opt._grid_chg_kw() - 6.0) < 1e-9)
 
+    # ---------- dopasowanie mocy do celu i czasu okna (maksimum = „Moc ładowania z sieci”)
+    from datetime import datetime
+    curve = {"start": "2026-11-26T01:00:00", "grid": [0, 1, 1, 1, 1, 0, 0], "target": [None, 90, 90, 90, 90, None, None], "soc": [40, 50, 62, 75, 90, 88, 85]}
+    t = lambda hh, mm: datetime(2026, 11, 26, hh, mm)
+    r = GL.fit_amps(curve, t(1, 30), 40, 10.0, 50.0, 100.0)
+    check("fit: poza oknem planu brak dopasowania", r is None, r)
+    r = GL.fit_amps(curve, t(2, 0), 40, 10.0, 50.0, 100.0)    # okno 02–06: 5 kWh / 4 h = 1,25 kW → 25 A × 1,1 ≈ 27,5 A
+    check("fit: moc rozłożona na cały czas okna (nie sufit)", r and 26 < r[0] < 29, r)
+    r2 = GL.fit_amps(curve, t(3, 0), 45, 10.0, 50.0, 100.0)   # 4,5 kWh / 3 h
+    check("fit: bateria wolniej niż plan → moc rośnie", r2 and r2[0] > r[0], (r, r2))
+    r3 = GL.fit_amps(curve, t(3, 0), 80, 10.0, 50.0, 100.0)
+    check("fit: bateria przed planem → moc spada", r3 and r3[0] < r[0], (r, r3))
+    r4 = GL.fit_amps(curve, t(4, 0), 5, 10.0, 50.0, 30.0)
+    check("fit: nigdy powyżej maksimum użytkownika", r4 and r4[0] == 30.0, r4)
+    r5 = GL.fit_amps(curve, t(5, 55), 60, 10.0, 50.0, 100.0)
+    check("fit: ostatnie minuty okna — pełne maksimum", r5 and r5[0] == 100.0, r5)
+    r6 = GL.fit_amps(curve, t(3, 0), 91, 10.0, 50.0, 100.0)
+    check("fit: cel osiągnięty → minimum", r6 and r6[0] == GL.MIN_A, r6)
+    check("fit: brak SOC albo napięcia → brak dopasowania", GL.fit_amps(curve, t(2, 0), None, 10.0, 50.0, 100.0) is None and GL.fit_amps(curve, t(2, 0), 40, 10.0, 0.0, 100.0) is None)
+    # tick: okno trwa, maksimum 5 kW (100 A przy 50 V), SOC 40% → prąd wyraźnie poniżej maksimum
+    class _Opt:
+        config = {"battery_capacity_kwh": 10.0}
+    from datetime import timezone
+    class _Now2(_Now):
+        def __init__(s, ts, dt): _Now.__init__(s, ts); s.dt = dt
+        def replace(s, **kw): return s.dt.replace(**kw)
+    h8 = mk(0.0, 5.0, cur=100.0); rt8 = _RT(h8); rt8.brand = lambda: brands.DEYE
+    rt8.optimizer = _Opt(); rt8._plan = {"curve": curve}; rt8.soc = lambda: 40.0
+    await GL.GridLimiter(rt8).tick(_Now2(8000.0, t(2, 0)))
+    check("tick: w oknie moc dopasowana poniżej maksimum", rt8.calls and 24 <= rt8.calls[0][2] <= 31, rt8.calls)
+    check("tick: dziennik opisuje dopasowanie", any("dopasowanie do celu 90%" in m for _k, m, _l in rt8.log.rows), rt8.log.rows)
+    h10 = mk(0.0, 5.0, cur=100.0); rt10 = _RT(h10); rt10.brand = lambda: brands.DEYE
+    rt10.optimizer = _Opt(); rt10._plan = {"curve": curve}; rt10.soc = lambda: 40.0
+    await GL.GridLimiter(rt10).tick(_Now2(10000.0, t(1, 30)))
+    check("tick: poza oknem prąd zostaje na maksimum", rt10.calls == [], rt10.calls)
+
     print(f"GRIDLIMIT PASS={common.PASS} FAIL={common.FAIL}")
     sys.exit(1 if common.FAIL else 0)
 asyncio.run(main())

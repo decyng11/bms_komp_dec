@@ -11,13 +11,14 @@ Działa tylko na Deye (encja „Battery Grid Charging Current”)."""
 from __future__ import annotations
 
 import logging
+from datetime import datetime, timedelta
 from typing import Any
 
 from homeassistant.util import dt as dt_util
 
 from . import brands
 from . import inverter_ctl as ictl
-from .const import CONF_BATTERY_VOLTAGE
+from .const import CONF_BATTERY_CAPACITY_KWH, CONF_BATTERY_VOLTAGE, DEFAULT_BATTERY_CAPACITY_KWH
 from .helpers import number_value, state_float
 
 _LOGGER = logging.getLogger(__name__)
@@ -56,6 +57,49 @@ def inverter_number_eid(hass, cfg: dict[str, Any], tails: tuple[str, ...]) -> st
     except Exception:  # noqa: BLE001
         pass
     return None
+
+
+FIT_MARGIN = 1.10          # zapas na straty i chwilowe odchylenia: lepiej skończyć odrobinę przed końcem okna niż po nim
+FIT_LAST_MIN = 10.0        # w ostatnich minutach okna nie zwalniamy — pełny sufit
+
+
+def fit_amps(curve: dict | None, now: datetime, soc: float | None, cap_kwh: float, v: float,
+             ceil_a: float, min_a: float = MIN_A) -> tuple[float, dict] | None:
+    """Prąd ładowania z sieci dopasowany do celu i czasu do końca bieżącego okna planu.
+
+    Zwraca (A, szczegóły) albo None, gdy teraz nie trwa okno ładowania z sieci w planie. Prąd = energia do celu / pozostały czas
+    (po stronie baterii, więc bez sprawności) × zapas, w granicach [min_a, ceil_a] — ceil_a to maksimum ustawione przez użytkownika."""
+    if not isinstance(curve, dict) or soc is None or not v or v < 10.0 or ceil_a <= 0:
+        return None
+    grid = curve.get("grid") or []
+    try:
+        t0 = datetime.fromisoformat(str(curve.get("start")))
+    except (TypeError, ValueError):
+        return None
+    n0, t = t0.replace(tzinfo=None, minute=0, second=0, microsecond=0), now.replace(tzinfo=None)
+    idx = int((t.replace(minute=0, second=0, microsecond=0) - n0).total_seconds() // 3600)
+    if idx < 0 or idx >= len(grid) or not grid[idx]:
+        return None
+    e = idx + 1
+    while e < len(grid) and grid[e]:
+        e += 1
+    tg = (curve.get("target") or [None] * len(grid))
+    target = tg[e - 1] if e - 1 < len(tg) else None
+    if not isinstance(target, (int, float)) or target <= 0:
+        socs = curve.get("soc") or []
+        target = socs[e - 1] if e - 1 < len(socs) and isinstance(socs[e - 1], (int, float)) else None
+    if target is None:
+        return None
+    end = n0 + timedelta(hours=e)
+    rem_h = (end - t).total_seconds() / 3600.0
+    info = {"target": float(target), "end_h": end.hour, "rem_min": max(0.0, rem_h * 60.0)}
+    if rem_h * 60.0 <= FIT_LAST_MIN:
+        return ceil_a, {**info, "why": "koniec okna"}
+    need_kwh = max(0.0, float(target) - float(soc)) / 100.0 * cap_kwh
+    if need_kwh <= 0.02:
+        return min_a, {**info, "why": "cel osiągnięty"}
+    amps = need_kwh / rem_h * 1000.0 / v * FIT_MARGIN
+    return max(min_a, min(ceil_a, amps)), {**info, "why": "do celu", "need_kwh": need_kwh}
 
 
 def plan_decision(cur: float, ceiling: float | None, base: float, p_w: float | None, charging_w: float,
@@ -137,6 +181,18 @@ class GridLimiter:
                 ceiling = min(ceiling, float(amax)) if ceiling else None
         except (TypeError, ValueError):
             pass
+        fit = None
+        if ceiling:
+            try:
+                capk = float(rt.optimizer.config.get(CONF_BATTERY_CAPACITY_KWH, DEFAULT_BATTERY_CAPACITY_KWH))
+                fit = fit_amps((rt._plan or {}).get("curve"), now if hasattr(now, "replace") else dt_util.now(), rt.soc(), capk, v, ceiling)  # noqa: SLF001
+            except Exception:  # noqa: BLE001
+                fit = None
+        if fit:
+            ceiling = float(int(round(fit[0])))
+            gl["fit"] = {k: (round(x, 1) if isinstance(x, float) else x) for k, x in fit[1].items()}
+        else:
+            gl.pop("fit", None)
         p = rt.grid_power()
         data = rt.coordinator.data or {}
         bp = data.get("battery_power")
@@ -168,6 +224,7 @@ class GridLimiter:
         gl["auto"] = want
         rt._save_state()  # noqa: SLF001
         txt = {"reduce": f"pobór {0 if p is None else p / 1000.0:.1f} kW przekracza limit {limit_kw:.1f} kW",
-               "restore": "jest zapas pod limitem", "ceiling": f"sufit mocy ładowania {cap_kw:.1f} kW"}.get(why, why)
+               "restore": "jest zapas pod limitem", "ceiling": (f"dopasowanie do celu {fit[1]['target']:.0f}% o {fit[1]['end_h']:02d}:00 ({fit[1]['why']}), maks. {cap_kw:.1f} kW" if fit
+                               else f"sufit mocy ładowania {cap_kw:.1f} kW")}.get(why, why)
         rt.log.add("guard", f"Ochrona przyłącza: prąd ładowania z sieci {cur:.0f} → {want:.0f} A ({txt})",
                    "warn" if why == "reduce" else "info")
