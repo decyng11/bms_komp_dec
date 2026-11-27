@@ -4574,8 +4574,16 @@
           <div class="inb-btns"><button type="button" data-inb="reject" data-p="${dat}">Odrzuć</button><button type="button" class="ok" data-inb="apply" data-p="${dat}">Potwierdź</button></div></div>`;
       }).join('');
       const ic = { error: '🚨', warn: '⚠️', ok: '✅', info: 'ℹ️' };
-      const notes = d.notes.map(e => `<div class="inb-card n-${esc(e.level)} ${e.read ? '' : 'unread'}"><div class="inb-r"><span class="inb-t">${ic[e.level] || 'ℹ️'} ${esc(e.title)}</span><span class="inb-time">${(e.n || 1) > 1 ? `×${e.n} · ` : ''}${esc(ago(e.ts))}</span></div>
-        <div class="inb-msg">${esc(e.message)}</div><div class="inb-act">${e.read ? (e.auto ? `<span class="inb-autotag">odczytane automatycznie: ${esc(e.auto)}</span>` : '') : `<button type="button" data-inb="read" data-id="${e.id}">Przeczytane</button>`}<button type="button" data-inb="del" data-id="${e.id}">Usuń</button></div></div>`).join('');
+      // Długie komunikaty: na wierzchu pierwsza linia albo pierwsze zdanie, reszta pod „Szczegóły”; „EMS:” w tytule jest zbędne.
+      const splitMsg = m => {
+        m = String(m || '').trim(); const nl = m.indexOf('\n');
+        if (nl > 0) return [m.slice(0, nl).trim(), m.slice(nl + 1).trim()];
+        if (m.length > 150) { const re = /[.!?](?:\s+(?=[A-ZĄĆĘŁŃÓŚŹŻ0-9])|$)/g; let x; while ((x = re.exec(m))) { if (x.index >= 12 && x.index <= 160) { const h = m.slice(0, x.index + 1), r = m.slice(x.index + 1).trim(); return r ? [h, r] : [m, '']; } } }
+        return [m, ''];
+      };
+      const shortT = t => String(t || '').replace(/\bEMS:\s*/, '');
+      const notes = d.notes.map(e => { const [mh, mr] = splitMsg(e.message); return `<div class="inb-card n-${esc(e.level)} ${e.read ? '' : 'unread'}"><div class="inb-r"><span class="inb-t">${ic[e.level] || 'ℹ️'} ${esc(shortT(e.title))}</span><span class="inb-time">${(e.n || 1) > 1 ? `×${e.n} · ` : ''}${esc(ago(e.ts))}</span></div>
+        <div class="inb-msg">${esc(mh)}</div>${det('m' + e.id, 'Szczegóły', esc(mr))}<div class="inb-act">${e.read ? (e.auto ? `<span class="inb-autotag">odczytane automatycznie: ${esc(e.auto)}</span>` : '') : `<button type="button" data-inb="read" data-id="${e.id}">Przeczytane</button>`}<button type="button" data-inb="del" data-id="${e.id}">Usuń</button></div></div>`; }).join('');
       const nP = d.pending;
       ov.firstChild.innerHTML = `<div class="inb-grip"></div><div class="inb-h"><b>${nP ? `Do decyzji (${nP})` : 'Powiadomienia'}</b><button type="button" class="inb-x" data-inb="close" aria-label="Zamknij">✕</button></div>
         ${d.auto ? '' : '<span class="inb-pill">auto-stosowanie wył.</span>'}
