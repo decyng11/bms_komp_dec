@@ -160,6 +160,20 @@ async def main():
     await GL.GridLimiter(rt10).tick(_Now2(10000.0, t(1, 30)))
     check("tick: poza oknem prąd zostaje na maksimum", rt10.calls == [], rt10.calls)
 
+    # spokojne zmiany: w oknie prąd zmienia się rzadko (krok 5 A, najwyżej co 15 min), poza końcem okna i celem
+    h11 = mk(0.0, 6.0, cur=120.0); rt11 = _RT(h11); rt11.brand = lambda: brands.DEYE
+    rt11.optimizer = _Opt(); rt11._plan = {"curve": curve}
+    lm11 = GL.GridLimiter(rt11)
+    soc11 = [30.0]; rt11.soc = lambda: soc11[0]
+    base_dt = datetime(2026, 11, 26, 2, 0)
+    for k in range(0, 60):                                   # 2:00–2:59, tick co minutę, SOC rośnie o 0,3 pp/min
+        soc11[0] = 30.0 + 0.3 * k
+        dtk = base_dt.replace(minute=k)
+        await lm11.tick(_Now2(20000.0 + k * 60.0, dtk))
+    n_w = len([c for c in rt11.calls if c[1].endswith("battery_grid_charging_current")])
+    check("w ciągu godziny okna prąd zmienia się rzadko (≤ 3 zapisy)", n_w <= 3, (n_w, [c[2] for c in rt11.calls]))
+    check("wartości zapisu są krokami po 5 A", all(float(c[2]) % 5 == 0 or float(c[2]) == 120.0 for c in rt11.calls), [c[2] for c in rt11.calls])
+
     print(f"GRIDLIMIT PASS={common.PASS} FAIL={common.FAIL}")
     sys.exit(1 if common.FAIL else 0)
 asyncio.run(main())

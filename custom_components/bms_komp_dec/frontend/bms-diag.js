@@ -1893,6 +1893,6 @@
 
   };
   install.contract = 1;
-  install.version = '0.9.6.2';
+  install.version = '0.9.6.3';
   window.__bmsDiagInstall = install;
 })();

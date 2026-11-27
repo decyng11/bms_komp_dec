@@ -61,6 +61,8 @@ def inverter_number_eid(hass, cfg: dict[str, Any], tails: tuple[str, ...]) -> st
 
 FIT_MARGIN = 1.10          # zapas na straty i chwilowe odchylenia: lepiej skończyć odrobinę przed końcem okna niż po nim
 FIT_LAST_MIN = 10.0        # w ostatnich minutach okna nie zwalniamy — pełny sufit
+FIT_STEP_A = 5.0           # prąd dopasowania zaokrąglamy do pełnych 5 A (≈0,25 kW), by drobne zmiany nie powodowały zapisów
+FIT_HOLD_S = 900.0         # dopasowany prąd zmieniamy najwyżej co 15 min (poza końcem okna i osiągnięciem celu)
 
 
 def fit_amps(curve: dict | None, now: datetime, soc: float | None, cap_kwh: float, v: float,
@@ -188,11 +190,20 @@ class GridLimiter:
                 fit = fit_amps((rt._plan or {}).get("curve"), now if hasattr(now, "replace") else dt_util.now(), rt.soc(), capk, v, ceiling)  # noqa: SLF001
             except Exception:  # noqa: BLE001
                 fit = None
+        ts = now.timestamp() if hasattr(now, "timestamp") else dt_util.now().timestamp()
         if fit:
-            ceiling = float(int(round(fit[0])))
+            top = float(ceiling)
+            new_fit = float(min(top, max(MIN_A, round(fit[0] / FIT_STEP_A) * FIT_STEP_A)))
+            prev_fit = gl.get("fit_a")
+            urgent_fit = fit[1].get("why") in ("koniec okna", "cel osiągnięty")
+            if prev_fit is not None and not urgent_fit and new_fit != prev_fit and ts - float(gl.get("fit_ts") or 0.0) < FIT_HOLD_S:
+                new_fit = min(top, float(prev_fit))          # trzymamy poprzednią wartość — zmiana dopiero po FIT_HOLD_S
+            elif new_fit != prev_fit:
+                gl["fit_a"], gl["fit_ts"] = new_fit, ts
+            ceiling = new_fit
             gl["fit"] = {k: (round(x, 1) if isinstance(x, float) else x) for k, x in fit[1].items()}
         else:
-            gl.pop("fit", None)
+            gl.pop("fit", None); gl.pop("fit_a", None); gl.pop("fit_ts", None)
         p = rt.grid_power()
         data = rt.coordinator.data or {}
         bp = data.get("battery_power")
@@ -202,7 +213,6 @@ class GridLimiter:
             charging_w = 0.0
         want, why = plan_decision(cur, ceiling, base, p, charging_w, limit_kw, v)
         want = float(int(round(want)))
-        ts = now.timestamp() if hasattr(now, "timestamp") else dt_util.now().timestamp()
         if why == "cannot":
             if p is not None and ts - self._last_note >= NOTE_GAP_S:
                 self._last_note = ts
