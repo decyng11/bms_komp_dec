@@ -1,6 +1,6 @@
 """Constants for EMS komp-dec integration."""
 DOMAIN = "bms_komp_dec"
-VERSION = "0.9.6.3"
+VERSION = "0.9.6.2"
 
 # Mapowanie encji źródłowych
 CONF_PV_POWER = "pv_power"

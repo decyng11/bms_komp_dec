@@ -1,9 +1,7 @@
-# EMS komp-dec 0.9.6.3
+# EMS komp-dec 0.9.6.2
 
 ## Spokojniejsza moc ładowania z sieci
 Dopasowany prąd ładowania jest zaokrąglany do pełnych 5 A (ok. 0,25 kW) i zmieniany najwyżej raz na 15 minut. Wyjątki: ostatnie 10 minut okna (pełne maksimum) i osiągnięcie celu (minimum). Redukcja przez limit poboru z sieci działa jak dotąd od razu. W godzinie okna zapisów do falownika jest zwykle 0–2.
-
-## Wersja 0.9.6.2
 
 ## Moc ładowania z sieci dopasowana do celu i czasu okna
 Pole „Moc ładowania z sieci” nadal jest maksimum ustawianym przez Ciebie. Poniżej niego EMS co kilkanaście sekund dobiera prąd ładowania (Deye) tak, by bateria osiągnęła cel z planu dokładnie na końcu bieżącego okna: moc = energia do celu ÷ pozostały czas × 1,1. Gdy bateria jest przed planem, moc spada (mniej strat i szczytów), gdy za planem, rośnie do maksimum; w ostatnich 10 minutach okna działa maksimum, po osiągnięciu celu minimum. Poza oknem prąd zostaje na maksimum, a ochrona przyłącza (limit poboru) nadal może go obniżyć. Zmiany tylko przy różnicy większej niż martwa strefa (≥ 2 A) i nie częściej niż co 20 s. Działa zawsze, gdy maksimum jest ustawione (> 0), bez osobnego przełącznika.
@@ -11,10 +9,8 @@ Pole „Moc ładowania z sieci” nadal jest maksimum ustawianym przez Ciebie. P
 ## Zwijany opis planu
 „Co EMS planuje na najbliższe 24 h” (Plan) zwija się i rozwija kliknięciem nagłówka; stan zapamiętany w przeglądarce.
 
-## Wersja 0.9.6.1
-
 ## Nowy styl „Bohater” (Ustawienia → Wygląd → Styl)
-Ciemnozielona karta baterii z miętowym pierścieniem, białe zaokrąglone karty, zielony akcent i pigułkowy dolny pasek; jasny i ciemny motyw. Tylko wygląd: dane i funkcje identyczne jak w pozostałych stylach (test zgodności stylów obejmuje „Bohatera”). Domyślnym nadal jest „Klasyczny”. Poniżej zmiany od tagu 0.9.6.0 (nowa wersja zbiera wszystko, co dodano po nim).
+Ciemnozielona karta baterii z miętowym pierścieniem, białe zaokrąglone karty, zielony akcent i pigułkowy dolny pasek; jasny i ciemny motyw. Tylko wygląd: dane i funkcje identyczne jak w pozostałych stylach (test zgodności stylów obejmuje „Bohatera”). Domyślnym nadal jest „Klasyczny”.
 
 ## Rok do roku i „Nowości po aktualizacji”
 - **Rok do roku** (Zysk i log → Oszczędności): ostatnie 30 dni wobec tych samych 30 dni rok wcześniej: sprzedaż, zakup, saldo, pobór i oddanie energii, z różnicą w zł i procentach. Gdy księga nie sięga jeszcze roku wstecz, panel podaje przybliżoną datę, od której porównanie się pojawi.
