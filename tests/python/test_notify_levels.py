@@ -91,17 +91,17 @@ async def main():
     await n.send("low_soc", "🔋 niski SOC", "Bateria 12% (próg 10%)", key="a", level="warn")
     await n.send("low_soc", "🔋 niski SOC", "Bateria 9% (próg 10%)", key="b", level="warn")
     es = inb(rt)
-    check("powtórka (inne liczby): starszy wpis przeczytany, nowszy nieprzeczytany", len(es) == 2 and es[0]["read"] and es[0].get("auto") == "zastąpione nowszym" and not es[1]["read"], es)
+    check("powtórka (inne liczby): zlewa się w jeden nieprzeczytany wpis z licznikiem", len(es) == 1 and es[0]["n"] == 2 and not es[0]["read"] and "9%" in es[0]["message"], es)
     await n.send("low_soc", "🔋 niski SOC", "Bateria 8% (próg 10%)", key="c", level="warn")
-    check("po trzeciej: tylko najnowszy nieprzeczytany", [e["read"] for e in inb(rt)] == [True, True, False])
+    check("po trzeciej: nadal jeden wpis, licznik 3", [(e["read"], e["n"]) for e in inb(rt)] == [(False, 3)])
     hass, c, opt, rt = env("all", auto_read=False, kinds={"low_soc": {"cooldown": 0}}); n = rt.monitor.notifier
     await n.send("low_soc", "🔋 niski SOC", "Bateria 12%", key="a", level="warn")
     await n.send("low_soc", "🔋 niski SOC", "Bateria 9%", key="b", level="warn")
-    check("autoodczyt wyłączony: oba nieprzeczytane", [e["read"] for e in inb(rt)] == [False, False])
+    check("autoodczyt wyłączony: jeden nieprzeczytany wpis z licznikiem", [(e["read"], e["n"]) for e in inb(rt)] == [(False, 2)])
     hass, c, opt, rt = env("all", kinds={"alarm": {"cooldown": 0}, "drift": {"cooldown": 0}}); n = rt.monitor.notifier
     await n.send("alarm", "⚠ alarm", "F13 przepięcie", key="a", level="error")
     await n.send("alarm", "⚠ alarm", "F13 przepięcie", key="b", level="error")
-    check("błędy NIGDY nie są zastępowane", [e["read"] for e in inb(rt)] == [False, False])
+    check("błędy też się zlewają, ale zostają nieprzeczytane", [(e["read"], e["n"]) for e in inb(rt)] == [(False, 2)])
     await n.send("drift", "Zmiana po zapisie", "parametr work_mode zmienił wartość", key="a", level="warn")
     await n.send("drift", "Zmiana po zapisie", "parametr charge_current zmienił wartość", key="b", level="warn")
     check("inna treść (inny parametr) nie jest powtórką", [e["read"] for e in inb(rt) if e["kind"] == "drift"] == [False, False])
@@ -117,14 +117,14 @@ async def main():
     gone = I.auto_read(st, now=t)
     rd = {e["kind"]: e["read"] for e in st["inbox"]}
     check("po 6 h: stare info/ok przeczytane, świeże info nie", rd["device_cycle"] and rd["summary_daily"] and not rd["device_hint"], rd)
-    check("ostrzeżenia i błędy NIE czytają się same, nawet po dobie", not rd["low_soc"] and not rd["alarm"], rd)
-    check("zwraca rodzaje bez nieprzeczytanych wpisów (do zdjęcia z HA)", gone == ["device_cycle", "summary_daily"], gone)
+    check("ostrzeżenie czyta się samo po 24 h, błąd dopiero po 72 h", rd["low_soc"] and not rd["alarm"], rd)
+    check("zwraca rodzaje bez nieprzeczytanych wpisów (do zdjęcia z HA)", gone == ["device_cycle", "low_soc", "summary_daily"], gone)
     I.add(st, "device_cycle", "info nowa", "n", "info", ts=t - 60)
     st["inbox"][0]["read"] = False
     gone = I.auto_read(st, now=t)
     check("rodzaj z nowszym nieprzeczytanym wpisem nie jest zwracany", "device_cycle" not in gone, gone)
     check("znacznik powodu odczytu", [e.get("auto") for e in st["inbox"] if e["kind"] == "summary_daily"] == ["po 6 h"])
-    check("liczba nieprzeczytanych = tylko to, co wymaga uwagi", I.unread(st) == 4, I.unread(st))
+    check("liczba nieprzeczytanych = tylko to, co wymaga uwagi", I.unread(st) == 3, I.unread(st))
 
     # tick monitora: zdejmuje powiadomienia HA, zapisuje stan, szanuje wyłącznik
     hass, c, opt, rt = env("all"); n = rt.monitor.notifier

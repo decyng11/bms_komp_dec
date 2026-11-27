@@ -4492,13 +4492,13 @@
       return { groups, notes, auto, askip, autoRead, pending: groups.length, unread: notes.filter(e => !e.read).length };
     }
 
-    // Zamknięcie okienka = „obejrzane”: informacje (info/ok) stają się przeczytane; ostrzeżenia i błędy zostają, dopóki ich nie odhaczysz.
+    // Zamknięcie okienka = „obejrzane”: informacje i ostrzeżenia stają się przeczytane; błędy zostają do odhaczenia (albo 72 h).
     _inbAutoSeen() {
       try {
         const d = this._inbData(); if (!d.autoRead) return;
-        const quiet = d.notes.filter(e => !e.read && (e.level === 'info' || e.level === 'ok')); if (!quiet.length) return;
+        const quiet = d.notes.filter(e => !e.read && (e.level === 'info' || e.level === 'ok' || e.level === 'warn')); if (!quiet.length) return;
         this._inbRead = this._inbRead || new Set(); quiet.forEach(e => this._inbRead.add(e.id));
-        const p = this._hass.callService('bms_komp_dec', 'inbox_action', { action: 'read_info' }); if (p && p.catch) p.catch(() => {});
+        const p = this._hass.callService('bms_komp_dec', 'inbox_action', { action: 'read_seen' }); if (p && p.catch) p.catch(() => {});
       } catch (e) { /* nie wpływa na działanie panelu */ }
     }
 
@@ -4574,7 +4574,7 @@
           <div class="inb-btns"><button type="button" data-inb="reject" data-p="${dat}">Odrzuć</button><button type="button" class="ok" data-inb="apply" data-p="${dat}">Potwierdź</button></div></div>`;
       }).join('');
       const ic = { error: '🚨', warn: '⚠️', ok: '✅', info: 'ℹ️' };
-      const notes = d.notes.map(e => `<div class="inb-card n-${esc(e.level)} ${e.read ? '' : 'unread'}"><div class="inb-r"><span class="inb-t">${ic[e.level] || 'ℹ️'} ${esc(e.title)}</span><span class="inb-time">${esc(ago(e.ts))}</span></div>
+      const notes = d.notes.map(e => `<div class="inb-card n-${esc(e.level)} ${e.read ? '' : 'unread'}"><div class="inb-r"><span class="inb-t">${ic[e.level] || 'ℹ️'} ${esc(e.title)}</span><span class="inb-time">${(e.n || 1) > 1 ? `×${e.n} · ` : ''}${esc(ago(e.ts))}</span></div>
         <div class="inb-msg">${esc(e.message)}</div><div class="inb-act">${e.read ? (e.auto ? `<span class="inb-autotag">odczytane automatycznie: ${esc(e.auto)}</span>` : '') : `<button type="button" data-inb="read" data-id="${e.id}">Przeczytane</button>`}<button type="button" data-inb="del" data-id="${e.id}">Usuń</button></div></div>`).join('');
       const nP = d.pending;
       ov.firstChild.innerHTML = `<div class="inb-grip"></div><div class="inb-h"><b>${nP ? `Do decyzji (${nP})` : 'Powiadomienia'}</b><button type="button" class="inb-x" data-inb="close" aria-label="Zamknij">✕</button></div>
@@ -6278,7 +6278,7 @@
   // =====================================================================
   // Wersja tego pliku (ustawiana skryptem pakującym z manifest.json). Każdy moduł niesie tę samą w install.version:
   // gdy się różnią, przeglądarka podała starą kopię modułu z pamięci podręcznej.
-  const CARD_VERSION = '0.9.6.2';
+  const CARD_VERSION = '0.9.6.3';
   const MOD_TIMEOUT_MS = 20000;
   const MODULES = {
     diag:   { file: 'bms-diag.js',   global: '__bmsDiagInstall',   contract: 1, label: 'Diagnostyki', p: null, ready: false, err: '', got: '' },

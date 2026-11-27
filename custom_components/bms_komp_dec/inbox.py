@@ -14,8 +14,12 @@ INBOX_MAX = 60
 INBOX_DAYS = 14
 SKIP_KINDS = ("proposal",)
 AUTO_READ_INFO_H = 6          # informacje (info/ok) przestają być „nieprzeczytane” same po tylu godzinach
-QUIET_LEVELS = ("info", "ok")  # tylko takie wpisy czytają się same; ostrzeżenia i błędy czekają na człowieka
-ACTIONS = ("read", "read_all", "read_info", "delete", "clear", "reject", "unreject")
+QUIET_LEVELS = ("info", "ok")  # te wpisy czytają się same szybko i po zamknięciu okna
+SEEN_LEVELS = ("info", "ok", "warn")   # po obejrzeniu (zamknięciu okna) ostrzeżenie też staje się przeczytane; błędy czekają
+AUTO_READ_H = {"info": AUTO_READ_INFO_H, "ok": AUTO_READ_INFO_H, "warn": 24.0, "error": 72.0}   # siatka bezpieczeństwa: nic nie wisi bez końca
+MERGE_H = 12.0                 # powtórka tego samego komunikatu w tym czasie zlewa się w jeden wpis (licznik ×N), zamiast zapychać skrzynkę
+REARM_H = 6.0                  # przeczytany wpis wraca jako nieprzeczytany, tylko gdy powtórka przyszła po tylu godzinach ciszy
+ACTIONS = ("read", "read_all", "read_info", "read_seen", "delete", "clear", "reject", "unreject")
 _NUM = re.compile(r"\d+(?:[.,]\d+)?")
 
 
@@ -46,6 +50,18 @@ def add(state: dict[str, Any], kind: str, title: str, message: str, level: str =
         return None
     now = float(ts if ts is not None else time.time())
     items = _items(state)
+    lvl = level if level in ("info", "warn", "error", "ok") else "info"
+    for e in reversed(items):                      # powtórka tego samego komunikatu: jeden wpis z licznikiem, nie kolejny
+        if (isinstance(e, dict) and e.get("kind") == kind and e.get("title") == str(title)[:160] and e.get("level") == lvl
+                and now - float(e.get("ts") or now) <= MERGE_H * 3600.0 and _same_message(e.get("message", ""), str(message)[:1500])):
+            quiet_for = now - float(e.get("ts") or now)
+            e["n"] = int(e.get("n") or 1) + 1
+            e["ts"] = round(now)
+            e["message"] = str(message)[:1500]
+            if e.get("read") and quiet_for >= REARM_H * 3600.0:
+                e["read"] = False
+                e.pop("auto", None)
+            return e
     if supersede:
         for e in items:
             if (isinstance(e, dict) and not e.get("read") and e.get("kind") == kind and e.get("title") == str(title)[:160]
@@ -98,6 +114,11 @@ def act(state: dict[str, Any], action: str, *, ident: Any = None, key: str | Non
             if not e.get("read") and e.get("level") in QUIET_LEVELS:
                 _mark(e, "obejrzane")
                 n += 1
+    elif action == "read_seen":
+        for e in items:
+            if not e.get("read") and e.get("level") in SEEN_LEVELS:
+                _mark(e, "obejrzane")
+                n += 1
     elif action == "delete":
         before = len(items)
         items[:] = [e for e in items if e.get("id") != ident]
@@ -145,14 +166,14 @@ def prune_auto_skip(state: dict[str, Any], proposals: dict[str, Any]) -> int:
 
 
 def auto_read(state: dict[str, Any], now: float | None = None, hours: float = AUTO_READ_INFO_H) -> list[str]:
-    """Informacje (info/ok) starsze niż `hours` godzin → „przeczytane”. Zwraca rodzaje, które nie mają już nieprzeczytanych wpisów
-    (ich powiadomienia w HA można zdjąć). Ostrzeżeń i błędów NIE ruszamy — czekają, aż ktoś je odhaczy albo sytuacja minie."""
+    """Wpisy starsze niż próg poziomu (info/ok: `hours`, ostrzeżenia 24 h, błędy 72 h) → „przeczytane”. Zwraca rodzaje, które nie mają
+    już nieprzeczytanych wpisów (ich powiadomienia w HA można zdjąć)."""
     t = float(now if now is not None else time.time())
     touched = set()
     for e in _items(state):
-        if (isinstance(e, dict) and not e.get("read") and e.get("level") in QUIET_LEVELS
-                and t - float(e.get("ts") or t) >= hours * 3600.0):
-            _mark(e, f"po {hours:g} h")
+        h = hours if e.get("level") in QUIET_LEVELS else AUTO_READ_H.get(e.get("level"), hours)
+        if isinstance(e, dict) and not e.get("read") and t - float(e.get("ts") or t) >= h * 3600.0:
+            _mark(e, f"po {h:g} h")
             touched.add(e.get("kind"))
     left = {e.get("kind") for e in _items(state) if isinstance(e, dict) and not e.get("read")}
     return sorted(k for k in touched if k and k not in left)

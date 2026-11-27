@@ -9,6 +9,16 @@
     const BMS_INFO = { card: shared.version || '', url: shared.urlVersion || '' };
     // Co nowego po aktualizacji: pokazywane raz na przeglądarkę, po zmianie wersji karty. Dopisuj nową wersję na górze.
     const WHATS_NEW = {
+      '0.9.6.3': {
+        items: [
+          ['Powiadomienia nie zapychają', 'Powtarzający się komunikat zlewa się w jeden wpis z licznikiem ×N, zamiast dodawać kolejne.'],
+          ['Same się czytają', 'Zamknięcie okienka oznacza informacje i ostrzeżenia jako przeczytane; ostrzeżenia czytają się też same po 24 h, błędy po 72 h.'],
+          ['Spokojniejsza moc ładowania', 'Dopasowana moc ładowania z sieci zmienia się co najwyżej co 15 minut i w krokach po 5 A.'],
+          ['Dopasowanie mocy do celu', 'Ty ustalasz maksimum, a w oknie ładowania EMS dobiera niższą moc, żeby cel wypadł na końcu okna.'],
+          ['Nowy styl „Bohater”', 'Ustawienia → Wygląd → Styl: ciemnozielona karta baterii i białe zaokrąglone karty.'],
+          ['Kopia ustawień', 'EMS → Kopia ustawień: zapis do pliku i wczytanie z podglądem zmian.'],
+        ],
+      },
       '0.9.6.2': {
         items: [
           ['Spokojniejsza moc ładowania', 'Dopasowana moc ładowania z sieci zmienia się co najwyżej co 15 minut i w krokach po 5 A, więc falownik nie dostaje ciągłych zmian.'],
@@ -1539,6 +1549,6 @@
 
   };
   install.contract = 1;
-  install.version = '0.9.6.2';
+  install.version = '0.9.6.3';
   window.__bmsExtrasInstall = install;
 })();

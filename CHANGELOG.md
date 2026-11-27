@@ -1,3 +1,10 @@
+# EMS komp-dec 0.9.6.3
+
+## Powiadomienia nie zapychają skrzynki
+- Powtórka tego samego komunikatu (ten sam rodzaj, tytuł i poziom, w ciągu 12 h) zlewa się w jeden wpis z licznikiem ×N, a nie dopisuje kolejnych. Przeczytany wpis wraca jako nieprzeczytany dopiero po 6 h ciszy.
+- Zamknięcie okienka powiadomień oznacza informacje i ostrzeżenia jako przeczytane. Błędy czekają na odhaczenie.
+- Siatka bezpieczeństwa: informacje czytają się same po 6 h, ostrzeżenia po 24 h, błędy po 72 h (powiadomienie w HA znika razem z wpisem).
+
 # EMS komp-dec 0.9.6.2
 
 ## Spokojniejsza moc ładowania z sieci

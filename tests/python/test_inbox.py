@@ -72,5 +72,36 @@ from custom_components.bms_komp_dec.scheduler import ScheduleOptimizer as SO
 check("okno bez energii: opis nie obiecuje doładowania", "Doładuj" not in SO._charge_phrase(0.0) and "0.0 kWh" in SO._charge_phrase(0.0))
 check("okno z energią: „Doładuj ~2.5 kWh z sieci”", SO._charge_phrase(2.5) == "Doładuj ~2.5 kWh z sieci")
 
+# --- zlewanie powtórek, progi, read_seen ---
+H = 3600.0
+st = {}
+a = IB.add(st, "low_soc", "Niski SOC", "SOC 12%", "warn", ts=1_000_000)
+b = IB.add(st, "low_soc", "Niski SOC", "SOC 11%", "warn", ts=1_000_000 + 1 * H)
+check("powtórka zlewa się w jeden wpis z licznikiem", len(st["inbox"]) == 1 and b is a and a["n"] == 2 and a["message"] == "SOC 11%", st)
+IB.act(st, "read", ident=a["id"])
+IB.add(st, "low_soc", "Niski SOC", "SOC 10%", "warn", ts=1_000_000 + 2 * H)
+check("krótko po przeczytaniu powtórka nie odnawia nieprzeczytanego", st["inbox"][0]["read"] and st["inbox"][0]["n"] == 3)
+IB.add(st, "low_soc", "Niski SOC", "SOC 9%", "warn", ts=1_000_000 + 9 * H)
+check("po >=6 h ciszy powtórka znów jest nieprzeczytana", not st["inbox"][0]["read"] and st["inbox"][0]["n"] == 4)
+IB.add(st, "low_soc", "Niski SOC", "SOC 9%", "warn", ts=1_000_000 + 30 * H)
+check("po >12 h to nowy wpis", len(st["inbox"]) == 2)
+st = {}
+w = IB.add(st, "low_soc", "A", "m", "warn", ts=2_000_000)
+i = IB.add(st, "summary_daily", "B", "m", "info", ts=2_000_000)
+er = IB.add(st, "alarm", "C", "m", "error", ts=2_000_000)
+IB.act(st, "read_seen")
+check("read_seen: info i warn przeczytane, błąd zostaje", w["read"] and i["read"] and not er["read"], st)
+IB.auto_read(st, now=2_000_000 + 71 * H)
+check("błąd przed 72 h nie czyta się sam", not er["read"])
+IB.auto_read(st, now=2_000_000 + 73 * H)
+check("błąd po 72 h czyta się sam", er["read"])
+st = {}
+w = IB.add(st, "low_soc", "A", "m", "warn", ts=3_000_000)
+IB.auto_read(st, now=3_000_000 + 7 * H)
+check("ostrzeżenie po 7 h jeszcze czeka", not w["read"])
+IB.auto_read(st, now=3_000_000 + 25 * H)
+check("ostrzeżenie po 25 h czyta się samo", w["read"])
+
 print(f"INBOX PASS={common.PASS} FAIL={common.FAIL}")
 sys.exit(1 if common.FAIL else 0)
+
