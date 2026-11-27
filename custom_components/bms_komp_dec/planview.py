@@ -151,8 +151,6 @@ def why_now(rt: Any, now: datetime) -> dict[str, Any]:
         kind, text = "idle", "Tryb awaryjny: brak danych z falownika — wstrzymałem sterowanie, wrócę do planu po odzyskaniu połączenia."
     elif getattr(rt, "mismatch_active", lambda: False)():
         kind, text = "grid", "Uwaga: falownik ładuje z sieci poza planem (żadne okno ani komenda tego nie zleciły) — sprawdź ustawienia falownika."
-    elif rt.storm_active():
-        kind, text = "storm", "Tryb burzowy: bateria zostaje naładowana na wypadek awarii sieci, nic nie sprzedaję."
     elif rt.vacation_active():
         kind, text = "vacation", "Tryb urlopowy: ograniczam zużycie, bateria pracuje oszczędnie."
     elif selling:

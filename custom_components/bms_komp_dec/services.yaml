@@ -375,7 +375,7 @@ profile_apply:
       example: winter
       selector:
         select:
-          options: [winter, summer, vacation, storm]
+          options: [winter, summer, vacation]
 
 profile_revert:
   name: Cofnij profil pracy

@@ -35,10 +35,10 @@ def pure():
     check("get: tylko gotowe", P.get("winter") and P.get("u_1") is None)
 
     # --- make_custom / clean_custom
-    vals = {"sell_enabled": True, "reserve_floor_soc": 22.0, "pv_plan_pessimism_pct": 35.0, "inverter_floor_soc": 12.0, "auto_apply": True, "storm_mode": False}
+    vals = {"sell_enabled": True, "reserve_floor_soc": 22.0, "pv_plan_pessimism_pct": 35.0, "inverter_floor_soc": 12.0, "auto_apply": True, "vacation_mode": False}
     read = vals.get
     lst, rec, rep = P.make_custom("Weekend", "🏠", read, [], "2026-11-20T10:00:00+01:00")
-    check("zapis: tylko ustawienia z listy dozwolonych i dostępne", rec["set"] == {"sell_enabled": True, "storm_mode": False, "pv_plan_pessimism_pct": 35.0, "reserve_floor_soc": 22.0}, rec["set"])
+    check("zapis: tylko ustawienia z listy dozwolonych i dostępne", rec["set"] == {"sell_enabled": True, "vacation_mode": False, "pv_plan_pessimism_pct": 35.0, "reserve_floor_soc": 22.0}, rec["set"])
     check("zapis: id u_1, ikona, nie zastąpiono", rec["id"] == "u_1" and rec["icon"] == "🏠" and rep is False and rec["custom"] is True and len(lst) == 1)
     check("zapis: opis zawiera datę i liczbę ustawień", "2026-11-20" in rec["desc"] and "4 ustawienia" in rec["desc"], rec["desc"])
     lst2, rec2, rep2 = P.make_custom("Inny", "💥", read, lst, "2026-11-21T10:00:00+01:00")
@@ -80,7 +80,7 @@ def pure():
     # --- plan z datami
     ok_plan = P.check_plan("vacation", "2026-12-20", "2026-12-28", TODAY, [])
     check("plan: poprawny", ok_plan == {"id": "vacation", "from": "2026-12-20", "to": "2026-12-28", "status": "waiting", "resume": None}, ok_plan)
-    check("plan: dziś jako start i jednodniowy plan", P.check_plan("storm", "2026-11-20", "2026-11-20", TODAY, [])["from"] == "2026-11-20")
+    check("plan: dziś jako start i jednodniowy plan", P.check_plan("summer", "2026-11-20", "2026-11-20", TODAY, [])["from"] == "2026-11-20")
     for name, args in (("nieznany profil", ("xx", "2026-12-01", "2026-12-02")), ("własny nieistniejący", ("u_1", "2026-12-01", "2026-12-02")), ("brak dat", ("vacation", None, "2026-12-02")),
                        ("zły format", ("vacation", "01.12.2026", "2026-12-02")), ("start z przeszłości", ("vacation", "2026-11-19", "2026-12-02")),
                        ("koniec przed startem", ("vacation", "2026-12-05", "2026-12-02")), ("za długi (181 dni)", ("vacation", "2026-11-20", "2027-05-19")),
@@ -117,7 +117,7 @@ async def runtime_part():
     hass, c, opt, rt = build(); S = hass.states
     rt.state["notify_cfg"] = N.effective({"phone_level": "all"})
     v = rt.profile_view()
-    check("widok: 4 gotowe, bez własnych i planu, limit i lista kluczy", len(v["profiles"]) == 4 and all(not p["custom"] for p in v["profiles"]) and v["plan"] is None and v["custom_limit"] == 8 and len(v["custom_keys"]) == len(P.CUSTOM_KEYS))
+    check("widok: 3 gotowe, bez własnych i planu, limit i lista kluczy", len(v["profiles"]) == 3 and all(not p["custom"] for p in v["profiles"]) and v["plan"] is None and v["custom_limit"] == 8 and len(v["custom_keys"]) == len(P.CUSTOM_KEYS))
     # zapis bieżących ustawień
     S.set("number.bms_reserve_floor_soc", 25); S.set("number.bms_pv_plan_pessimism_pct", 30); S.set("switch.bms_sell_enabled", "off")
     res = rt.profile_save("Weekend", "🏠")
@@ -189,7 +189,7 @@ async def runtime_part():
     await rt.profile_plan_tick(at(2026, 11, 23, 12, 0)); await rt.profile_plan_tick(at(2026, 11, 24, 23, 59))
     check("w trakcie i ostatniego dnia: bez zmian i bez powtórnego włączania", S.get("switch.bms_vacation_mode").state == "on" and len(pn(hass, "włączono profil")) == 1 and rt.state["profile_plan"]["status"] == "active")
     try:
-        rt.profile_schedule("storm", "2026-12-01", "2026-12-02"); e = False
+        rt.profile_schedule("summer", "2026-12-01", "2026-12-02"); e = False
     except ValueError as err:
         e = "jeszcze trwa" in str(err)
     check("nowy plan podczas trwającego → ValueError", e)
@@ -217,9 +217,9 @@ async def runtime_part():
     await rt.profile_plan_tick(at(2026, 11, 21, 12, 0))
     check("ręczny powrót w trakcie planu: tick nie włącza go ponownie", rt.state["profile"] is None and S.get("switch.bms_vacation_mode").state == "off")
     S.set("switch.bms_vacation_mode", "on")                       # użytkownik włączył tryb urlopowy sam
-    await rt.apply_profile("storm")                               # i wybrał inny profil
+    await rt.apply_profile("summer")                               # i wybrał inny profil
     await rt.profile_plan_tick(at(2026, 11, 23, 0, 5))
-    check("koniec planu przy innym aktywnym profilu: cudzy profil nietknięty", rt.state["profile"]["id"] == "storm" and S.get("switch.bms_storm_mode").state == "on" and rt.state["profile_plan"] is None)
+    check("koniec planu przy innym aktywnym profilu: cudzy profil nietknięty", rt.state["profile"]["id"] == "summer" and rt.state["profile_plan"] is None)
     check("wpis: nic do przywracania", len(logs(rt, "nic do przywracania")) == 1)
 
     # ---------- restart HA: spóźniony start, termin minął, usunięty profil
@@ -268,7 +268,7 @@ async def runtime_part():
     await rt.profile_plan_tick(at(2026, 11, 22, 1, 0))
     check("uszkodzony plan: czyszczony bez wyjątku", rt.state["profile_plan"] is None)
     rt.state["custom_profiles"] = "śmieć"
-    check("uszkodzone własne profile: widok działa", len(rt.profile_view()["profiles"]) == 4)
+    check("uszkodzone własne profile: widok działa", len(rt.profile_view()["profiles"]) == 3)
     st = {"custom_profiles": "x", "profile_plan": "y"}
     fixed = state_guard.sanitize(st)
     check("state_guard: śmieci → [] i None", st["custom_profiles"] == [] and st["profile_plan"] is None and "custom_profiles" in fixed and "profile_plan" in fixed, (st, fixed))

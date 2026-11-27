@@ -1353,12 +1353,11 @@
     _dgProfileDel(name) { if (!confirm(`Usunąć profil „${name}”?`)) return; const p = DG_LS.get('bms_diag_profiles', {}); delete p[name]; DG_LS.set('bms_diag_profiles', p); this._dgRenderSection(); },
 
     // ======================= TRYBY I POWIADOMIENIA =======================
-    // Przeniesione ze strony EMS: tryb burzowy, urlopowy, powiadomienia i test auto-stosowania. To encje samej integracji (bms_*),
+    // Przeniesione ze strony EMS: tryb urlopowy, powiadomienia i test auto-stosowania. To encje samej integracji (bms_*),
     // nie parametry falownika, więc zapis nie trafia do dziennika zmian falownika ani do kontroli odczytu.
     _dgModesDef() {
       return {
         sw: [
-          ['storm_mode', '⛈', 'Tryb burzowy', 'Rezerwa 100%: bateria ładuje się w tanim oknie i nie sprzedaje. Wyłącza się sam po ustawionym czasie.'],
           ['vacation_mode', '🏖', 'Tryb urlopowy', 'Plan zakłada stałe, minimalne zużycie domu zamiast średniej z historii.'],
           ['notifications_enabled', '🔔', 'Powiadomienia', 'Niski SOC, alarm falownika, zmiana parametru po zapisie, brak cen RCE, brak łączności.'],
           ['tabs_top', '⬆️', 'Pasek zakładek na górze', 'Domyślnie pasek zakładek (same ikony) jest przyklejony do dołu ekranu. Włącz, aby wrócić do paska na górze — u wszystkich użytkowników.'],
@@ -1371,7 +1370,6 @@
           ['auto_apply_dry_run', '🧪', 'Auto-stosowanie: tylko podgląd', 'Automat liczy zmiany i zapisuje je w dzienniku, ale niczego nie wysyła do falownika.'],
         ],
         num: [
-          ['storm_mode_hours', 'Tryb burzowy: czas trwania', 'h', 1, 'Po tym czasie tryb burzowy wyłącza się sam.'],
           ['vacation_load_w', 'Tryb urlopowy: zużycie domu', 'W', 10, 'Stałe zużycie domu, które plan zakłada zamiast średniej z historii.'],
         ],
       };
@@ -1392,7 +1390,7 @@
           <div class="ctl"><input type="number" step="${a.step || step}" ${a.min != null ? `min="${dgEsc(a.min)}"` : ''} ${a.max != null ? `max="${dgEsc(a.max)}"` : ''} data-mode-num="${k}" data-orig="${dgEsc(v)}" value="${dgEsc(v)}" ${dis ? 'disabled' : ''} /></div>
           <div><button class="dg-btn sm" data-act="mode-save" data-k="${k}" ${dis ? 'disabled' : ''}>Zapisz</button></div></div>`;
       }).join('');
-      return `<div class="dg-card"><h4>Tryby i powiadomienia</h4><div class="sub">Tryb burzowy ładuje baterię do 100% i nie sprzedaje — przydatny przed burzą lub planowaną awarią sieci. Tryb urlopowy obniża prognozę zużycia, więc plan nie rezerwuje energii „na zapas”. Aktywny tryb widać też w pasku statusu na stronie głównej.</div>${sw}${nums}</div>`;
+      return `<div class="dg-card"><h4>Tryby i powiadomienia</h4><div class="sub">Tryb urlopowy obniża prognozę zużycia, więc plan nie rezerwuje energii „na zapas”. Aktywny tryb widać też w pasku statusu na stronie głównej.</div>${sw}${nums}</div>`;
     },
     _dgModesToggle(k) {
       const eid = this._eid('switch', k); const on = this._st(eid) === 'on';

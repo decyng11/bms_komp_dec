@@ -248,38 +248,6 @@ async def main():
 
     # =========================================================== G. tryby
     hass, c, opt, rt = mk2(); S = hass.states
-    S.set("switch.bms_storm_mode", "on"); S.set("number.bms_storm_mode_hours", 2)
-    t = at(2026, 10, 28, 12, 0); await rt.modes_tick(t)
-    check("storm: czas końca zapisany (2 h)", abs(rt.state["storm_until"] - (t.timestamp() + 7200)) < 1, rt.state["storm_until"])
-    check("storm: rezerwa 100%", rt.reserve()["pct"] == 100 and rt.sell_soc_threshold() == 100)
-    reason = rt.sell_block_reason()
-    check("storm: sprzedaż zablokowana z powodem", reason and "burzow" in reason, reason)
-    try: await rt.run_command("sprzedaz_6000w", source="ręcznie"); blocked = False
-    except HomeAssistantError as e: blocked = "zablokowana" in str(e)
-    check("storm: przycisk sprzedaży odrzucony", blocked)
-    check("storm: powiadomienie o włączeniu", len(pn(hass, nid="bms_storm")) == 1)
-    t = at(2026, 10, 28, 13, 0); await rt.modes_tick(t)
-    check("storm: w trakcie — bez zmian", rt.state["storm_until"] is not None and S.get("switch.bms_storm_mode").state == "on")
-    t = at(2026, 10, 28, 14, 1); await rt.modes_tick(t)
-    check("storm: po czasie sam się wyłącza", S.get("switch.bms_storm_mode").state == "off" and rt.state["storm_until"] is None)
-    check("storm: po wyłączeniu rezerwa i sprzedaż wracają", not rt.reserve().get("storm") and rt.sell_block_reason() is None and rt.sell_soc_threshold() < 100)
-    S.set("switch.bms_storm_mode", "on"); t = at(2026, 10, 28, 15, 0); await rt.modes_tick(t)
-    S.set("switch.bms_storm_mode", "off"); t = at(2026, 10, 28, 15, 5); await rt.modes_tick(t)
-    check("storm: ręczne wyłączenie czyści znacznik", rt.state["storm_until"] is None)
-    # guard: trwająca sprzedaż w trybie burzowym zostaje zatrzymana
-    hass, c, opt, rt = mk2(); S = hass.states
-    S.set("select.inverter_work_mode", "Export First"); S.set("switch.bms_storm_mode", "on")
-    t = at(2026, 10, 28, 17, 30); rt.state["storm_until"] = t.timestamp() + 3600
-    await rt.enforce_guard(t)
-    check("storm: zabezpieczenie zatrzymuje trwającą sprzedaż", S.get("select.inverter_work_mode").state == "Zero Export To Load")
-    # schedule: start sprzedaży w trybie burzowym pominięty
-    hass, c, opt, rt = mk2(); S = hass.states
-    S.set("switch.bms_storm_mode", "on"); S.set("switch.bms_bateria_sprzedaz_1", "on")
-    t = at(2026, 10, 28, 17, 0); rt.state["storm_until"] = t.timestamp() + 3600
-    S.set("time.bms_bateria_sprzedaz_start", "17:00:00")
-    S.set(c.config["soc"], 95)
-    res = await rt.process_rules(t)
-    check("storm: harmonogram nie startuje sprzedaży", S.get("select.inverter_work_mode").state == "Zero Export To Load" and not [r for r in res["results"] if r.get("fired")])
     # urlop
     hass, c, opt, rt = mk2(); S = hass.states
     S.set("switch.bms_vacation_mode", "on")
@@ -303,14 +271,7 @@ async def main():
     await rt.refresh_plan(); check("plan: cache (bez ponownego liczenia w TTL)", cnt[0] == 1)
     at(2026, 10, 28, 12, 16); await rt.refresh_plan(); check("plan: po TTL przeliczony", cnt[0] == 2)
     await rt.refresh_plan(force=True); check("plan: force przelicza", cnt[0] == 3)
-    S.set("switch.bms_storm_mode", "on"); await rt.modes_tick(at(2026, 10, 28, 12, 17))
-    check("plan: zmiana trybu unieważnia cache", rt._plan_ts == 0.0)
-    plan = await rt.refresh_plan()
-    check("plan: tryb burzowy w planie", plan["mode"] == "storm", plan.get("mode"))
-    tg = [x for x in plan["curve"]["target"] if x is not None]
-    check("plan: tryb burzowy ładuje do 100%", tg and max(tg) == 100, tg)
-    check("plan: tryb burzowy bez sprzedaży", sum(plan["curve"]["sale"]) == 0)
-    S.set("switch.bms_storm_mode", "off"); S.set("switch.bms_vacation_mode", "on"); S.set("number.bms_vacation_load_w", 100)
+    S.set("switch.bms_vacation_mode", "on"); S.set("number.bms_vacation_load_w", 100)
     await rt.modes_tick(at(2026, 10, 28, 12, 18))
     pv = await rt.refresh_plan()
     check("plan: tryb urlopowy — stałe zużycie 0.1 kWh/h", pv["mode"] == "vacation" and all(abs(x - 0.1) < 1e-6 for x in pv["curve"]["load"]), pv["curve"]["load"][:4])
@@ -323,8 +284,8 @@ async def main():
         except Exception as e:
             ok = False; v = a = repr(e)
         check(f"sensor {key}: stan i atrybuty bez wyjątku", ok, v)
-        if key == "plan_curve": check("sensor plan_curve: stan = tryb, atrybut curve", v in ("normal", "storm", "vacation") and a["curve"]["hours"] > 0, (v, list(a)))
-        if key == "monitor_status": check("sensor monitor_status: pola", set(a) >= {"alarms", "watches", "low_soc_active", "storm_until", "recent_notifications"}, list(a))
+        if key == "plan_curve": check("sensor plan_curve: stan = tryb, atrybut curve", v in ("normal", "vacation") and a["curve"]["hours"] > 0, (v, list(a)))
+        if key == "monitor_status": check("sensor monitor_status: pola", set(a) >= {"alarms", "watches", "low_soc_active", "recent_notifications"}, list(a))
 
     # =========================================================== I. statystyki baterii
     hass = stubs.FakeHass()
@@ -653,7 +614,7 @@ async def main():
     check("tick: pełny tick (tryby, kontrola, monitoring, raport, plan) bez błędów", not ERRS, ERRS[:3])
     check("tick: plan odświeżony przez tick", rt.plan() is not None and rt.plan().get("curve"))
     sig = rt.state
-    check("tick: stan zawiera nowe klucze i serializuje się do JSON", json.dumps(sig, default=str) and all(k in sig for k in ("notified", "alarms_active", "watches", "storm_until", "report_sent")))
+    check("tick: stan zawiera nowe klucze i serializuje się do JSON", json.dumps(sig, default=str) and all(k in sig for k in ("notified", "alarms_active", "watches", "report_sent")))
     # wczytanie starego stanu (sprzed 0.6) nie psuje nowych kluczy
     hass2, c2, opt2, rt2 = mk2()
     async def _old(): return {"today_date": "2026-10-01", "price_reaction": {"active": False, "prev_mode": None}, "last_applied": {}}

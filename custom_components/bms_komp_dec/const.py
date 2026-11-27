@@ -188,7 +188,6 @@ SWITCHES = [
     ("readback_verify", "Weryfikuj wykonanie komend (odczyt zwrotny)", "mdi:check-network", True),
     # --- powiadomienia, tryby specjalne, test na sucho
     ("notifications_enabled", "Powiadomienia EMS", "mdi:bell-ring", True),
-    ("storm_mode", "Tryb burzowy (rezerwa 100%, bez sprzedaży)", "mdi:weather-lightning", False),
     ("vacation_mode", "Tryb urlopowy (minimalne zużycie)", "mdi:palm-tree", False),
     ("auto_apply_dry_run", "Auto-stosowanie: tylko podgląd (bez zapisu)", "mdi:eye-check", False),
     ("pv_forecast_correction", "Korekta prognozy PV z historii (planer)", "mdi:solar-power-variant", True),
@@ -253,7 +252,6 @@ NUMBERS = [
     ("surplus_power_w", "Moc nadwyżki (tryb Zero Export)", 0, 30000, 100, "W"),
     ("normal_charge_current", "Prąd ładowania po odblokowaniu (0 = zapamiętany/auto)", 0, 400, 1, "A"),
     ("battery_charge_sign", "Znak mocy baterii przy ładowaniu (−1 / +1; 0 = auto)", -1, 1, 1, ""),
-    ("storm_mode_hours", "Tryb burzowy — czas trwania", 1, 96, 1, "h"),
     ("vacation_load_w", "Tryb urlopowy — stałe zużycie domu", 0, 5000, 10, "W"),
     ("battery_price_pln", "Koszt zużycia baterii — cena baterii (0 = nie licz)", 0, 500000, 100, "PLN"),
     ("battery_cycles", "Koszt zużycia baterii — liczba cykli życia", 500, 20000, 100, ""),
@@ -289,7 +287,6 @@ NUMBER_DEFAULTS = {
     "grid_import_limit_kw": 0.0,
     "device_shed_soc": 0.0,
     "battery_charge_sign": 0,
-    "storm_mode_hours": 24,
     "vacation_load_w": 250,
     "monthly_goal_pln": 0,
     "battery_price_pln": 0,

@@ -49,6 +49,25 @@ def clean_cfg(raw: dict | None) -> dict[str, Any]:
     return out
 
 
+# Ceny orientacyjne (brutto, zł/kWh) — żeby porównania działały od razu; Ty wpisujesz swoje, a strefowa i dynamiczna liczą się z Twoich danych.
+DEFAULT_G11 = 0.65
+DEFAULT_ZONE = {"peak": 0.80, "off": 0.50, "windows": "6-13,15-22", "weekend_offpeak": True, "holiday_offpeak": True}
+
+
+def with_defaults(cfg: dict | None, auto: dict | None = None) -> tuple[dict[str, Any], list[str]]:
+    """Ustawienia do porównań: wpisane przez Ciebie > wyliczone z Twoich danych > ceny orientacyjne.
+    Zwraca (ustawienia, lista kluczy wziętych z cen orientacyjnych) — panel pokazuje wtedy ostrzeżenie „ustaw swoje”."""
+    eff = {**(auto or {}), **clean_cfg(cfg)}
+    assumed: list[str] = []
+    if "g11" not in eff:
+        eff["g11"] = DEFAULT_G11
+        assumed.append("g11")
+    if "zone" not in eff:
+        eff["zone"] = dict(DEFAULT_ZONE)
+        assumed.append("zone")
+    return eff, assumed
+
+
 def auto_cfg(buckets_by_day: dict[str, list], peaks_txt: str, weekend_offpeak: bool = True, holiday_offpeak: bool = True,
              min_hours: int = 48) -> dict[str, Any]:
     """Stawki do porównania taryf wyliczone z Twoich danych, gdy ich nie wpisałeś: strefowa (mediana ceny zakupu w godzinach
@@ -95,11 +114,13 @@ def tariff_compare(buckets_by_day: dict[str, list], cfg: dict, today: date, days
     keys = [k for k in keys if k in buckets_by_day and any(x is not None for x in buckets_by_day[k])]
     n_days = len(keys)
     imp_total = actual = 0.0
-    alt = {"g11": 0.0, "zone": 0.0, "dyn": 0.0, "top": 0.0, "low": 0.0}
-    zprof = None
+    alt = {"g11": 0.0, "zone": 0.0, "g12": 0.0, "dyn": 0.0, "top": 0.0, "low": 0.0}
+    zprof = g12prof = None
     z = cfg.get("zone")
     if z:
         zprof = TariffProfile(parse_peaks(z["windows"])[0] or (), z["weekend_offpeak"], z["holiday_offpeak"])
+        if z["weekend_offpeak"] or z["holiday_offpeak"]:      # G12 „zwykła”: weekendy i święta bez obniżki (G12w ma je tanie)
+            g12prof = TariffProfile(parse_peaks(z["windows"])[0] or (), False, False)
     dyn_ok = dyn_n = 0
     for k in keys:
         d = date.fromisoformat(k)
@@ -123,6 +144,8 @@ def tariff_compare(buckets_by_day: dict[str, list], cfg: dict, today: date, days
                 alt["g11"] += imp * cfg["g11"]
             if zprof is not None:
                 alt["zone"] += imp * (z["peak"] if zprof.is_peak(datetime(d.year, d.month, d.day, h)) else z["off"])
+            if g12prof is not None:
+                alt["g12"] += imp * (z["peak"] if g12prof.is_peak(datetime(d.year, d.month, d.day, h)) else z["off"])
             if "dyn_markup" in cfg:
                 rce = _f(b[_SELL_S] / b[_SELL_T]) if b[_SELL_T] else None
                 dyn_n += 1
@@ -137,8 +160,11 @@ def tariff_compare(buckets_by_day: dict[str, list], cfg: dict, today: date, days
         rows.append({"key": "g11", "name": f"Jedna stawka (G11) {cfg['g11']:.2f} zł/kWh", "cost": round(alt["g11"], 2),
                      "diff": round(alt["g11"] - actual, 2)})
     if zprof is not None:
-        rows.append({"key": "zone", "name": f"Strefowa: szczyt {z['peak']:.2f} / poza {z['off']:.2f} zł/kWh ({z['windows']})",
+        rows.append({"key": "zone", "name": f"{'G12w' if (z['weekend_offpeak'] or z['holiday_offpeak']) else 'G12'} / strefowa: szczyt {z['peak']:.2f} / poza {z['off']:.2f} zł/kWh ({z['windows']})",
                      "cost": round(alt["zone"], 2), "diff": round(alt["zone"] - actual, 2)})
+    if g12prof is not None:
+        rows.append({"key": "g12", "name": f"G12: szczyt {z['peak']:.2f} / poza {z['off']:.2f} zł/kWh, weekendy bez obniżki",
+                     "cost": round(alt["g12"], 2), "diff": round(alt["g12"] - actual, 2)})
     if "dyn_markup" in cfg and dyn_n and dyn_ok / dyn_n >= 0.8:
         rows.append({"key": "dyn", "name": f"Dynamiczna: giełda (RCE) + {cfg['dyn_markup']:.2f} zł/kWh", "cost": round(alt["dyn"], 2),
                      "diff": round(alt["dyn"] - actual, 2)})
@@ -154,6 +180,66 @@ def tariff_compare(buckets_by_day: dict[str, list], cfg: dict, today: date, days
     return {"days": n_days, "import_kwh": round(imp_total, 1), "rows": rows,
             "best": best["key"] if best and best["key"] != "actual" else None, "cfg": cfg,
             "note": "Szacunek: ten sam pobór z sieci co do godziny; bez opłat stałych i bez zmiany zachowania EMS przy innej taryfie."}
+
+
+def plain_house(buckets_by_day: dict[str, list], cfg: dict, today: date, days: int = 30) -> dict[str, Any] | None:
+    """„Zwykły dom”: ile kosztowałoby CAŁE Twoje zużycie (godzina po godzinie), gdybyś nie miał PV ani baterii i płacił wg
+    G11, G12, G12w albo dynamicznej — obok tego, ile naprawdę płacisz z PV, baterią i EMS (zakup − sprzedaż)."""
+    cfg = clean_cfg(cfg)
+    keys = [(today - timedelta(days=i)).isoformat() for i in range(days, 0, -1)]
+    keys = [k for k in keys if k in buckets_by_day and any(x is not None for x in buckets_by_day[k])]
+    if not keys:
+        return None
+    z = cfg.get("zone")
+    peaks = (parse_peaks(z["windows"])[0] or ()) if z else ()
+    g12 = TariffProfile(peaks, False, False) if z else None
+    g12w = TariffProfile(peaks, True, True) if z else None
+    cost = {"g11": 0.0, "g12": 0.0, "g12w": 0.0, "real": 0.0, "dyn": 0.0}
+    load_total = net = 0.0
+    dyn_ok = dyn_n = 0
+    for k in keys:
+        d = date.fromisoformat(k)
+        for h, b in enumerate(buckets_by_day[k]):
+            if b is None:
+                continue
+            load = max(0.0, b[_LOAD])
+            buy = _f(b[_BUY_S] / b[_BUY_T]) if b[_BUY_T] else None
+            sell = _f(b[_SELL_S] / b[_SELL_T]) if b[_SELL_T] else None
+            if buy is None or load <= 0 and b[_IMP] <= 0 and b[_EXP] <= 0:
+                continue
+            load_total += load
+            net += b[_IMP] * buy - b[_EXP] * (sell if sell is not None else 0.0)
+            cost["real"] += load * buy
+            if "g11" in cfg:
+                cost["g11"] += load * cfg["g11"]
+            if z:
+                t = datetime(d.year, d.month, d.day, h)
+                cost["g12"] += load * (z["peak"] if g12.is_peak(t) else z["off"])
+                cost["g12w"] += load * (z["peak"] if g12w.is_peak(t) else z["off"])
+            if "dyn_markup" in cfg:
+                dyn_n += 1
+                if sell is not None:
+                    dyn_ok += 1
+                    cost["dyn"] += load * (max(0.0, sell) + cfg["dyn_markup"])
+                else:
+                    cost["dyn"] += load * buy
+    if load_total <= 0.5:
+        return None
+    scale = 30.0 / len(keys)
+    rows = []
+    if "g11" in cfg:
+        rows.append(("g11", f"Taryfa jednostrefowa G11 ({cfg['g11']:.2f} zł/kWh)", cost["g11"]))
+    if z:
+        rows.append(("g12", f"G12: szczyt {z['peak']:.2f} / poza {z['off']:.2f} zł/kWh", cost["g12"]))
+        rows.append(("g12w", "G12w: to samo, weekendy i święta tanie", cost["g12w"]))
+    if "dyn_markup" in cfg and dyn_n and dyn_ok / dyn_n >= 0.8:
+        rows.append(("dyn", f"Dynamiczna: giełda (RCE) + {cfg['dyn_markup']:.2f} zł/kWh", cost["dyn"]))
+    rows.append(("real", "Twoja obecna taryfa (rzeczywiste ceny)", cost["real"]))
+    out_rows = [{"key": k, "name": n, "cost": round(c, 2), "per_month": round(c * scale, 2),
+                 "saving": round(c - net, 2), "saving_month": round((c - net) * scale, 2)} for k, n, c in rows]
+    return {"days": len(keys), "load_kwh": round(load_total, 1), "actual": round(net, 2), "actual_month": round(net * scale, 2),
+            "rows": out_rows, "best_plain": min(out_rows, key=lambda r: r["cost"])["key"],
+            "note": "Szacunek z godzinowych cen i zużycia; bez opłat stałych i dystrybucyjnych. „Zysk” = ile mniej płacisz niż zwykły dom bez PV i baterii."}
 
 
 MIN_HOURS_NEG = 20            # doba z co najmniej tyloma godzinami danych (jak „pełna doba” w Insights)

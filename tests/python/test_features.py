@@ -226,9 +226,6 @@ async def main():
     await rt.run_command("sprzedaz_6000w", source="ręcznie")
     check("dlaczego: sprzedaż", rt.why_now(t0)["kind"] == "sell")
     await rt.run_command("nadwyzka_9700w", source="ręcznie")
-    S.set("switch.bms_storm_mode", "on")
-    check("dlaczego: tryb burzowy ma pierwszeństwo", rt.why_now(t0)["kind"] == "storm")
-    S.set("switch.bms_storm_mode", "off")
     rt.override_add("no_sell", t0.timestamp(), t0.timestamp() + 3600)
     w = rt.why_now(t0)
     check("dlaczego: nadpisanie i powód blokady na liście", any("nadpisanie" in x for x in w["details"]) and any("Sprzedaż zablokowana" in x for x in w["details"]), w)
@@ -265,6 +262,22 @@ async def main():
     r3 = analysis.tariff_compare({}, {"g11": 0.9}, today)
     check("taryfy: brak danych — bez błędu", r3["days"] == 0 and r3["rows"][0]["cost"] == 0.0)
     check("taryfy: błędne ustawienia odrzucone", analysis.clean_cfg({"g11": "abc", "zone": {"peak": 1, "off": 1, "windows": "xx"}, "invest_pv": -5}) == {})
+    # domyślne ceny orientacyjne, G12 osobno od G12w, „zwykły dom bez PV i baterii”
+    e0, as0 = analysis.with_defaults({})
+    check("domyślne: G11 i strefowa orientacyjne, oznaczone jako założone", e0["g11"] == analysis.DEFAULT_G11 and e0["zone"]["peak"] > e0["zone"]["off"] and as0 == ["g11", "zone"], (e0, as0))
+    e1, as1 = analysis.with_defaults({"g11": 0.9}, {"zone": {"peak": 1.0, "off": 0.5, "windows": "6-13,15-22", "weekend_offpeak": True, "holiday_offpeak": True}, "dyn_markup": 0.3})
+    check("domyślne: wpisane > wyliczone z danych > orientacyjne", e1["g11"] == 0.9 and e1["zone"]["peak"] == 1.0 and e1["dyn_markup"] == 0.3 and as1 == [], (e1, as1))
+    e2, as2 = analysis.with_defaults({"g11": 0.9}, {"dyn_markup": 0.3})
+    check("domyślne: brak strefowej w danych → orientacyjna, G11 wpisane nie jest „założone”", as2 == ["zone"] and e2["g11"] == 0.9, as2)
+    rg = analysis.tariff_compare(bk, {"g11": 0.9, "zone": {"peak": 1.2, "off": 0.6, "windows": "6-13,15-22"}}, today)
+    kg = {x["key"]: x for x in rg["rows"]}
+    check("taryfy: osobny wiersz G12 (weekendy bez obniżki) obok G12w", "g12" in kg and "zone" in kg and kg["g12"]["cost"] >= kg["zone"]["cost"] - 1e-9, list(kg))
+    pl = analysis.plain_house(bk, {"g11": 0.9, "zone": {"peak": 1.2, "off": 0.6, "windows": "6-13,15-22", "weekend_offpeak": True, "holiday_offpeak": True}}, today)
+    pr = {x["key"]: x for x in pl["rows"]}
+    check("zwykły dom: 10 dób × 24 h × 0,5 kWh = 120 kWh", pl["days"] == 10 and abs(pl["load_kwh"] - 120.0) < 0.01, (pl["days"], pl["load_kwh"]))
+    check("zwykły dom: G11 = 120 × 0,9 = 108, zysk = 108 − 36 (zakup − sprzedaż)", abs(pr["g11"]["cost"] - 108.0) < 0.01 and abs(pl["actual"] - 36.0) < 0.01 and abs(pr["g11"]["saving"] - 72.0) < 0.01, (pr["g11"], pl["actual"]))
+    check("zwykły dom: wiersze G11, G12, G12w i Twoja taryfa; na miesiąc ×3", all(k in pr for k in ("g11", "g12", "g12w", "real")) and abs(pr["g11"]["per_month"] - 324.0) < 0.05, list(pr))
+    check("zwykły dom: brak danych → None", analysis.plain_house({}, {"g11": 0.9}, today) is None)
 
     # ---------------------------------------------------------------- symulacja roczna i zwrot (12)
     days = {}

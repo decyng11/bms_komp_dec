@@ -18,7 +18,7 @@ TO_REDACT = {
     "host", "inverter_host", "serial", "inverter_serial", "sn", "logger_serial", "password", "username", "token",
     "api_key", "notify_service", "latitude", "longitude", "mac", "email", "diag_password", "ip",
 }
-_STATE_KEYS = ("today_date", "low_soc_active", "storm_until", "vacation_since", "report_sent", "grid_outage",
+_STATE_KEYS = ("today_date", "low_soc_active", "vacation_since", "report_sent", "grid_outage",
                "price_reaction", "last_applied", "battery_sign_votes", "dev_ctl")
 
 

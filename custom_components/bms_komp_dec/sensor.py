@@ -365,7 +365,6 @@ class BmsRuntimeSensor(BmsBaseEntity, SensorEntity):
                 "alarms": [{"entity_id": e, "state": v, "text": fault_text(v)} for e, v in (st.get("alarms_active") or {}).items()],
                 "low_soc_active": bool(st.get("low_soc_active")),
                 "fault_note": FAULT_NOTE,
-                "storm_until": st.get("storm_until"),
                 "vacation_since": st.get("vacation_since"),
                 "watches": rt.watch.list(),
                 "accuracy": acc.summary(st.get("accuracy") or []),

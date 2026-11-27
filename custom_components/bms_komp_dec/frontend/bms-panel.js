@@ -3287,7 +3287,7 @@
           ${moneyTile('Ten miesiąc', pMonth, '')}
           ${moneyTile('Łącznie', pTotal, '')}
           ${tile('Rezerwa SOC', reserve && reserve.state !== 'unknown' ? `${reserve.state}%` : '—',
-            ra.storm ? '⛈ tryb burzowy — cała energia zostaje w baterii' : (ra.enabled ? `aktywna · potrzeba ${ra.need_kwh ?? '?'} kWh do ${ra.until_hour ?? '?'}:00` : 'wyłączona (podgląd)'))}
+            (ra.enabled ? `aktywna · potrzeba ${ra.need_kwh ?? '?'} kWh do ${ra.until_hour ?? '?'}:00` : 'wyłączona (podgląd)'))}
         </div>`;
 
       const bars = hist.length ? this._balanceSvg(hist, `Bilans dzienny (eksport × RCE − import × cena zakupu), ostatnie ${hist.length} dni`) :
@@ -4818,11 +4818,6 @@
         const last = (Array.isArray(w.checks) ? w.checks : []).slice(-1)[0] || {};
         items.push(['bad', `⚠ <b>${this._esc(w.label || w.entity_id)}:</b> ustawiono ${this._esc(w.expected)}, a falownik raportuje ${this._esc(last.value)}${last.note ? ' (' + this._esc(last.note) + ')' : ''}. Sprawdź w Diagnostyce.`]);
       });
-      if (sw('storm_mode')) {
-        const until = Number(a.storm_until);
-        const when = isFinite(until) && until > 0 ? ` do ${new Date(until * 1000).toLocaleString('pl-PL', { weekday: 'short', hour: '2-digit', minute: '2-digit' })}` : '';
-        items.push(['warn', `⛈ <b>Tryb burzowy${when}</b> — rezerwa 100%, sprzedaż z baterii wyłączona.`]);
-      }
       if (sw('vacation_mode')) {
         const w = this._st(this._eid('number', 'vacation_load_w'));
         items.push(['', `🏖 <b>Tryb urlopowy</b> — plan zakłada stałe zużycie domu${w ? ' ' + this._esc(Math.round(Number(w))) + ' W' : ''}.`]);
@@ -4992,7 +4987,7 @@
       if (!w || !w.text) { if (box.style.display !== 'none') box.style.display = 'none'; return; }
       const key = JSON.stringify([w.kind, w.text, w.details]);
       if (box.dataset.k !== key) {
-        const ICON = { sell: '💰', grid: '🔌', pv: '☀️', full: '🔋', home: '🏠', storm: '⛈', vacation: '🏖', idle: '⏸' };
+        const ICON = { sell: '💰', grid: '🔌', pv: '☀️', full: '🔋', home: '🏠', vacation: '🏖', idle: '⏸' };
         const det = Array.isArray(w.details) ? w.details : [];
         box.dataset.k = key;
         box.innerHTML = `<div class="why-h"><span class="why-i">${ICON[w.kind] || 'ℹ️'}</span><span class="why-t">${bmsEsc(w.text)}</span></div>`

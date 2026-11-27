@@ -34,9 +34,6 @@ PROFILES: tuple[dict[str, Any], ...] = (
     {"id": "vacation", "name": "Urlop", "icon": "🏖",
      "desc": "Nikogo nie ma w domu: plan zakłada stałe, minimalne zużycie, bateria może sprzedawać, powiadomienia o usterkach zostają włączone.",
      "set": {"vacation_mode": True, "sell_enabled": True, "notifications_enabled": True}},
-    {"id": "storm", "name": "Burza", "icon": "⛈",
-     "desc": "Ryzyko awarii sieci: bateria zostaje naładowana na zapas i nic nie sprzedaje. Tryb wyłącza się sam po ustawionym czasie.",
-     "set": {"storm_mode": True}},
 )
 BY_ID = {p["id"]: p for p in PROFILES}
 
@@ -45,10 +42,10 @@ BY_ID = {p["id"]: p for p in PROFILES}
 # prądy i moce (sprzęt), znak baterii, ręczne wymuszanie ładowania, autostosowanie oraz zabezpieczenia (blokada sprzedaży po imporcie,
 # blokada arbitrażu, dzienny limit importu) — profil nie może ich po cichu zmienić.
 CUSTOM_SWITCHES = ("sell_enabled", "grid_charge_enabled", "dynamic_reserve", "auto_enable_sets", "grid_stop_at_target", "negative_price_reaction",
-                   "profit_check", "storm_mode", "vacation_mode", "pv_forecast_correction", "pv_fallback_forecast", "live_load_correction",
+                   "profit_check", "vacation_mode", "pv_forecast_correction", "pv_fallback_forecast", "live_load_correction",
                    "sale_power_fit", "device_control", "notifications_enabled")
 CUSTOM_NUMBERS = ("min_soc_for_sell", "min_soc_for_pv_export", "min_soc_for_pv_export_stop", "pv_plan_pessimism_pct", "low_price_threshold",
-                  "min_sell_margin", "reserve_floor_soc", "dawn_margin_soc", "auto_apply_max_shift_h", "storm_mode_hours", "vacation_load_w",
+                  "min_sell_margin", "reserve_floor_soc", "dawn_margin_soc", "auto_apply_max_shift_h", "vacation_load_w",
                   "device_shed_soc", "load_forecast_override")
 CUSTOM_KEYS = CUSTOM_SWITCHES + CUSTOM_NUMBERS
 MAX_CUSTOM = 8                     # tyle własnych profili

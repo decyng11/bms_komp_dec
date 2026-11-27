@@ -36,8 +36,7 @@ async function seed(e, o = {}) {
     if (!o.noReport) st['sensor.bms_monthly_report'] = S(4.3, o.report);
     st['sensor.bms_battery_health'] = S(88.1, o.health);
     st['sensor.bms_monitor_status'] = S(0, o.monitor || { alarms: [], low_soc_active: false, watches: [] });
-    ['storm_mode', 'vacation_mode', 'notifications_enabled', 'auto_apply_dry_run'].forEach((k) => { st['switch.bms_' + k] = S(k === 'notifications_enabled' ? 'on' : (o[k] || 'off'), { friendly_name: k }); });
-    st['number.bms_storm_mode_hours'] = S(24, { min: 1, max: 96, step: 1 });
+    ['vacation_mode', 'notifications_enabled', 'auto_apply_dry_run'].forEach((k) => { st['switch.bms_' + k] = S(k === 'notifications_enabled' ? 'on' : (o[k] || 'off'), { friendly_name: k }); });
     st['number.bms_vacation_load_w'] = S(250, { min: 0, max: 5000, step: 10 });
     window.__el.hass = window.__mk();
   }, o);

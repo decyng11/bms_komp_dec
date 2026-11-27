@@ -206,8 +206,7 @@
         const gen = p.generated_at ? new Date(p.generated_at) : null;
         const genTxt = gen && !isNaN(gen) ? gen.toLocaleTimeString('pl-PL', { hour: '2-digit', minute: '2-digit' }) : '—';
         const chips = [`<span class="ex-chip">Policzono ${exEsc(genTxt)}</span>`, `<span class="ex-chip">SOC teraz ${exFmt(c.soc_now, 0, '%')}</span>`];
-        if (p.mode === 'storm') chips.push('<span class="ex-chip warn">⛈ tryb burzowy — cel 100%, bez sprzedaży</span>');
-        else if (p.mode === 'vacation') chips.push('<span class="ex-chip">🏖 tryb urlopowy</span>');
+        if (p.mode === 'vacation') chips.push('<span class="ex-chip">🏖 tryb urlopowy</span>');
 
         const soc = c.soc.map(Number), fl = (c.floor || []).map(Number);
         let mi = 0; soc.forEach((v, i) => { if (v < soc[mi]) mi = i; });
@@ -246,8 +245,7 @@
           }).join(', ') + '</div>');
         } else lines.push('<div>🔌 Ładowanie z sieci: <b>nie jest potrzebne</b> w tym horyzoncie.</div>');
         const sr = exRanges(c.sale || []);
-        if (p.mode === 'storm') lines.push('<div>💰 Sprzedaż z baterii: <b>wyłączona</b> (tryb burzowy).</div>');
-        else if (sr.length) lines.push('<div>💰 Sprzedaż z baterii: ' + sr.map((r) => {
+        if (sr.length) lines.push('<div>💰 Sprzedaż z baterii: ' + sr.map((r) => {
           const w = ((as && as.sale_windows) || []).find((x) => `${String(x.start).padStart(2, '0')}:00` === hm(r[0]) && exNum(x.power_w) > 0);
           return `<b>${hm(r[0])}–${hm(r[1])}</b>${w ? ` (moc obniżona do ${exFmt(exNum(w.power_w) / 1000, 1)} kW — sprzedaję tylko zapas energii)` : ''}`;
         }).join(', ') + '</div>');
@@ -975,7 +973,7 @@
     });
 
     // =====================================================================
-    //  PROFILE PRACY: zima / lato / urlop / burza jednym kliknięciem, z podglądem zmian i powrotem do poprzednich ustawień
+    //  PROFILE PRACY: zima / lato / urlop jednym kliknięciem, z podglądem zmian i powrotem do poprzednich ustawień
     // =====================================================================
     Object.assign(BmsPanel.prototype, {
       _exProf() {
@@ -1507,7 +1505,7 @@
         const ph = (v, t) => (v == null ? t : 'auto ' + exFmt(v, 2));
         const form = '<div class="px-row"><div class="nm">Nakłady (do liczenia zwrotu)<small>instalacja PV i bateria, zł; cena dokupienia baterii za 1 kWh</small></div>' + inp('pxIp', cfg.invest_pv, 'PV zł') + inp('pxIb', cfg.invest_batt, 'bateria zł') + inp('pxIk', cfg.batt_zl_kwh, 'zł za kWh baterii')
           + '<button class="btn" data-px-an="invest" style="padding:7px 14px;">Zapisz</button></div>'
-          + '<div class="px-row"><div class="nm">Porównanie taryf<small>stawki do porównania, zł/kWh. Puste pola liczą się automatycznie z Twoich cen (strefowa, dynamiczna); G11 trzeba wpisać</small></div>' + inp('pxTg', cfg.g11, 'G11 zł/kWh') + inp('pxTd', cfg.dyn_markup, ph(au.dyn_markup, 'narzut dynamic'))
+          + '<div class="px-row"><div class="nm">Porównanie taryf<small>stawki do porównania, zł/kWh. Puste pola liczą się automatycznie z Twoich cen (strefowa, dynamiczna); G11 ma cenę orientacyjną — wpisz swoją</small></div>' + inp('pxTg', cfg.g11, 'G11 zł/kWh' + (an.data.defaults && an.data.defaults.g11 != null ? ' (orientacyjnie ' + exFmt(an.data.defaults.g11, 2) + ')' : '')) + inp('pxTd', cfg.dyn_markup, ph(au.dyn_markup, 'narzut dynamic'))
           + inp('pxTzp', zc.peak, ph(az.peak, 'strefa: szczyt')) + inp('pxTzo', zc.off, ph(az.off, 'strefa: poza')) + inp('pxTzw', zc.windows, az.windows && az.peak != null ? 'auto ' + az.windows : 'okna np. 6-13,15-22')
           + '<button class="btn" data-px-an="invest" style="padding:7px 14px;">Zapisz</button></div>';
         const bt = an.data.batt;
@@ -1515,6 +1513,15 @@
           ? `<div class="px-tbl-wrap"><table class="px-tbl sim" id="exBattTbl"><thead><tr><th style="text-align:left;">Czy większa bateria się opłaca? (teraz ${exFmt(bt.cap_kwh, 1)} kWh)</th><th>Zysk / rok</th><th>Zwrot</th></tr></thead><tbody>`
             + bt.rows.map(r => `<tr><td style="text-align:left;">+${exFmt(r.extra_kwh, 0)} kWh (razem ${exFmt(r.cap_kwh, 1)} kWh)</td><td style="color:${exNum(r.saving_year) > 0 ? 'var(--green)' : 'inherit'};">${exNum(r.saving_year) > 0 ? '+' : ''}${exFmt(r.saving_year, 0)} zł</td><td>${r.payback_years != null ? exFmt(r.payback_years, 1) + ' lat' : '—'}</td></tr>`).join('')
             + `</tbody></table></div><div class="px-note">${exEsc(bt.note || '')}${cfg.batt_zl_kwh ? '' : ' Wpisz cenę dokupienia baterii (zł za kWh) poniżej, żeby zobaczyć czas zwrotu.'}</div>`
+          : '';
+        const pl = an.data.plain, plRows = pl && Array.isArray(pl.rows) ? pl.rows : [];
+        const asm = Array.isArray(an.data.assumed) ? an.data.assumed : [];
+        const asmNote = asm.length ? `<div class="ex-sum"><span class="ex-chip warn" style="white-space:normal;">⚠ Ceny ${asm.includes('g11') ? 'G11' : ''}${asm.includes('g11') && asm.includes('zone') ? ' i ' : ''}${asm.includes('zone') ? 'strefowe (G12/G12w)' : ''} są orientacyjne — wpisz swoje poniżej (pola „Porównanie taryf”), a porównania przeliczą się od razu.</span></div>` : '';
+        const plainBox = plRows.length && pl.days > 0
+          ? `<div class="px-tbl-wrap"><table class="px-tbl sim" id="exPlainTbl"><thead><tr><th style="text-align:left;">Zwykły dom bez PV i baterii (${exEsc(String(pl.days))} dób, zużycie ${exFmt(pl.load_kwh, 1)} kWh)</th><th>Na miesiąc</th><th>Twój zysk</th></tr></thead><tbody>`
+            + plRows.map(r => `<tr class="${pl.best_plain === r.key ? 'px-best' : ''}"><td style="text-align:left;">${exEsc(r.name)}</td><td>${exFmt(r.per_month, 2)} zł</td><td style="color:${exNum(r.saving_month) > 0 ? 'var(--green)' : 'var(--red)'};">${exNum(r.saving_month) > 0 ? '+' : ''}${exFmt(r.saving_month, 2)} zł</td></tr>`).join('')
+            + `<tr><td style="text-align:left;"><b>Ty: z PV, baterią i EMS (zakup − sprzedaż)</b></td><td><b>${exFmt(pl.actual_month, 2)} zł</b></td><td>—</td></tr>`
+            + `</tbody></table></div><div class="px-note">${exEsc(pl.note || '')}</div>`
           : '';
         const tc = an.data.tariff, tcRows = tc && Array.isArray(tc.rows) ? tc.rows : [];
         const tcol = (v) => { const n = exNum(v); return n === null ? '' : (n < -0.005 ? 'color:var(--green);' : (n > 0.005 ? 'color:var(--red);' : '')); };
@@ -1524,7 +1531,7 @@
             + tcRows.map(r => `<tr class="${tc.best === r.key ? 'px-best' : ''}"><td style="text-align:left;">${exEsc(r.name)}${r.what_if ? ' <small>(scenariusz, nie taryfa)</small>' : ''}</td><td>${exFmt(r.per_month, 2)} zł</td><td style="${tcol(r.diff_month)}">${r.key === 'actual' ? '—' : tcSign(r.diff_month)}</td></tr>`).join('')
             + `</tbody></table></div><div class="px-note">${exEsc(tc.note || '')} Wiersze „6 najdroższych / najtańszych godzin” pokazują, ile kosztuje samo przesunięcie poboru w czasie.</div>`
           : '';
-        if (!sim) return tariffBox + battBox + '<div class="chart-empty">Za mało pełnych dób z danymi godzinowymi (potrzeba co najmniej 3) — symulacja pojawi się po kilku dniach pracy.</div>' + form;
+        if (!sim) return asmNote + plainBox + tariffBox + battBox + '<div class="chart-empty">Za mało pełnych dób z danymi godzinowymi (potrzeba co najmniej 3) — symulacja pojawi się po kilku dniach pracy.</div>' + form;
         const rows = (sim.scenarios || []).map(s => `<tr class="${s.key === 'ems' ? 'px-best' : ''}"><td style="text-align:left;">${exEsc(s.name)}</td><td>${pxZl0(s.period)}</td><td>${pxZl0(s.year)}</td></tr>`).join('');
         const sv = sim.savings_year || {}, pb = sim.payback || {};
         const yrs = (v) => exFmt(v, 1) + ' lat';
@@ -1538,7 +1545,7 @@
           ? `⚠ „Samo PV” wychodzi drożej niż „Bez PV”, bo w danych są godziny z ujemną ceną (${exEsc(String(neg.sell_h))} h sprzedaży, ${exEsc(String(neg.buy_h))} h zakupu) — to nie błąd obliczeń, ale wynik roczny jest przez to mało wiarygodny.`
           : (neg ? `⚠ „Samo PV” wychodzi drożej niż „Bez PV”, a w ostatnich ${exEsc(String(neg.days))} dobach nie widzę godzin z ujemną ceną — więc to najpewniej błędne ceny w danych (np. zły sensor ceny zakupu/sprzedaży albo stare doby). Sprawdź ceny w zakładce „Ceny”. Wynik roczny jest niewiarygodny.`
                  : '⚠ „Samo PV” wychodzi drożej niż „Bez PV” — to możliwe tylko przy ujemnych cenach albo błędnych cenach w danych. Wynik roczny jest niewiarygodny.'));
-        return tariffBox + battBox + `<div class="px-tbl-wrap"><table class="px-tbl sim"><thead><tr><th style="text-align:left;">Scenariusz</th><th>${exEsc(String(sim.days))} dób</th><th>Rocznie</th></tr></thead><tbody>${rows}</tbody></table></div>`
+        return asmNote + plainBox + tariffBox + battBox + `<div class="px-tbl-wrap"><table class="px-tbl sim"><thead><tr><th style="text-align:left;">Scenariusz</th><th>${exEsc(String(sim.days))} dób</th><th>Rocznie</th></tr></thead><tbody>${rows}</tbody></table></div>`
           + `<div class="ex-sum" style="margin-top:10px;">${sav('☀️', 'PV', sv.pv, ' / rok')}${sav('🔋', 'bateria', sv.battery, ' / rok')}${sav('🤖', 'EMS', sv.ems, ' / rok')}<span class="ex-chip">razem ≈ ${pxZl0(sv.total)} / rok</span></div>`
           + (pvWorseTxt ? `<div class="ex-sum"><span class="ex-chip warn" style="white-space:normal;">${pvWorseTxt}</span></div>` : '') + negBox
           + (Object.keys(pb).length ? `<div class="ex-sum"><span class="ex-chip">${pb.pv_years != null ? '⏱ zwrot PV: ' + yrs(pb.pv_years) : ''}</span><span class="ex-chip">${pb.battery_years != null ? '⏱ zwrot baterii (z EMS): ' + yrs(pb.battery_years) : ''}</span><span class="ex-chip">${pb.total_years != null ? '⏱ całość: ' + yrs(pb.total_years) : ''}</span></div>` : '')
