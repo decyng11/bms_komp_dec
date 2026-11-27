@@ -880,8 +880,7 @@ class ScheduleOptimizer:
             c2, p2 = rt.charge_2d() if rt is not None else (None, None)
         except Exception:  # noqa: BLE001
             c2, p2 = None, None
-        mode = "storm" if switch_on(self.hass, "storm_mode", False) else (
-            "vacation" if switch_on(self.hass, "vacation_mode", False) else "normal")
+        mode = "vacation" if switch_on(self.hass, "vacation_mode", False) else "normal"
         if mode == "vacation":     # urlop: stałe, minimalne zużycie zamiast prognozy z historii domu
             load_tomorrow = number_value(self.hass, "vacation_load_w", 250.0) / 1000.0 * 24.0
         ctx: dict[str, Any] = {
@@ -936,8 +935,6 @@ class ScheduleOptimizer:
             ctx["full_due"] = fd() if callable(fd) else None
         except Exception:  # noqa: BLE001
             ctx["full_due"] = None
-        if mode == "storm":
-            ctx["target_cfg"] = 100.0
         # próg z falownika + margines (jak „margines świtu”): plan nie schodzi tak nisko, by alarmy odzywały się przy normalnej pracy
         ctx["night_floor"] = max(ctx["stop_soc"], ctx["reserve_floor"], HARD_FLOOR_SOC + 5.0,
                                  min(90.0, ctx["inv_dawn"] + ctx["dawn_margin"]) if ctx["inv_dawn"] > 0 else 0.0)
@@ -1033,15 +1030,8 @@ class ScheduleOptimizer:
         proposals: dict[str, dict] = {}
         proposals.update(self._suggest_grid_charge(ctx))
         proposals.update(self._suggest_midday_charge(ctx))
-        if ctx["mode"] == "storm":
-            why = "Pomiń — tryb burzowy: energia zostaje w baterii (rezerwa 100%); wyłącz tryb, aby planować sprzedaż."
-            for keys in (("bateria_sprzedaz_start", "bateria_sprzedaz_stop"),
-                         ("bateria_sprzedaz_start_2", "bateria_sprzedaz_stop_2"),
-                         ("pv_export_start", "pv_export_stop")):
-                self._skip_pair(proposals, keys, why)
-        else:
-            proposals.update(self._suggest_battery_sell(ctx))
-            proposals.update(self._suggest_pv_block(ctx))
+        proposals.update(self._suggest_battery_sell(ctx))
+        proposals.update(self._suggest_pv_block(ctx))
         self._prune_proposals(proposals, ctx)
         self._apply_blocks(proposals, ctx)
         try:
@@ -1108,7 +1098,7 @@ class ScheduleOptimizer:
         3) propozycja różniąca się od bieżących godzin o ≤ NOOP_SHIFT_MIN min (start i stop) = „bez zmian” —
            pokazujemy bieżące godziny, więc nic nie trzeba zatwierdzać."""
         g1 = proposals.get("start_grid_charge")
-        if (isinstance(g1, dict) and not g1.get("skip") and ctx["mode"] != "storm" and not ctx.get("urgent_charge")
+        if (isinstance(g1, dict) and not g1.get("skip") and not ctx.get("urgent_charge")
                 and 0.0 <= ctx["grid_kwh"] < GRID_MIN_KWH and not ctx["midday_hours"]):
             self._skip_pair(proposals, ("start_grid_charge", "stop_grid_charge"),
                             f"Pomiń — bateria wystarczy do rana (do doładowania tylko ~{ctx['grid_kwh']:.1f} kWh, "
@@ -1330,8 +1320,6 @@ class ScheduleOptimizer:
             load_hourly=ctx["load_h"], pv_hourly=pv_profile, pv_scale_next_day=scale,
         )
         target = min(ctx["target_cfg"], res["pct"] + ctx["dawn_margin"])
-        if ctx["mode"] == "storm":
-            target = 100.0
         floor_note = (f" Próg odcięcia falownika: {ctx['inv_dawn']:.0f}% ({ctx['inv']['source']})."
                       if ctx["inv_dawn"] > ctx["reserve_floor"] else "")
         if urgent:
@@ -1345,7 +1333,7 @@ class ScheduleOptimizer:
         d_end = (ctx["now"] + timedelta(days=1)).date() if end >= 24 else ctx["now"].date()
         pk, off = self._pk_off(d_end)
         peak_note = ""
-        if (ctx["mode"] != "storm" and day_pv and isinstance(pk, (int, float)) and isinstance(off, (int, float))
+        if (day_pv and isinstance(pk, (int, float)) and isinstance(off, (int, float))
                 and pk > off / ctx["eff"] + 0.05 and prof.peak_day(d_end)):
             # Jeśli w ciągu dnia jest tanie okno (G12w: 13–15) i zestaw 2 ładowania jest włączony, wieczorny szczyt
             # pokryje doładowanie południowe — noc ma wtedy zapewnić tylko szczyt poranny (nie kupujemy na zapas).
@@ -1364,7 +1352,7 @@ class ScheduleOptimizer:
 
         # Pełne ładowanie co N dni (kalibracja SOC, wyrównanie ogniw): po upływie terminu cel = 100%, niezależnie od opłacalności.
         fd = ctx.get("full_due")
-        full_act = bool(fd) and ctx["mode"] != "storm"
+        full_act = bool(fd)
         if fd:
             target = 100.0
             ago = f"{fd['days']} dni temu" if fd.get("days") is not None else "jeszcze nie odnotowano"
@@ -1383,7 +1371,7 @@ class ScheduleOptimizer:
         wear = ctx.get("wear", 0.0)
         if (wear > 0 and isinstance(pk, (int, float)) and isinstance(off, (int, float))
                 and not (prof.dynamic_for(ctx["now"].date()) or prof.dynamic_for(d_end))
-                and pk <= off / ctx["eff"] + wear and ctx["mode"] != "storm" and not full_act):
+                and pk <= off / ctx["eff"] + wear and not full_act):
             self._skip_pair(out, set1 + set2,
                             f"Pomiń — ładowanie z sieci się nie opłaca: szczyt {pk:.2f} zł/kWh wobec {off:.2f} / {ctx['eff']:.0%} "
                             f"sprawności + {wear:.2f} zł/kWh kosztu zużycia baterii.")
@@ -1450,7 +1438,7 @@ class ScheduleOptimizer:
             soc_at = soc_start if s_abs <= earliest else self._simulate(ctx, ctx["soc"], now_h + 1, s_abs)
             b_end = s_abs + n
             drop = 0.0 if b_end >= end else max(0.0, target - self._simulate(ctx, target, b_end, end))
-            blk_target = min(100.0 if ctx["mode"] == "storm" else max(target, ctx["target_cfg"]), target + drop)
+            blk_target = min(max(target, ctx["target_cfg"]), target + drop)
             stored = max(0.0, (blk_target - soc_at) / 100.0 * cap)
             grid_kwh = stored / eff
             n_new = max(1, min(avail, math.ceil(grid_kwh / chg)))
@@ -1465,7 +1453,7 @@ class ScheduleOptimizer:
             s_abs, n = s_new, n_new
         grid_kwh = min(grid_kwh, n * chg)
         wear = ctx.get("wear", 0.0)
-        if pk is not None and avg is not None and not pk > avg / eff + 0.05 + wear and ctx["mode"] != "storm" and not ctx.get("full_act"):
+        if pk is not None and avg is not None and not pk > avg / eff + 0.05 + wear and not ctx.get("full_act"):
             wear_txt = f" i kosztu zużycia baterii ({wear:.2f} zł/kWh)" if wear > 0 else ""
             self._skip_pair(out, set1 + set2,
                             f"Pomiń — najtańsze godziny przed szczytem kosztują śr. {avg:.2f} zł/kWh, a szczyt śr. {pk:.2f}: "
@@ -1527,8 +1515,6 @@ class ScheduleOptimizer:
         floor_eve = max(ctx["reserve_floor"], float(HARD_FLOOR_SOC))
         need = self._need_start_soc(ctx, ev_a, ev_b, floor_eve)
         target = min(ctx["target_cfg"], need + ctx["dawn_margin"] / 2.0)
-        if ctx["mode"] == "storm":
-            target = 100.0
         soc_lo = ctx["soc"] if lo <= now_h + 1 else self._simulate(ctx, ctx["soc"], now_h + 1, lo)
         soc15 = soc_lo if lo >= ev_a else self._simulate(ctx, soc_lo, lo, ev_a)
         fl15 = ctx["inv_floor_h"][ev_a % 24]

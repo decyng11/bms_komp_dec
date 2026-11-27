@@ -42,7 +42,7 @@ const PAY = JSON.parse(fs.readFileSync('notify_payload.json', 'utf8'));
   ok(await e.q(() => __el.shadowRoot.querySelector('#dgNt [data-act="nt-save"]').disabled), 'po zapisie: brak niezapisanych zmian');
   // grupa: wszystkie / żadne
   await e.q(() => __el.shadowRoot.querySelector('#dgNt [data-act="nt-all"][data-g="Działanie"][data-v="1"]').click()); await sleep(200);
-  ok(await e.q(() => ['sale', 'grid_charge', 'price_reaction', 'storm'].every((k) => __el.shadowRoot.querySelector(`[data-nk="${k}"][data-nf="on"]`).checked)), 'grupa „Działanie”: wszystkie włączone');
+  ok(await e.q(() => ['sale', 'grid_charge', 'price_reaction'].every((k) => __el.shadowRoot.querySelector(`[data-nk="${k}"][data-nf="on"]`).checked)), 'grupa „Działanie”: wszystkie włączone');
   await e.q(() => __el.shadowRoot.querySelector('#dgNt [data-act="nt-test"]').click()); await sleep(300);
   ok(await e.q(() => window.__ntTest === 1), 'przycisk testowy wywołuje usługę');
   ok(/Wysłano na notify\.mobile_app_tel/.test(await sr(e, '#dgToast')), 'komunikat po teście');

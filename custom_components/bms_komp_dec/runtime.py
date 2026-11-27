@@ -202,7 +202,6 @@ class BmsRuntime:
             "alarms_active": {},               # encja alarmu → ostatnio zgłoszony stan
             "watches": [],                     # kontrola wartości po zapisie (watch.py)
             "low_soc_active": False,
-            "storm_until": None,               # znacznik czasu końca trybu burzowego
             "vacation_since": None,
             "report_sent": None,               # „RRRR-MM” ostatnio wysłanego raportu miesięcznego
             "overrides": [],                   # ręczne nadpisania planu (overrides.py)
@@ -684,18 +683,13 @@ class BmsRuntime:
                     f"sprzedaż dopiero, gdy dom ją zużyje")
         return None
 
-    def storm_active(self) -> bool:
-        return switch_on(self.hass, "storm_mode", False)
-
     def vacation_active(self) -> bool:
         return switch_on(self.hass, "vacation_mode", False)
 
     def sell_block_reason(self, strict_grid: bool = False) -> str | None:
-        """Powód zakazu sprzedaży (tryb burzowy / import z sieci / arbitraż) albo None.
+        """Powód zakazu sprzedaży (import z sieci / arbitraż) albo None.
 
         strict_grid=True: brak odczytu mocy sieci również blokuje (start z harmonogramu)."""
-        if self.storm_active():
-            return "tryb burzowy — energia zostaje w baterii (rezerwa 100%)"
         if not switch_on(self.hass, "sell_enabled", True):
             return "sprzedaż z baterii wyłączona w ustawieniach (przełącznik „Sprzedawaj z baterii”)"
         ov = self.override_active(dt_util.now(), "no_sell")
@@ -776,10 +770,6 @@ class BmsRuntime:
 
     # --------------------------------------------- dynamiczna rezerwa (funkcja 3)
     def reserve(self) -> dict[str, Any]:
-        if self.storm_active():       # tryb burzowy: cała energia zostaje w baterii (zasilanie awaryjne)
-            cap = float(self.optimizer.config.get(CONF_BATTERY_CAPACITY_KWH, DEFAULT_BATTERY_CAPACITY_KWH))
-            return {"pct": 100.0, "need_kwh": round(cap, 2), "until_hour": None, "hours": 0,
-                    "enabled": True, "storm": True}
         now_ts = dt_util.now().timestamp()
         if self._reserve_cache and now_ts - self._reserve_cache[0] < RESERVE_TTL_S:
             return self._reserve_cache[1]
@@ -823,8 +813,6 @@ class BmsRuntime:
             return {"hourly": [0.0] * 24, "shutdown": None, "source": "brak danych", "manual": 0.0, "programs": []}
 
     def sell_soc_threshold(self) -> float:
-        if self.storm_active():
-            return 100.0
         base = number_value(self.hass, "min_soc_for_sell", SOC_DEFAULTS["min_soc_for_sell"])
         if switch_on(self.hass, "dynamic_reserve", False):
             return max(base, float(self.reserve()["pct"]))
@@ -1974,8 +1962,14 @@ class BmsRuntime:
                                          bool(getattr(base, "weekend_offpeak", True)), bool(getattr(base, "holiday_offpeak", True)))
         except Exception:  # noqa: BLE001
             _LOGGER.debug("EMS: automatyczne stawki taryf nieudane", exc_info=True)
-        eff = {**auto, **cfg}                      # to, co wpisał użytkownik, ma pierwszeństwo przed wyliczonym automatycznie
+        eff, assumed = analysis_mod.with_defaults(cfg, auto)      # wpisane > wyliczone z Twoich danych > ceny orientacyjne
+        plain = None
+        try:
+            plain = analysis_mod.plain_house({k: b for k, b in buckets.items() if b}, eff, today)
+        except Exception:  # noqa: BLE001
+            _LOGGER.debug("EMS: porównanie ze zwykłym domem nieudane", exc_info=True)
         return {"batt": batt, "tariff": analysis_mod.tariff_compare(buckets, eff, today), "auto": auto,
+                "plain": plain, "assumed": assumed, "defaults": {"g11": analysis_mod.DEFAULT_G11, "zone": analysis_mod.DEFAULT_ZONE},
                 "sim": analysis_mod.year_sim(dict(self.insights.days), eff, avg), "cfg": cfg, "neg": neg,
                 "neg_reaction": switch_on(self.hass, "negative_price_reaction", False),
                 "neg_threshold": number_value(self.hass, "low_price_threshold", 0.0)}
@@ -2246,46 +2240,14 @@ class BmsRuntime:
                 _LOGGER.error("EMS price: zatrzymanie nieudane: %s", err)
 
     # --------------------------------------------------------------- tick / listenery
-    # --------------------------------------------------------- tryby burza / urlop
+    # --------------------------------------------------------- tryb urlopowy
     async def modes_tick(self, now: datetime) -> None:
-        """Tryb burzowy wygasa sam po `storm_mode_hours` (żeby nie zostać włączonym na zawsze i nie blokować sprzedaży).
-
-        Urlop tylko zmienia prognozę zużycia (nie ma limitu czasu), ale zapamiętujemy datę włączenia do raportu."""
+        """Urlop tylko zmienia prognozę zużycia (nie ma limitu czasu), ale zapamiętujemy datę włączenia do raportu."""
         st = self.state
         now_ts = now.timestamp()
-        if self.storm_active():
-            until = st.get("storm_until")
-            if not isinstance(until, (int, float)):
-                hours = max(1.0, number_value(self.hass, "storm_mode_hours", 24.0))
-                st["storm_until"] = until = now_ts + hours * 3600.0
-                self._save_state()
-                self._reserve_cache = None
-                self.log.add("mode", f"Tryb burzowy WŁĄCZONY: rezerwa 100%, sprzedaż zablokowana, "
-                                     f"auto-wyłączenie za {hours:.0f} h", "warn")
-                await self.monitor.notifier.send(
-                    "storm", "⛈ EMS: tryb burzowy włączony",
-                    f"Bateria jest ładowana do 100% w najbliższym tanim oknie i nie sprzedaje energii. "
-                    f"Tryb wyłączy się sam za {hours:.0f} h.", key="storm_on", cooldown_s=300, level="info")
-                self._plan_ts = 0.0
-            elif now_ts >= float(until):
-                st["storm_until"] = None
-                self._save_state()
-                self._reserve_cache = None
-                self.log.add("mode", "Tryb burzowy wygasł — wyłączam", "ok")
-                await self.monitor.notifier.send("storm", "⛈ EMS: tryb burzowy wyłączony", "Minął ustawiony czas — wracam do zwykłego planu.",
-                                                 key="storm_off", level="info")
-                try:
-                    await self.hass.services.async_call(
-                        "switch", "turn_off", {"entity_id": find_eid(self.hass, "switch", "storm_mode")}, blocking=True)
-                except Exception as err:  # noqa: BLE001
-                    _LOGGER.error("EMS: nie udało się wyłączyć trybu burzowego: %s", err)
-                self._plan_ts = 0.0
-        elif st.get("storm_until") is not None:
+        if st.get("storm_until") is not None:     # pozostałość po usuniętym trybie burzowym
             st["storm_until"] = None
             self._save_state()
-            self._reserve_cache = None
-            self._plan_ts = 0.0
-            self.log.add("mode", "Tryb burzowy wyłączony", "ok")
         if self.vacation_active():
             if st.get("vacation_since") is None:
                 st["vacation_since"] = dt_util.as_local(now).date().isoformat()
@@ -2977,8 +2939,6 @@ class BmsRuntime:
                 applied[key] = prof_mod.check_value(key, target)
         since = dt_util.now().isoformat(timespec="seconds")
         self.state["profile"] = {"id": pid, "since": since, "prev": prev, "applied": applied, "ended": None}
-        if pid == "storm":
-            self.state["storm_until"] = None               # czas trwania liczony od teraz (modes_tick ustawi nowy)
         self._plan_ts = 0.0
         self._reserve_cache = None
         self._save_state()

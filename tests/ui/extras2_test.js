@@ -114,15 +114,15 @@ const { seed, curve, REPORT, HEALTH, tab, sr, openModes, openSec } = T;
   const nowS = Math.floor(Date.now() / 1000);
   await seed(e, { curve: curve(), monitor: { fault_note: 'Opis kodu dotyczy hybryd niskonapięciowych Deye (SG01LP1). W innych modelach znaczenie bywa inne.', alarms: [{ entity_id: 'sensor.deye_alert', state: 'F35 <img src=x onerror=window.__xss=1>', text: 'Brak sieci AC' }], low_soc_active: false,
     watches: [{ id: 'w1', status: 'drift', label: 'Zero export', entity_id: 'number.x', expected: 20, t0: nowS - 600, checks: [{ value: 65516, note: 'przepełnienie U16', ok: false }] }, { id: 'w2', status: 'drift', label: 'Stary', expected: 1, t0: nowS - 9 * 3600, checks: [{ value: 5 }] }, { id: 'w3', status: 'pending', label: 'Czeka', expected: 3, t0: nowS, checks: [] }],
-    storm_until: nowS + 7200 }, storm_mode: 'on', vacation_mode: 'on' });
+  }, vacation_mode: 'on' });
   await sleep(300);
   const bn = await sr(e, '#statusBanner');
   ok(/Alarm falownika: sensor\.deye_alert = F35/.test(bn) && /Brak sieci AC/.test(bn), 'baner: alarm falownika z opisem kodu');
   ok(/Zero export: ustawiono 20, a falownik raportuje 65516 \(przepełnienie U16\)/.test(bn), 'baner: dryf parametru po zapisie');
   ok(!/Stary|Czeka/.test(bn), 'baner: stary dryf (>6 h) i oczekująca kontrola nie są pokazywane');
-  ok(/Tryb burzowy do/.test(bn) && /rezerwa 100%/.test(bn) && /Tryb urlopowy/.test(bn) && /250 W/.test(bn), 'baner: tryb burzowy (do kiedy) i urlopowy (zużycie)');
+  ok(!/burzow/i.test(bn) && /Tryb urlopowy/.test(bn) && /250 W/.test(bn), 'baner: tryb urlopowy (zużycie), bez trybu burzowego');
   ok(await e.q(() => window.__xss === undefined && !__el.shadowRoot.querySelector('#statusBanner img')), 'baner: znaczniki HTML w stanie alarmu nie są wykonywane');
-  ok(await e.q(() => __el.shadowRoot.querySelectorAll('#statusBanner .sb-item.bad').length === 2 && __el.shadowRoot.querySelectorAll('#statusBanner .sb-item.warn').length === 1), 'baner: kolory — 2 czerwone, 1 pomarańczowy');
+  ok(await e.q(() => __el.shadowRoot.querySelectorAll('#statusBanner .sb-item.bad').length === 2 && __el.shadowRoot.querySelectorAll('#statusBanner .sb-item.warn').length === 0), 'baner: kolory — 2 czerwone, brak pomarańczowych');
   ok(await e.q(() => /⚠/.test(__el.shadowRoot.getElementById('tabDiag').textContent)), 'zakładka Ustawienia: ⚠ od alarmu z integracji');
   ok(/ⓘ/.test(bn) && await e.q(() => /niskonapięciowych/.test(__el.shadowRoot.querySelector('#statusBanner .sb-item span[title]').title)), 'baner: zastrzeżenie o modelu falownika w podpowiedzi ⓘ');
   // „Co dziś nie działa”: lista z integracji (sensor monitor_status → issues) nie jest już w banerze (jest w Ustawienia → Diagnostyka → Przegląd)
@@ -133,7 +133,7 @@ const { seed, curve, REPORT, HEALTH, tab, sr, openModes, openSec } = T;
   await sleep(300);
   ok(await e.q(() => !/Co dziś nie działa/.test(__el.shadowRoot.getElementById('statusBanner').textContent) && !__el.shadowRoot.querySelector('#statusBanner details.sb-issues')), 'baner: lista „Co dziś nie działa” przeniesiona do Diagnostyki');
   // przywrócenie stanu sprzed tego fragmentu (alarmy i tryby dla dalszych sprawdzeń)
-  await seed(e, { curve: curve(), monitor: { fault_note: 'x', alarms: [{ entity_id: 'sensor.deye_alert', state: 'F35', text: 'Brak sieci AC' }], low_soc_active: false, watches: [], storm_until: nowS + 7200 }, storm_mode: 'on', vacation_mode: 'on' });
+  await seed(e, { curve: curve(), monitor: { fault_note: 'x', alarms: [{ entity_id: 'sensor.deye_alert', state: 'F35', text: 'Brak sieci AC' }], low_soc_active: false, watches: [] }, vacation_mode: 'on' });
   await sleep(300);
   // tryby — przeniesione do Diagnostyki (zakładka „🛡️ Tryby”)
   await tab(e, 'ems');
@@ -143,40 +143,29 @@ const { seed, curve, REPORT, HEALTH, tab, sr, openModes, openSec } = T;
   await openModes(e);
   const dgq = (f, ...a) => e.q(f, ...a);
   ok(await dgq(() => !/Ładowanie modułu/.test(__el.shadowRoot.getElementById('diagRoot').textContent) && __el.shadowRoot.getElementById('diagRoot').querySelectorAll('.chart-empty').length === 0), 'Diagnostyka: po załadowaniu modułu nie zostaje napis „Ładowanie modułu…”');
-  ok(await dgq(() => __el.shadowRoot.querySelectorAll('#dgBody [data-act="mode-sw"]').length === 11 && __el.shadowRoot.querySelectorAll('#dgBody input[data-mode-num]').length === 2), 'tryby (Diagnostyka): 11 przełączników i 2 pola liczbowe');
-  ok(/Tryb burzowy/.test(await sr(e, '#dgBody')) && /Tryb urlopowy/.test(await sr(e, '#dgBody')) && /Powiadomienia/.test(await sr(e, '#dgBody')) && /Auto-stosowanie: tylko podgląd/.test(await sr(e, '#dgBody')), 'tryby (Diagnostyka): nazwy i opisy');
-  ok(await dgq(() => __el.shadowRoot.querySelector('[data-act="mode-sw"][data-k="storm_mode"]').classList.contains('green') && !__el.shadowRoot.querySelector('[data-act="mode-sw"][data-k="auto_apply_dry_run"]').classList.contains('green')), 'tryby (Diagnostyka): stan przycisków zgodny ze stanem encji');
+  ok(await dgq(() => __el.shadowRoot.querySelectorAll('#dgBody [data-act="mode-sw"]').length === 10 && __el.shadowRoot.querySelectorAll('#dgBody input[data-mode-num]').length === 1), 'tryby (Diagnostyka): 10 przełączników i 1 pole liczbowe');
+  ok(!/Tryb burzowy/.test(await sr(e, '#dgBody')) && /Tryb urlopowy/.test(await sr(e, '#dgBody')) && /Powiadomienia/.test(await sr(e, '#dgBody')) && /Auto-stosowanie: tylko podgląd/.test(await sr(e, '#dgBody')), 'tryby (Diagnostyka): nazwy i opisy');
+  ok(await dgq(() => __el.shadowRoot.querySelector('[data-act="mode-sw"][data-k="vacation_mode"]').classList.contains('green') && !__el.shadowRoot.querySelector('[data-act="mode-sw"][data-k="auto_apply_dry_run"]').classList.contains('green')), 'tryby (Diagnostyka): stan przycisków zgodny ze stanem encji');
   await e.q(() => { window.__calls.length = 0; __el.shadowRoot.querySelector('[data-act="mode-sw"][data-k="auto_apply_dry_run"]').click(); }); await sleep(100);
   ok(await dgq(() => JSON.stringify(window.__calls[0]) === JSON.stringify(['switch', 'turn_on', { entity_id: 'switch.bms_auto_apply_dry_run' }])), 'tryby (Diagnostyka): kliknięcie → switch.turn_on dla właściwej encji');
-  await e.q(() => { window.__calls.length = 0; __el.shadowRoot.querySelector('[data-act="mode-sw"][data-k="storm_mode"]').click(); }); await sleep(100);
-  ok(await dgq(() => window.__calls[0][1] === 'turn_off' && window.__calls[0][2].entity_id === 'switch.bms_storm_mode'), 'tryby (Diagnostyka): włączony tryb burzowy → turn_off');
+  await e.q(() => { window.__calls.length = 0; __el.shadowRoot.querySelector('[data-act="mode-sw"][data-k="vacation_mode"]').click(); }); await sleep(100);
+  ok(await dgq(() => window.__calls[0][1] === 'turn_off' && window.__calls[0][2].entity_id === 'switch.bms_vacation_mode'), 'tryby (Diagnostyka): włączony tryb urlopowy → turn_off');
   ok(await dgq(() => !window.__calls.some((c) => c[0] === 'bms_komp_dec') && !window.__ws.some((t) => /watch/.test(t))), 'tryby (Diagnostyka): zapis nie zgłasza się do kontroli odczytu falownika');
-  await e.q(() => { window.__calls.length = 0; const i = __el.shadowRoot.querySelector('[data-mode-num="storm_mode_hours"]'); i.value = '48'; i.dispatchEvent(new Event('input', { bubbles: true })); }); await sleep(50);
-  ok(await dgq(() => __el.shadowRoot.querySelector('[data-mode-num="storm_mode_hours"]').classList.contains('dirty') && window.__calls.length === 0), 'tryby (Diagnostyka): zmiana pola oznaczona, ale jeszcze niezapisana');
+  await e.q(() => { window.__calls.length = 0; const i = __el.shadowRoot.querySelector('[data-mode-num="vacation_load_w"]'); i.value = '310'; i.dispatchEvent(new Event('input', { bubbles: true })); }); await sleep(50);
+  ok(await dgq(() => __el.shadowRoot.querySelector('[data-mode-num="vacation_load_w"]').classList.contains('dirty') && window.__calls.length === 0), 'tryby (Diagnostyka): zmiana pola oznaczona, ale jeszcze niezapisana');
   await e.q(() => { __el.hass = __mk(); }); await sleep(1300);
-  ok(await dgq(() => __el.shadowRoot.querySelector('[data-mode-num="storm_mode_hours"]').value === '48'), 'tryby (Diagnostyka): odświeżenie stanu nie kasuje wpisywanej wartości');
-  await e.q(() => { __el.shadowRoot.querySelector('[data-act="mode-save"][data-k="storm_mode_hours"]').click(); }); await sleep(100);
-  ok(await dgq(() => JSON.stringify(window.__calls[0]) === JSON.stringify(['number', 'set_value', { entity_id: 'number.bms_storm_mode_hours', value: 48 }])), 'tryby (Diagnostyka): „Zapisz” → number.set_value 48');
+  ok(await dgq(() => __el.shadowRoot.querySelector('[data-mode-num="vacation_load_w"]').value === '310'), 'tryby (Diagnostyka): odświeżenie stanu nie kasuje wpisywanej wartości');
+  await e.q(() => { __el.shadowRoot.querySelector('[data-act="mode-save"][data-k="vacation_load_w"]').click(); }); await sleep(100);
+  ok(await dgq(() => JSON.stringify(window.__calls[0]) === JSON.stringify(['number', 'set_value', { entity_id: 'number.bms_vacation_load_w', value: 310 }])), 'tryby (Diagnostyka): „Zapisz” → number.set_value 310');
   await e.q(() => { window.__calls.length = 0; const i = __el.shadowRoot.querySelector('[data-mode-num="vacation_load_w"]'); i.value = '300'; i.focus(); i.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, composed: true })); }); await sleep(100);
   ok(await dgq(() => JSON.stringify(window.__calls[0]) === JSON.stringify(['number', 'set_value', { entity_id: 'number.bms_vacation_load_w', value: 300 }])), 'tryby (Diagnostyka): Enter w polu zapisuje wartość');
-  await e.q(() => { window.__calls.length = 0; const i = __el.shadowRoot.querySelector('[data-mode-num="storm_mode_hours"]'); i.value = '500'; __el.shadowRoot.querySelector('[data-act="mode-save"][data-k="storm_mode_hours"]').click(); }); await sleep(100);
-  ok(await dgq(() => window.__calls.length === 0) && /Największa dozwolona wartość: 96/.test(await sr(e, '#dgToast')), 'tryby (Diagnostyka): wartość powyżej zakresu encji jest odrzucona z komunikatem');
   await e.q(() => { window.__calls.length = 0; const i = __el.shadowRoot.querySelector('[data-mode-num="vacation_load_w"]'); i.value = 'abc'; __el.shadowRoot.querySelector('[data-act="mode-save"][data-k="vacation_load_w"]').click(); }); await sleep(100);
   ok(await dgq(() => window.__calls.length === 0), 'tryby (Diagnostyka): niepoprawna liczba nie wywołuje usługi');
   // brak encji (stara wersja integracji)
-  await e.q(() => { delete window.__states['switch.bms_storm_mode']; delete window.__states['number.bms_vacation_load_w']; __el.hass = __mk(); }); await sleep(1400);
-  ok(await dgq(() => __el.shadowRoot.querySelector('[data-act="mode-sw"][data-k="storm_mode"]').disabled && __el.shadowRoot.querySelector('[data-mode-num="vacation_load_w"]').disabled) && /niedostępne/.test(await sr(e, '#dgBody')), 'tryby (Diagnostyka): brak encji → wyłączone z komunikatem');
+  await e.q(() => { delete window.__states['switch.bms_vacation_mode']; delete window.__states['number.bms_vacation_load_w']; __el.hass = __mk(); }); await sleep(1400);
+  ok(await dgq(() => __el.shadowRoot.querySelector('[data-act="mode-sw"][data-k="vacation_mode"]').disabled && __el.shadowRoot.querySelector('[data-mode-num="vacation_load_w"]').disabled) && /niedostępne/.test(await sr(e, '#dgBody')), 'tryby (Diagnostyka): brak encji → wyłączone z komunikatem');
   ok(await dgq(() => !window.__xss), 'tryby (Diagnostyka): brak wykonania obcego HTML');
   ok(e.errs.length === 0, '3: brak błędów JS ' + JSON.stringify(e.errs));
-  await e.ctx.close();
-
-  // kafelek „Rezerwa SOC” w trybie burzowym
-  e = await openCard(b, {});
-  await seed(e, { curve: curve(), storm: true });
-  await e.q(() => { window.__states['sensor.bms_reserve_soc'].state = '100'; window.__states['sensor.bms_reserve_soc'].attributes = { storm: true, enabled: true, need_kwh: 10, until_hour: null, capacity_kwh: 10, inverter_floor: 25 }; window.__states['sensor.bms_decision_log'] = { state: 'x', attributes: { entries: [] }, last_updated: new Date().toISOString() }; __el.hass = __mk(); });
-  await tab(e, 'log'); await sleep(400);
-  const tile = await sr(e, '#logTabBody');
-  ok(/tryb burzowy — cała energia zostaje w baterii/.test(tile) && !/do \?:00|do null:00/.test(tile), 'Rezerwa SOC: tryb burzowy bez „do ?:00”');
   await e.ctx.close();
 
   console.log('FAILS', fails); await b.close(); process.exit(fails ? 1 : 0);

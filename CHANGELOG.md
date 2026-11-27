@@ -3,6 +3,18 @@
 ## Dłuższa korekta zużycia przy nietypowo wysokim poborze
 Korekta „zużycie na żywo” (przełącznik `live_load_correction`) wygasała po 3 godzinach. Teraz, gdy zużycie jest wyraźnie wyższe od prognozy przez co najmniej 3 godziny z rzędu, podwyżka prognozy sięga do 7 godzin w przód (wagi 1,0 / 0,8 / 0,6 / 0,5 / 0,4 / 0,3 / 0,2), z ostrożniejszym limitem +2,5 kW. Godzina bez odchylenia zeruje serię. Dotyczy tylko zużycia wyższego od prognozy; niższe działa jak dotąd. W atrybutach korekty pojawia się `streak_h`.
 
+## Krótsze powiadomienia
+- W panelu (dzwonek): na wierzchu pierwsza linia albo pierwsze zdanie, reszta pod „Szczegóły”; z tytułów zniknęło „EMS:”.
+- Na telefonie i w powiadomieniach HA: podsumowanie dnia i tygodnia to jedna linia „Bilans · PV · Dom (zużycie) · SOC” z dopiskiem „Szczegóły: panel → dzwonek”; plan na jutro i nocny pobór pokazują pierwsze zdanie. Alarmy bez zmian. Pełna treść zostaje w skrzynce panelu.
+
+## Usunięty tryb burzowy
+Przełącznik „Tryb burzowy”, pole „czas trwania”, profil „Burza”, powiadomienie o trybie i wszystkie reguły planera z nim związane zniknęły (rezerwa 100% i blokada sprzedaży na żądanie). Tryb urlopowy zostaje. Stare encje `switch.bms_storm_mode` i `number.bms_storm_mode_hours` w HA mogą pozostać jako „niedostępne” — można je usunąć ręcznie w Ustawienia → Urządzenia i usługi → Encje.
+
+## Porównania taryf działają od razu
+- Ceny orientacyjne zamiast pustych pól: G11 0,65 zł/kWh i strefowa 0,80 / 0,50 zł/kWh (okna 6–13, 15–22). Kolejność: to, co wpiszesz, potem to, co EMS wylicza z Twoich cen, a dopiero potem wartości orientacyjne. Panel ostrzega, gdy używa orientacyjnych.
+- Nowa tabela „Zwykły dom bez PV i baterii”: ile kosztowałoby całe Twoje zużycie (godzina po godzinie) w G11, G12, G12w, taryfie dynamicznej i obecnej, obok kosztu z PV, baterią i EMS (zakup − sprzedaż) oraz Twojego zysku na miesiąc.
+- W porównaniu poboru z sieci G12 (weekendy bez obniżki) jest osobno od G12w.
+
 # EMS komp-dec 0.9.6.3
 
 ## Powiadomienia nie zapychają skrzynki

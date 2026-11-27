@@ -1,4 +1,4 @@
-"""Profile pracy (zima / lato / urlop / burza): definicje, podgląd zmian, zastosowanie, cofnięcie, dryf, usługi i uprawnienia."""
+"""Profile pracy (zima / lato / urlop): definicje, podgląd zmian, zastosowanie, cofnięcie, dryf, usługi i uprawnienia."""
 import asyncio, json, sys, types
 sys.path.insert(0, ".")
 import common
@@ -12,7 +12,7 @@ NAN = float("nan")
 
 def pure():
     ids = [p["id"] for p in P.PROFILES]
-    check("cztery profile o unikalnych id", ids == ["winter", "summer", "vacation", "storm"] and len(set(ids)) == 4, ids)
+    check("trzy profile o unikalnych id", ids == ["winter", "summer", "vacation"] and len(set(ids)) == 3, ids)
     check("każdy profil ma nazwę, ikonę i opis", all(p["name"] and p["icon"] and len(p["desc"]) > 20 for p in P.PROFILES))
     bad = [(p["id"], k) for p in P.PROFILES for k, v in p["set"].items() if P.check_value(k, v) is None]
     check("wszystkie ustawienia profili istnieją i mieszczą się w zakresach encji", not bad, bad)
@@ -23,11 +23,11 @@ def pure():
     check("odmiana: ustawienie / ustawienia / ustawień", [P.settings_word(n) for n in (0, 1, 2, 4, 5, 11, 12, 14, 22, 25)]
           == ["0 ustawień", "1 ustawienie", "2 ustawienia", "4 ustawienia", "5 ustawień", "11 ustawień", "12 ustawień", "14 ustawień", "22 ustawienia", "25 ustawień"])
     check("get: znane i nieznane id", P.get("winter")["name"] == "Zima" and P.get("x") is None and P.get(None) is None and P.get(5) is None)
-    check("kind", P.kind("storm_mode") == "switch" and P.kind("reserve_floor_soc") == "number" and P.kind("nie_ma") is None)
+    check("kind", P.kind("vacation_mode") == "switch" and P.kind("reserve_floor_soc") == "number" and P.kind("nie_ma") is None)
     check("label i unit", P.label("reserve_floor_soc").startswith("Dynamiczna rezerwa") and P.unit("reserve_floor_soc") == "%" and P.label("nie_ma") == "nie_ma")
 
     # check_value
-    check("przełącznik przyjmuje tylko bool", P.check_value("storm_mode", True) is True and P.check_value("storm_mode", 1) is None and P.check_value("storm_mode", "on") is None)
+    check("przełącznik przyjmuje tylko bool", P.check_value("vacation_mode", True) is True and P.check_value("vacation_mode", 1) is None and P.check_value("vacation_mode", "on") is None)
     check("liczba w zakresie", P.check_value("reserve_floor_soc", 30) == 30.0 and P.check_value("reserve_floor_soc", 0) == 0.0 and P.check_value("reserve_floor_soc", 60) == 60.0)
     check("liczba poza zakresem / nan / inf / bool / napis → None", all(P.check_value("reserve_floor_soc", v) is None for v in (61, -1, NAN, float("inf"), True, "30", None)))
     check("nieznany klucz → None", P.check_value("nie_ma", 1) is None)
@@ -36,7 +36,7 @@ def pure():
     check("same: liczby z tolerancją", P.same(30, 30.0) and P.same(0.1 + 0.2, 0.3) and not P.same(30, 31))
     check("same: bool nie równa się liczbie", not P.same(True, 1) and not P.same(0, False) and P.same(True, True) and not P.same(True, False))
     check("same: None / napis", not P.same(None, 1) and not P.same("x", 1))
-    check("fmt: przełącznik, liczba z jednostką, brak", P.fmt("storm_mode", True) == "włączone" and P.fmt("storm_mode", False) == "wyłączone"
+    check("fmt: przełącznik, liczba z jednostką, brak", P.fmt("vacation_mode", True) == "włączone" and P.fmt("vacation_mode", False) == "wyłączone"
           and P.fmt("reserve_floor_soc", 30.0) == "30 %" and P.fmt("min_sell_margin", 0.25) == "0,25 PLN/kWh" and P.fmt("reserve_floor_soc", None) == "—")
 
     # changes / drifted
@@ -46,8 +46,8 @@ def pure():
           and not ch["dawn_margin_soc"]["differs"] and not ch["grid_charge_enabled"]["differs"]
           and not ch["pv_plan_pessimism_pct"]["available"] and not ch["pv_plan_pessimism_pct"]["differs"], ch)
     check("changes: teksty przed i po", ch["reserve_floor_soc"]["now_text"] == "15 %" and ch["reserve_floor_soc"]["target_text"] == "30 %" and ch["dynamic_reserve"]["target_text"] == "włączone")
-    check("drifted: brak zmian", P.drifted({"reserve_floor_soc": 30.0, "storm_mode": True}, {"reserve_floor_soc": 30.0, "storm_mode": True}.get) == [])
-    check("drifted: zmieniona wartość i niedostępna encja", P.drifted({"reserve_floor_soc": 30.0, "storm_mode": True, "x": 1}, {"reserve_floor_soc": 22.0, "storm_mode": True}.get) == ["reserve_floor_soc", "x"])
+    check("drifted: brak zmian", P.drifted({"reserve_floor_soc": 30.0, "vacation_mode": True}, {"reserve_floor_soc": 30.0, "vacation_mode": True}.get) == [])
+    check("drifted: zmieniona wartość i niedostępna encja", P.drifted({"reserve_floor_soc": 30.0, "vacation_mode": True, "x": 1}, {"reserve_floor_soc": 22.0, "vacation_mode": True}.get) == ["reserve_floor_soc", "x"])
 
     # clean_state
     good = {"id": "winter", "since": "2026-11-20T10:00:00+01:00", "prev": {"reserve_floor_soc": 15.0}, "applied": {"reserve_floor_soc": 30.0}, "ended": None}
@@ -76,7 +76,7 @@ async def runtime_part():
     hass, c, opt, rt = build()
     S = hass.states
     v = rt.profile_view()
-    check("widok: cztery profile, brak aktywnego", [p["id"] for p in v["profiles"]] == ["winter", "summer", "vacation", "storm"] and v["active"] is None, v["active"])
+    check("widok: trzy profile, brak aktywnego", [p["id"] for p in v["profiles"]] == ["winter", "summer", "vacation"] and v["active"] is None, v["active"])
     w = next(p for p in v["profiles"] if p["id"] == "winter")
     wc = {x["key"]: x for x in w["changes"]}
     check("widok: Zima — rezerwa 15 → 30 %, dynamiczna rezerwa wyłączone → włączone",
@@ -164,21 +164,6 @@ async def runtime_part():
     wc = {x["key"]: x for x in next(p for p in v["profiles"] if p["id"] == "winter")["changes"]}
     check("widok: niedostępne ustawienie oznaczone", wc["dawn_margin_soc"]["available"] is False and wc["dawn_margin_soc"]["now_text"] == "—")
 
-    # ---------- burza: wygaśnięcie trybu kończy profil
-    hass, c, opt, rt = build()
-    S = hass.states
-    rt.state["storm_until"] = 123.0
-    res = await rt.apply_profile("storm")
-    check("burza: przełącznik włączony, czas trwania liczony od nowa", S.get("switch.bms_storm_mode").state == "on" and rt.state["storm_until"] is None and res["changed"] == 1, res)
-    await rt.modes_tick(at(2026, 11, 20, 12, 0))
-    check("burza: modes_tick ustawia czas końca", isinstance(rt.state["storm_until"], float))
-    await rt.modes_tick(at(2026, 11, 21, 13, 0))
-    check("burza: po wygaśnięciu przełącznik wyłączony", S.get("switch.bms_storm_mode").state == "off")
-    await rt.profile_tick(at(2026, 11, 21, 13, 1))
-    check("burza: koniec trybu kończy profil bez cofania czegokolwiek", rt.state["profile"]["ended"]["keys"] == ["storm_mode"], rt.state["profile"])
-    res = await rt.revert_profile()
-    check("burza: cofnięcie po końcu — tryb nadal wyłączony, nic „zmienionego ręcznie”", S.get("switch.bms_storm_mode").state == "off" and res["restored"] == 1 and res["kept"] == [], res)
-
     # ---------- urlop: włącza tryb urlopowy
     hass, c, opt, rt = build()
     S = hass.states
@@ -210,7 +195,7 @@ async def runtime_part():
     check("usługi: profiles_get, profile_apply, profile_revert zarejestrowane", all(n in H for n in ("profiles_get", "profile_apply", "profile_revert")))
     def call(data, uid=None): return types.SimpleNamespace(data=data, context=types.SimpleNamespace(user_id=uid))
     r = await H["profiles_get"](call({}, "usr"))
-    check("profiles_get: odczyt dla zwykłego użytkownika", len(r["profiles"]) == 4)
+    check("profiles_get: odczyt dla zwykłego użytkownika", len(r["profiles"]) == 3)
     for name, data in (("profile_apply", {"id": "winter"}), ("profile_revert", {})):
         try:
             await H[name](call(data, "usr")); ok_ = False
@@ -219,7 +204,7 @@ async def runtime_part():
         check(f"usługi: {name} odrzuca użytkownika bez uprawnień admina", ok_)
     check("odrzucone wywołanie nic nie zmieniło", nv(hass.states, "number.bms_reserve_floor_soc") == 15 and rt.state.get("profile") is None)
     r = await H["profile_apply"](call({"id": "winter"}, "adm"))
-    check("profile_apply: admin; odpowiedź zawiera nowy widok", r["ok"] and r["active"]["id"] == "winter" and len(r["profiles"]) == 4, r.get("active"))
+    check("profile_apply: admin; odpowiedź zawiera nowy widok", r["ok"] and r["active"]["id"] == "winter" and len(r["profiles"]) == 3, r.get("active"))
     try:
         await H["profile_apply"](call({"id": "xx"}, "adm")); ok_ = False
     except HomeAssistantError:

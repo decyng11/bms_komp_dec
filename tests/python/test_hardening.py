@@ -76,13 +76,13 @@ async def main():
     # ---- naprawa uszkodzonego stanu
     st = {"battery_sign_votes": {"pos": "x", "neg": [1]}, "notified": {"a": [1]}, "watches": "źle", "overrides": [1, {"id": 1}, None], "soc_day": {"date": "2026-11-19", "min": "", "max": 5},
           "today_charge": "abc", "price_reaction": 5, "inbox": [{"kind": ["x"], "ts": 1}, {"kind": "a", "ts": 2, "level": "info"}, 7], "accuracy_fc": {"date": 1},
-          "inbox_seq": float("nan"), "storm_until": "kiedyś", "low_soc_active": "tak", "control_test": [1], "nieznany": [1, 2]}
+          "inbox_seq": float("nan"), "low_soc_active": "tak", "control_test": [1], "nieznany": [1, 2]}
     fixed = SG.sanitize(st)
     check("state_guard: zły typ wraca do domyślnego", st["battery_sign_votes"] == {"pos": 0, "neg": 0} and st["notified"] == {} and st["watches"] == [] and st["today_charge"] == 0.0
-          and st["price_reaction"] == {"active": False, "prev_mode": None} and st["storm_until"] is None and st["low_soc_active"] is False and st["control_test"] is None and st["inbox_seq"] == 0, st)
+          and st["price_reaction"] == {"active": False, "prev_mode": None} and st["low_soc_active"] is False and st["control_test"] is None and st["inbox_seq"] == 0, st)
     check("state_guard: z list zostają tylko poprawne wpisy; soc_day/accuracy_fc z błędem są czyszczone", st["overrides"] == [{"id": 1}] and st["inbox"] == [{"kind": "a", "ts": 2, "level": "info"}] and st["soc_day"] == {} and st["accuracy_fc"] == {}, st)
     check("state_guard: nieznane klucze nietknięte, lista naprawionych niepusta", st["nieznany"] == [1, 2] and "watches" in fixed and "battery_sign_votes" in fixed, fixed)
-    good = {"today_charge": 1.5, "soc_day": {"date": "2026-11-19", "min": 20.0, "max": 90}, "watches": [{"id": 1}], "price_reaction": {"active": True, "prev_mode": "x"}, "inbox_seq": 4, "storm_until": 1.7e9}
+    good = {"today_charge": 1.5, "soc_day": {"date": "2026-11-19", "min": 20.0, "max": 90}, "watches": [{"id": 1}], "price_reaction": {"active": True, "prev_mode": "x"}, "inbox_seq": 4}
     before = json.dumps(good, sort_keys=True)
     check("state_guard: poprawny stan bez zmian", SG.sanitize(good) == [] and json.dumps(good, sort_keys=True) == before)
     for bad in ({"pos": "x"}, {"pos": float("inf")}, {"pos": [1]}, None, 5, {"pos": 10**30}):

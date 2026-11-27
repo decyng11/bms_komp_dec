@@ -19,7 +19,7 @@ LISTS = ("accuracy", "watches", "overrides", "auto_enabled", "auto_disabled", "a
 FLOATS = ("today_charge", "today_pv", "yesterday_charge", "yesterday_pv")
 INTS = ("inbox_seq", "settings_log_seq")
 STRS = ("accuracy_done", "today_date", "yesterday_date", "report_sent", "sale_report_done", "pv_streak_day", "review_done")
-NUMS = ("normal_charge_current", "storm_until", "vacation_since")     # liczba albo None
+NUMS = ("normal_charge_current", "vacation_since")     # liczba albo None
 BOOLS = ("low_soc_active",)
 DICT_OR_NONE = ("control_test", "profile")
 

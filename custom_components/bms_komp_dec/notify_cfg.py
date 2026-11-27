@@ -67,7 +67,6 @@ CATALOG: dict[str, tuple] = {
     "night_draw": ("Działanie", "Nocny pobór wyższy niż zwykle", "Rano: średni pobór domu w nocy (1:00–5:00) jest wyraźnie wyższy niż zwykle — coś zostało włączone na noc. Raz na dobę.", True, True, 1440, False,
                    ("ile razy więcej niż zwykle", "×", 1.6, 1.2, 5.0, 0.1)),
     "profile_plan": ("Działanie", "Profil z kalendarza: start i koniec", "Profil zaplanowany na daty (np. urlop) włączył się albo się skończył, i co przywrócono.", True, True, 0, False, None),
-    "storm": ("Działanie", "Tryb burzowy", "Włączenie i automatyczne wyłączenie trybu burzowego.", True, True, 5, False, None),
     # --- urządzenia (zakładka „Urządzenia”; przy każdym urządzeniu można też wyłączyć jego powiadomienia)
     "device_cycle": ("Urządzenia", "Koniec cyklu urządzenia", "Pralka, zmywarka, suszarka… skończyła — czas, kWh i koszt cyklu.", True, True, 0, False, None),
     "fleet_alert": ("Falownik", "Flota: alarm", "Falownik nie odpowiada, rozjazd trybu master/slave, bateria odstająca od reszty klastra, wysoka temperatura. Raz na dobę dla każdego zestawu alarmów.", True, True, 0, True, None),
@@ -93,7 +92,7 @@ PRIORITY: dict[str, int] = {
     "low_soc": 1, "alarm": 1, "comm_loss": 1, "grid_outage": 1, "island_overload": 1, "battery_temp_high": 1, "battery_temp_low": 1,
     "command_unconfirmed": 1, "sensor_fault": 1, "drift": 1, "guard_action": 1, "grid_limit": 1, "grid_charge_stalled": 1, "plan_floor": 1, "set_off": 1,
     "morning_guard": 1, "grid_charge_target": 1,
-    "rce_missing": 2, "data_repair": 2, "buy_prices_missing": 2, "pv_forecast_missing": 2, "plan_error": 2, "auto_apply": 2, "storm": 2, "battery_health": 2,
+    "rce_missing": 2, "data_repair": 2, "buy_prices_missing": 2, "pv_forecast_missing": 2, "plan_error": 2, "auto_apply": 2, "battery_health": 2,
     "device_anomaly": 2, "device_shed": 2, "profile_plan": 2, "night_draw": 2, "weak_pv": 2, "rce_negative": 2, "summary_daily": 2, "summary_weekly": 2, "summary_monthly": 2,
     "bill_goal": 2, "sunny_day": 3, "rce_high": 3, "plan_tomorrow": 3, "pv_caution": 3, "load_above": 3, "high_import": 3, "battery_full": 3, "proposal": 3, "schedule_skipped": 3, "sale": 3, "grid_charge": 3,
     "price_reaction": 3, "device_cycle": 3, "ev_session": 3, "fleet_alert": 2, "device_hint": 3, "device_plan": 3, "devices_unknown": 3,

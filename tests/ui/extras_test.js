@@ -39,8 +39,7 @@ async function seed(e, o = {}) {
     if (!o.noReport) st['sensor.bms_monthly_report'] = S(4.3, o.report);
     st['sensor.bms_battery_health'] = S(88.1, o.health);
     st['sensor.bms_monitor_status'] = S(0, o.monitor || { alarms: [], low_soc_active: false, watches: [] });
-    ['storm_mode', 'vacation_mode', 'notifications_enabled', 'auto_apply_dry_run'].forEach((k) => { st['switch.bms_' + k] = S(k === 'notifications_enabled' ? 'on' : (o[k] || 'off'), { friendly_name: k }); });
-    st['number.bms_storm_mode_hours'] = S(24, { min: 1, max: 96, step: 1 });
+    ['vacation_mode', 'notifications_enabled', 'auto_apply_dry_run'].forEach((k) => { st['switch.bms_' + k] = S(k === 'notifications_enabled' ? 'on' : (o[k] || 'off'), { friendly_name: k }); });
     st['number.bms_vacation_load_w'] = S(250, { min: 0, max: 5000, step: 10 });
     window.__el.hass = window.__mk();
   }, o);
@@ -110,11 +109,11 @@ const blue = (e) => e.q(() => { const c = __el.shadowRoot.querySelector('#exPlan
     ok(e.errs.length === 0, 'wariant „' + name + '”: brak błędów JS ' + JSON.stringify(e.errs));
     await e.ctx.close();
   }
-  // tryb burzowy i brak cen RCE
-  e = await openCard(b, {}); await seed(e, { mode: 'storm', storm_mode: 'on', curve: Object.assign(curve({ noSell: true }), { sale: new Array(24).fill(0) }) }); await tab(e, 'charts');
+  // brak cen RCE
+  e = await openCard(b, {}); await seed(e, { curve: Object.assign(curve({ noSell: true }), { sale: new Array(24).fill(0) }) }); await tab(e, 'charts');
   await e.page.waitForFunction(() => !!__el.shadowRoot.querySelector('#exPlanCv'), null, { timeout: 8000 });
   const ts = await sr(e, '#exPlanBox');
-  ok(/tryb burzowy — cel 100%, bez sprzedaży/.test(ts) && /Sprzedaż z baterii: wyłączona \(tryb burzowy\)/.test(ts), 'plan: tryb burzowy oznaczony');
+  ok(!/burzow/i.test(ts), 'plan: bez oznaczeń trybu burzowego');
   ok(/Brak cen RCE w horyzoncie/.test(ts), 'plan: brak cen RCE opisany');
   await e.ctx.close();
 
