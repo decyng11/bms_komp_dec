@@ -34,6 +34,22 @@ const now = () => Math.round(Date.now() / 1000);
   ok(!/Potwierdź wszystkie|Odrzuć wszystkie/i.test(txt), 'brak przycisków zbiorczych');
   ok(await e.q(() => __el.shadowRoot.querySelectorAll('#inbOv [data-inb="apply"]').length) === 1, 'jeden przycisk Potwierdź (na propozycję)');
   ok(/Alarm falownika/.test(txt) && /Podsumowanie dnia/.test(txt) && /2 min temu/.test(txt), 'skrzynka: alarm i podsumowanie z czasem');
+  // długie komunikaty: nagłówek + „Szczegóły”, bez „EMS:” w tytule
+  await setNotes([
+    { id: 5, ts: now() - 60, kind: 'summary_daily', group: 'Podsumowania', title: '📅 EMS: podsumowanie dnia 27.11', message: 'Zysk 3,10 zł\nPV 8,2 kWh\nSOC min 20%', level: 'info', read: true },
+    { id: 6, ts: now() - 90, kind: 'night_draw', group: 'Dom', title: '🌙 EMS: nocny pobór', message: 'Nocny pobór wyższy niż zwykle o 0,4 kW. ' + 'Powód może być różny, np. pompa ciepła albo ładowanie auta w nocy, sprawdź urządzenia w Ustawieniach i w historii zużycia domu.', level: 'info', read: true },
+    { id: 7, ts: now() - 100, kind: 'x', group: 'Inne', title: 'Krótki', message: 'Krótka treść.', level: 'info', read: true }]);
+  await sleep(250);
+  const lg = await e.q(() => { const c = [...__el.shadowRoot.querySelectorAll('#inbOv .inb-card[class*="n-"]')]; return c.map(x => ({ t: x.querySelector('.inb-t').textContent, m: x.querySelector('.inb-msg').textContent, d: !!x.querySelector('details'), r: (x.querySelector('details .inb-why') || {}).textContent || '' })); });
+  ok(lg.length >= 3 && lg.every(x => !/EMS:/.test(x.t)), 'tytuły bez „EMS:”: ' + lg.map(x => x.t));
+  const s1 = lg.find(x => /podsumowanie/.test(x.t)), s2 = lg.find(x => /nocny/.test(x.t)), s3 = lg.find(x => /Krótki/.test(x.t));
+  ok(s1.m === 'Zysk 3,10 zł' && s1.d && /PV 8,2 kWh/.test(s1.r) && /SOC min/.test(s1.r), 'wielolinijkowe: pierwsza linia na wierzchu, reszta w „Szczegóły”: ' + JSON.stringify(s1));
+  ok(/^Nocny pobór wyższy niż zwykle o 0,4 kW\.$/.test(s2.m) && s2.d && /sprawdź urządzenia/.test(s2.r), 'długie jednolinijkowe: pierwsze zdanie na wierzchu: ' + JSON.stringify(s2));
+  ok(s3.m === 'Krótka treść.' && !s3.d, 'krótki komunikat bez „Szczegóły”');
+  await setNotes([
+    { id: 3, ts: now() - 120, kind: 'alarm', group: 'Falownik', title: '🚨 Alarm falownika', message: 'F23 — upływ prądu', level: 'error', read: false },
+    { id: 2, ts: now() - 7200, kind: 'summary_daily', group: 'Podsumowania', title: 'Podsumowanie dnia', message: 'Zysk 3,10 zł', level: 'info', read: true }]);
+  await sleep(200);
   ok(/auto-stosowanie wył\./.test(txt), 'pigułka, gdy auto-stosowanie wyłączone');
   ok(/tańsze godziny po 23/i.test(await e.q(() => __el.shadowRoot.getElementById('inbOv').textContent)), 'uzasadnienie w rozwijanym „Dlaczego”');
   // Potwierdź

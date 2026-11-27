@@ -86,6 +86,24 @@ async def main():
     r = await n.send("device_cycle", "🧺 Koniec cyklu", "x", level="info")
     check("rodzaj wyłączony w konfiguratorze: nic (jak dotąd)", r is False and not inb(rt))
 
+    # ---------------------------------------------------------------- krótka wersja na telefon
+    from custom_components.bms_komp_dec import monitor as MM
+    hass, c, opt, rt = env("all"); n = rt.monitor.notifier
+    full = "Bilans +3,18 zł\nPV 8,2 kWh\nDom 11,4 kWh"
+    await n.send("summary_daily", "📅 podsumowanie", full, level="info", short="Bilans +3,18 zł · PV 8,2 kWh · Dom 11,4 kWh")
+    check("short: telefon dostaje jedną linię + wskazówkę", push(hass) and push(hass)[0][2]["message"] == "Bilans +3,18 zł · PV 8,2 kWh · Dom 11,4 kWh\nSzczegóły: panel → dzwonek", push(hass))
+    check("short: powiadomienie HA też krótkie", pn(hass) and pn(hass)[0][2]["message"].startswith("Bilans +3,18 zł · PV"), pn(hass))
+    check("short: skrzynka panelu ma pełną treść", inb(rt)[0]["message"] == full, inb(rt))
+    clear(hass)
+    hass, c, opt, rt = env("all"); n = rt.monitor.notifier
+    await n.send("device_cycle", "🧺 Koniec cyklu", "Pralka skończyła", level="info")
+    check("bez short: telefon dostaje pełną treść", push(hass)[0][2]["message"] == "Pralka skończyła", push(hass))
+    check("short_of: krótkie zostaje, długie → pierwsze zdanie, wielolinijkowe → pierwsza linia",
+          MM.short_of("Krótko.") is None and MM.short_of("a\nb") == "a"
+          and MM.short_of("Nocny pobór wyższy niż zwykle o 0,4 kW. " + "Powód. " * 30) == "Nocny pobór wyższy niż zwykle o 0,4 kW.")
+    hass, c, opt, rt = env("all")
+    check("_summary_short bez danych → None (idzie pełna treść)", rt.monitor._summary_short("day", __import__("datetime").date(2026, 11, 7)) is None)
+
     # ---------------------------------------------------------------- powtórki zastępują starsze
     hass, c, opt, rt = env("all", kinds={"low_soc": {"cooldown": 0}}); n = rt.monitor.notifier
     await n.send("low_soc", "🔋 niski SOC", "Bateria 12% (próg 10%)", key="a", level="warn")
