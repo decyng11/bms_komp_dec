@@ -85,7 +85,8 @@ async def notify_part():
     await rt.monitor._summaries(at(2026, 11, 7, 21, 5))
     p = push(hass)
     check("podsumowanie dnia: trafiło na telefon przy domyślnej konfiguracji", len(p) == 1 and "podsumowanie dnia" in p[0][2]["title"], [x[2].get("title") for x in p])
-    msg = p[0][2]["message"] if p else ""
+    check("podsumowanie dnia: telefon dostaje jedną linię z bilansem, PV i zużyciem domu", p and p[0][2]["message"].startswith("Bilans ") and "Dom 16,4 kWh" in p[0][2]["message"] and "Szczegóły: panel" in p[0][2]["message"], p[0][2]["message"] if p else p)
+    msg = next((e["message"] for e in rt.state.get("inbox", []) if e["kind"] == "summary_daily"), "")
     check("podsumowanie dnia: bilans, oszczędność, skąd energia, taryfa", "Bilans zł" in msg and "Bez PV i baterii" in msg and "Skąd energia" in msg and "drogie godziny" in msg, msg)
     # po wyłączeniu: komunikat w dzienniku zamiast ciszy
     hass, c, opt, rt = mkenv()

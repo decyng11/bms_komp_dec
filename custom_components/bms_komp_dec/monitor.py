@@ -112,7 +112,7 @@ class Notifier:
         return ncfg.effective(self.rt.state.get("notify_cfg"))
 
     async def send(self, kind: str, title: str, message: str, *, key: str | None = None,
-                   cooldown_s: float = 0.0, level: str = "warn", force: bool = False) -> bool:
+                   cooldown_s: float = 0.0, level: str = "warn", force: bool = False, short: str | None = None) -> bool:
         """True, gdy powiadomienie faktycznie wysłano (nie wstrzymał go odstęp, konfigurator ani wyłącznik).
 
         Rodzaj z katalogu: włączenie, odstęp i kanał (telefon / tylko HA) z konfiguratora; w ciszy nocnej
@@ -139,6 +139,8 @@ class Notifier:
         rt._save_state()  # noqa: SLF001
         rt.log.add("notify", f"{title}: {message}", level)
         inbox.add(rt.state, kind, title, message, level, supersede=bool(cfg.get("auto_read", True)))
+        if short:                                            # telefon i powiadomienie HA: jedna linia, pełna treść zostaje w skrzynce panelu
+            message = f"{short}\nSzczegóły: panel → dzwonek"
         if not switch_on(rt.hass, "notifications_enabled", True):
             return False
         if not force and not ncfg.phone_allows(cfg, kind):
@@ -604,7 +606,8 @@ class Monitor:
             top = self.rt.devices.top_now()
         except Exception:  # noqa: BLE001
             top = []
-        await self.notifier.send("night_draw", "🌙 EMS: nocny pobór wyższy niż zwykle", nightdraw_mod.message(res, top), level="info")
+        _nm = nightdraw_mod.message(res, top)
+        await self.notifier.send("night_draw", "🌙 EMS: nocny pobór wyższy niż zwykle", _nm, level="info", short=short_of(_nm))
 
     async def _accuracy(self, now: datetime) -> None:
         """Rano zapamiętuje prognozę dnia (zużycie, PV), wieczorem (od 23:00) porównuje ją z faktem i dopisuje wpis
@@ -728,7 +731,8 @@ class Monitor:
         except Exception:  # noqa: BLE001
             pass
         self._once("plan_tomorrow", key)
-        await self.notifier.send("plan_tomorrow", f"🗓 EMS: plan na jutro ({tomorrow:%d.%m})", tomorrowplan_mod.message(info), level="info")
+        _pm = tomorrowplan_mod.message(info)
+        await self.notifier.send("plan_tomorrow", f"🗓 EMS: plan na jutro ({tomorrow:%d.%m})", _pm, level="info", short=short_of(_pm))
 
     async def _pv_caution(self, now: datetime) -> None:
         """Rano: jeśli oceny dobowe wskazują stale zawyżoną (albo zaniżoną) prognozę PV, powiadamia o propozycji zmiany ostrożności.
@@ -846,12 +850,34 @@ class Monitor:
         if ncfg.kind(cfg, "summary_daily").get("on") and hm >= sch["daily"]["time"] and sent.get("daily") != today.isoformat():
             sent["daily"] = today.isoformat()
             self.rt._save_state()  # noqa: SLF001
-            await self.notifier.send("summary_daily", f"📅 EMS: podsumowanie dnia {today:%d.%m}", self._summary_body("day", today), level="info")
+            await self.notifier.send("summary_daily", f"📅 EMS: podsumowanie dnia {today:%d.%m}", self._summary_body("day", today), level="info",
+                                     short=self._summary_short("day", today))
         if (ncfg.kind(cfg, "summary_weekly").get("on") and loc.weekday() == sch["weekly"]["weekday"]
                 and hm >= sch["weekly"]["time"] and sent.get("weekly") != today.isoformat()):
             sent["weekly"] = today.isoformat()
             self.rt._save_state()  # noqa: SLF001
-            await self.notifier.send("summary_weekly", "🗓 EMS: podsumowanie tygodnia", self._summary_body("week", today), level="info")
+            await self.notifier.send("summary_weekly", "🗓 EMS: podsumowanie tygodnia", self._summary_body("week", today), level="info",
+                                     short=self._summary_short("week", today))
+
+    def _summary_short(self, kind: str, day) -> str | None:
+        """Jedna linia na telefon: bilans, PV i zużycie domu (dla dnia także SOC min–max). Błąd liczenia → None (idzie pełna treść)."""
+        try:
+            from . import report as report_mod
+            rt = self.rt
+            start = day - timedelta(days=6) if kind == "week" else day
+            t = report_mod.period_totals(rt.ledger, rt.stats, start, day)
+            if not t.get("days"):
+                return None
+            parts = [f"Bilans {t['net']:+.2f} zł".replace(".", ",")]
+            for lab, k in (("PV", "pv_kwh"), ("Dom", "load_kwh")):
+                if isinstance(t.get(k), (int, float)):
+                    parts.append(f"{lab} {t[k]:.1f} kWh".replace(".", ","))
+            sd = rt.state.get("soc_day") or {}
+            if kind == "day" and sd.get("date") == day.isoformat():
+                parts.append(f"SOC {float(sd['min']):.0f}–{float(sd['max']):.0f}%")
+            return " · ".join(parts)
+        except Exception:  # noqa: BLE001
+            return None
 
     def _summary_body(self, kind: str, day) -> str:
         """Treść podsumowania; błąd w liczeniu nie może zgubić całej wiadomości (znacznik „wysłano” jest już ustawiony)."""
@@ -862,6 +888,18 @@ class Monitor:
             self.rt.log.add("notify", f"Podsumowanie ({kind}): nie udało się policzyć szczegółów — {err}", "error")
             return f"Nie udało się policzyć szczegółów podsumowania ({err}). Sprawdź dziennik EMS."
         return text or "Brak danych do podsumowania za ten okres."
+
+
+def short_of(message: str) -> str | None:
+    """Pierwsza linia albo pierwsze zdanie długiego komunikatu; krótkie zostają bez skracania (None)."""
+    m = str(message or "").strip()
+    if "\n" in m:
+        return m.split("\n", 1)[0].strip()
+    if len(m) > 150:
+        for x in re.finditer(r"[.!?](?:\s+(?=[A-ZĄĆĘŁŃÓŚŹŻ0-9])|$)", m):
+            if 12 <= x.start() <= 160:
+                return m[: x.start() + 1]
+    return None
 
 
 _DNI_DOP = ("poniedziałku", "wtorku", "środy", "czwartku", "piątku", "soboty", "niedzieli")
