@@ -101,7 +101,7 @@ const withPrio = (pay, lvl, ar) => { const p = JSON.parse(JSON.stringify(pay)); 
   ok((await bell(x)).open, 'dzwonek otwiera okienko');
   await x.q(() => __el._el('bell').click()); await sleep(200);
   r = await bell(x);
-  ok(!r.open && r.calls.includes('read_seen') && r.badge === '1', `zamknięcie dzwonkiem też „ogląda” informacje (licznik ${r.badge})`);
+  ok(!r.open && r.calls.includes('read_seen') && (r.badge === '0' || r.badge === ''), `zamknięcie dzwonkiem też „ogląda” informacje (licznik ${r.badge})`);
   await x.q(() => window.__calls.length = 0);
   await x.q(() => __el._el('bell').click()); await sleep(150);
   await x.q(() => { const ov = __el.shadowRoot.getElementById('inbOv'); ov.dispatchEvent(new MouseEvent('click', { bubbles: true })); }); await sleep(150);
