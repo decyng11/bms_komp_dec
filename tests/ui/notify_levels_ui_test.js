@@ -86,11 +86,11 @@ const withPrio = (pay, lvl, ar) => { const p = JSON.parse(JSON.stringify(pay)); 
   ok(r.badge === '6' && r.unread === 6, `przed zamknięciem: 6 nieprzeczytanych (${r.badge})`);
   await x.q(() => __el.shadowRoot.querySelector('#inbOv [data-inb="close"]').click()); await sleep(200);
   r = await bell(x);
-  ok(r.calls.length === 1 && r.calls[0] === 'read_info', 'zamknięcie okienka (✕) → usługa inbox_action: read_info: ' + JSON.stringify(r.calls));
-  ok(r.badge === '3', `po zamknięciu licznik = tylko ostrzeżenia i błąd (3), jest ${r.badge}`);
+  ok(r.calls.length === 1 && r.calls[0] === 'read_seen', 'zamknięcie okienka (✕) → usługa inbox_action: read_seen: ' + JSON.stringify(r.calls));
+  ok(r.badge === '1', `po zamknięciu licznik = tylko tylko błąd (1), jest ${r.badge}`);
   await x.q(() => __el._el('bell').click()); await sleep(150);
   r = await bell(x);
-  ok(r.open && r.unread === 3, `po ponownym otwarciu nieprzeczytane zostały tylko: błąd i 2 ostrzeżenia (${r.unread})`);
+  ok(r.open && r.unread === 1, `po ponownym otwarciu nieprzeczytane zostały tylko: błąd (${r.unread})`);
   await x.page.context().close();
 
   // zamknięcie dzwonkiem (przełącznik) i kliknięciem w tło
@@ -101,7 +101,7 @@ const withPrio = (pay, lvl, ar) => { const p = JSON.parse(JSON.stringify(pay)); 
   ok((await bell(x)).open, 'dzwonek otwiera okienko');
   await x.q(() => __el._el('bell').click()); await sleep(200);
   r = await bell(x);
-  ok(!r.open && r.calls.includes('read_info') && r.badge === '1', `zamknięcie dzwonkiem też „ogląda” informacje (licznik ${r.badge})`);
+  ok(!r.open && r.calls.includes('read_seen') && r.badge === '1', `zamknięcie dzwonkiem też „ogląda” informacje (licznik ${r.badge})`);
   await x.q(() => window.__calls.length = 0);
   await x.q(() => __el._el('bell').click()); await sleep(150);
   await x.q(() => { const ov = __el.shadowRoot.getElementById('inbOv'); ov.dispatchEvent(new MouseEvent('click', { bubbles: true })); }); await sleep(150);
