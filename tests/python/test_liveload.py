@@ -76,6 +76,32 @@ async def main():
     o2 = sched._apply_live_load(list(b2))
     check("23:10: tylko ostatnia godzina doby, bez wyjścia poza listę", len(o2) == 24 and abs(o2[23] - 3.0) < 1e-9, o2[22:])
 
+    # ---------- wydłużona korekta: wysokie zużycie utrzymuje się kilka godzin
+    sched2 = scheduler.ScheduleOptimizer(hass, c, cfg)
+    state["live"] = 3.0
+    base = [1.0] * 24
+    r = {}
+    for h in (8, 9, 10):
+        at(2026, 11, 7, h, 20)
+        r[h] = sched2._apply_live_load(list(base))
+    check("1–2 godziny wyższego zużycia: zwykła, krótka korekta (3 godziny)", r[9][12] == 1.0 and "streak_h" not in (sched2._live_load or {}) or sched2._live_load.get("streak_h"), sched2._live_load)
+    check("po 3 godzinach z rzędu: korekta sięga dalej (7 godzin) z limitem 2,5 kW", abs(r[10][10] - 3.0) < 1e-9 and r[10][16] > 1.0 and r[10][17] == 1.0, r[10][10:18])
+    check("opis zawiera liczbę godzin serii", sched2._live_load.get("streak_h") == 3, sched2._live_load)
+    at(2026, 11, 7, 11, 20)
+    state["live"] = 1.0
+    sched2._apply_live_load(list(base))
+    at(2026, 11, 7, 12, 20)
+    state["live"] = 3.0
+    o = sched2._apply_live_load(list(base))
+    check("godzina bez odchylenia zeruje serię", o[12] == 3.0 and o[14] == 1.6 and o[15] == 1.0 and "streak_h" not in sched2._live_load, o[12:17])
+    sched3 = scheduler.ScheduleOptimizer(hass, c, cfg)
+    state["live"] = 0.2
+    for h in (8, 9, 10, 11):
+        at(2026, 11, 7, h, 20)
+        sched3._apply_live_load(list(base))
+    check("niższe zużycie nigdy nie wydłuża korekty", "streak_h" not in (sched3._live_load or {}), sched3._live_load)
+    state["live"] = 3.0
+
     # ---------- przez _load_today i założenia planu
     at(2026, 11, 7, 6, 31)
     c.data = {"load_forecast": {"hourly_remaining_today": [None] * 6 + [1.0] * 18}}

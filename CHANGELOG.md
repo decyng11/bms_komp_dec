@@ -1,3 +1,8 @@
+# EMS komp-dec 0.9.6.4
+
+## Dłuższa korekta zużycia przy nietypowo wysokim poborze
+Korekta „zużycie na żywo” (przełącznik `live_load_correction`) wygasała po 3 godzinach. Teraz, gdy zużycie jest wyraźnie wyższe od prognozy przez co najmniej 3 godziny z rzędu, podwyżka prognozy sięga do 7 godzin w przód (wagi 1,0 / 0,8 / 0,6 / 0,5 / 0,4 / 0,3 / 0,2), z ostrożniejszym limitem +2,5 kW. Godzina bez odchylenia zeruje serię. Dotyczy tylko zużycia wyższego od prognozy; niższe działa jak dotąd. W atrybutach korekty pojawia się `streak_h`.
+
 # EMS komp-dec 0.9.6.3
 
 ## Powiadomienia nie zapychają skrzynki

@@ -9,6 +9,15 @@
     const BMS_INFO = { card: shared.version || '', url: shared.urlVersion || '' };
     // Co nowego po aktualizacji: pokazywane raz na przeglądarkę, po zmianie wersji karty. Dopisuj nową wersję na górze.
     const WHATS_NEW = {
+      '0.9.6.4': {
+        items: [
+          ['Dłuższa korekta zużycia', 'Gdy dom bierze wyraźnie więcej niż w prognozie od 3 godzin z rzędu, podwyżka prognozy wygasa wolniej (do 7 godzin, max +2,5 kW) zamiast po 3 godzinach.'],
+          ['Powiadomienia nie zapychają', 'Powtarzający się komunikat zlewa się w jeden wpis z licznikiem ×N; zamknięcie okienka oznacza informacje i ostrzeżenia jako przeczytane.'],
+          ['Spokojniejsza moc ładowania', 'Dopasowana moc ładowania z sieci zmienia się co najwyżej co 15 minut i w krokach po 5 A.'],
+          ['Nowy styl „Bohater”', 'Ustawienia → Wygląd → Styl: ciemnozielona karta baterii i białe zaokrąglone karty.'],
+          ['Kopia ustawień', 'EMS → Kopia ustawień: zapis do pliku i wczytanie z podglądem zmian.'],
+        ],
+      },
       '0.9.6.3': {
         items: [
           ['Powiadomienia nie zapychają', 'Powtarzający się komunikat zlewa się w jeden wpis z licznikiem ×N, zamiast dodawać kolejne.'],
@@ -1549,6 +1558,6 @@
 
   };
   install.contract = 1;
-  install.version = '0.9.6.3';
+  install.version = '0.9.6.4';
   window.__bmsExtrasInstall = install;
 })();

@@ -782,6 +782,9 @@ class ScheduleOptimizer:
     LIVE_WEIGHTS = (1.0, 0.6, 0.3)        # wpływ korekty na bieżącą godzinę i dwie następne
     LIVE_MIN_KW = 0.3                       # mniejsze odchylenia ignorujemy
     LIVE_MAX_UP_KW = 4.0
+    LIVE_STREAK_H = 3                       # tyle godzin z rzędu wyższego zużycia, by korekta wygasała wolniej
+    LIVE_WEIGHTS_LONG = (1.0, 0.8, 0.6, 0.5, 0.4, 0.3, 0.2)
+    LIVE_LONG_MAX_KW = 2.5                  # przy długim odchyleniu ostrożniejszy limit podwyżki
 
     def _apply_live_load(self, out: list[float | None]) -> list[float | None]:
         """Korekta najbliższych godzin o różnicę między tym, co dom bierze teraz (średnia z ~15 min), a tym, czego oczekiwano."""
@@ -796,16 +799,40 @@ class ScheduleOptimizer:
         if live is None or exp is None:
             return out
         delta = live - exp
-        if abs(delta) < max(self.LIVE_MIN_KW, 0.25 * exp):
+        big = abs(delta) >= max(self.LIVE_MIN_KW, 0.25 * exp)
+        streak = self._live_streak(now, delta if (big and delta > 0) else None)
+        if not big:
             return out
         delta = max(-0.5 * exp, min(self.LIVE_MAX_UP_KW, delta))
+        weights = self.LIVE_WEIGHTS
+        if delta > 0 and streak >= self.LIVE_STREAK_H:     # nietypowo wysokie zużycie trwa od kilku godzin → wolniejsze wygasanie
+            delta = min(delta, self.LIVE_LONG_MAX_KW)
+            weights = self.LIVE_WEIGHTS_LONG
         res = list(out)
-        for i, w in enumerate(self.LIVE_WEIGHTS):
+        for i, w in enumerate(weights):
             h = h0 + i
             if h < 24 and res[h] is not None:
                 res[h] = max(0.0, res[h] + w * delta)
         self._live_load = {"live_kw": round(live, 2), "expected_kw": round(exp, 2), "delta_kw": round(delta, 2)}
+        if weights is self.LIVE_WEIGHTS_LONG:
+            self._live_load["streak_h"] = streak
         return res
+
+    def _live_streak(self, now, up_delta: float | None) -> int:
+        """Ile kolejnych godzin (łącznie z bieżącą) zużycie było wyraźnie wyższe od prognozy. Godzina bez odchylenia zeruje licznik."""
+        hist = getattr(self, "_live_hist", None)
+        if hist is None:
+            hist = self._live_hist = {}
+        key = now.replace(minute=0, second=0, microsecond=0)
+        hist[key] = bool(up_delta is not None) or hist.get(key, False)
+        for k in [k for k in hist if (key - k).total_seconds() > 12 * 3600]:
+            del hist[k]
+        n = 0
+        t = key
+        while hist.get(t):
+            n += 1
+            t = t - timedelta(hours=1)
+        return n
 
     @staticmethod
     def _load_abs(ctx: dict, h_abs: int) -> float:
