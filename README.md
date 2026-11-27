@@ -99,7 +99,7 @@ Integracja potrafi sama znaleźć w Home Assistancie liczniki kWh (pralka, pompa
 - Komendy są weryfikowane odczytem zwrotnym, a wartość, która zmieniła się po zapisie, wywołuje powiadomienie.
 - Ochrona przyłącza (Deye): w zakładce EMS ustawiasz własny limit poboru z sieci (kW) i opcjonalnie sufit mocy ładowania z sieci. Gdy dom i ładowanie baterii go przekraczają, EMS zmniejsza prąd ładowania, a gdy jest zapas, przywraca go. Domyślnie wyłączone.
 - Blokada sprzedaży z baterii, gdy chwilowy import z sieci albo import z całego dnia jest za duży.
-- Tryby burzowy i urlopowy, reakcja na niskie i ujemne ceny, zabezpieczenie przed niskim SOC.
+- Tryb urlopowy, reakcja na niskie i ujemne ceny, zabezpieczenie przed niskim SOC.
 - Falowniki Sofar (G3 i hybrydowe) są obsługiwane eksperymentalnie: na start EMS tylko zapisuje w dzienniku, co by ustawił.
 
 ## Ustawienia (dawniej Diagnostyka) i autotest

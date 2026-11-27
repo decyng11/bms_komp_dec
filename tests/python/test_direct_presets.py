@@ -80,12 +80,15 @@ inv_e = Ent("sensor.inverter_battery", "bms_komp_dec", "inv1", "Battery", "batte
 bms_e = Ent("sensor.bms_soc", "bms_komp_dec", "bms1", "SOC", "soc"); bms_e.unique_id = UID + "soc"
 old_e = Ent("sensor.bms_old", "bms_komp_dec", "bms1", "Old", "old"); old_e.unique_id = "staryformat123"
 foreign = Ent("sensor.inne", "inna_platforma", "zzz", "X", "x"); foreign.unique_id = "abc"
-rr = RegRm([inv_e, bms_e, old_e, foreign])
+storm_e = Ent("switch.bms_storm_mode", "bms_komp_dec", "bms1", "Burza", "storm"); storm_e.unique_id = UID + "storm_mode"
+storm_n = Ent("number.bms_storm_mode_hours", "bms_komp_dec", "bms1", "Burza h", "storm_h"); storm_n.unique_id = UID + "storm_mode_hours"
+rr = RegRm([inv_e, bms_e, old_e, foreign, storm_e, storm_n])
 er = sys.modules["homeassistant.helpers.entity_registry"]; er.async_get = lambda hass: rr
 init.er = er
 hass = stubs.FakeHass(); hass.config_entries = Cfg([Entry("inv1", "inverter"), Entry("bms1")])
 init._cleanup_legacy_entities(hass)
-check("sprzątanie: usuwa tylko stare encje BMS", rr.removed == ["sensor.bms_old"], rr.removed)
+check("sprzątanie: usuwa stare encje BMS i encje usuniętego trybu burzowego", sorted(rr.removed) == ["number.bms_storm_mode_hours", "sensor.bms_old", "switch.bms_storm_mode"], rr.removed)
+check("sprzątanie: zwykłe encje BMS zostają", "sensor.bms_soc" in rr.entities)
 check("sprzątanie: encje falownika bezpośredniego zostają", "sensor.inverter_battery" in rr.entities)
 print(f"DIRECT-PRESETS PASS={PASS} FAIL={FAIL}")
 sys.exit(1 if FAIL else 0)

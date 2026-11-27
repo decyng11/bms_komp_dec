@@ -68,6 +68,9 @@ def _get_optimizer(hass: HomeAssistant) -> ScheduleOptimizer | None:
     return None
 
 
+_REMOVED_KEYS = ("storm_mode", "storm_mode_hours")        # encje usuniętych funkcji (tryb burzowy) — sprzątane przy starcie
+
+
 def _cleanup_legacy_entities(hass: HomeAssistant) -> None:
     ent_reg = er.async_get(hass)
     removed = 0
@@ -76,7 +79,7 @@ def _cleanup_legacy_entities(hass: HomeAssistant) -> None:
     for entity in list(ent_reg.entities.values()):
         if entity.platform != DOMAIN:
             continue
-        if str(entity.unique_id).startswith(UID_PREFIX):
+        if str(entity.unique_id).startswith(UID_PREFIX) and str(entity.unique_id)[len(UID_PREFIX):] not in _REMOVED_KEYS:
             continue
         if getattr(entity, "config_entry_id", None) in direct_ids:
             continue

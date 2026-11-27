@@ -12,6 +12,9 @@
       '0.9.6.4': {
         items: [
           ['Dłuższa korekta zużycia', 'Gdy dom bierze wyraźnie więcej niż w prognozie od 3 godzin z rzędu, podwyżka prognozy wygasa wolniej (do 7 godzin, max +2,5 kW) zamiast po 3 godzinach.'],
+          ['Krótsze powiadomienia', 'W panelu pierwsza linia i „Szczegóły”; na telefon jedna linia (podsumowanie z zużyciem domu).'],
+          ['Porównania taryf od razu', 'Ceny orientacyjne G11 i G12, tabela „Zwykły dom bez PV i baterii”, G12 osobno od G12w.'],
+          ['Bez trybu burzowego', 'Tryb burzowy usunięty; tryb urlopowy zostaje.'],
           ['Powiadomienia nie zapychają', 'Powtarzający się komunikat zlewa się w jeden wpis z licznikiem ×N; zamknięcie okienka oznacza informacje i ostrzeżenia jako przeczytane.'],
           ['Spokojniejsza moc ładowania', 'Dopasowana moc ładowania z sieci zmienia się co najwyżej co 15 minut i w krokach po 5 A.'],
           ['Nowy styl „Bohater”', 'Ustawienia → Wygląd → Styl: ciemnozielona karta baterii i białe zaokrąglone karty.'],
