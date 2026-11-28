@@ -1221,6 +1221,8 @@
     // =====================================================================
     const PLUS_CSS = `
       .px-note { font-size:11px; color:var(--muted); line-height:1.5; margin-top:8px; }
+      .px-fold > summary { cursor:pointer; padding:10px 4px; font-weight:600; font-size:13px; color:var(--text); list-style:none; }
+      .px-fold > summary::before { content:"▸ "; color:var(--muted); } .px-fold[open] > summary::before { content:"▾ "; }
       .px-row { display:flex; flex-wrap:wrap; gap:8px; align-items:center; padding:8px 0; border-bottom:1px solid var(--line); }
       .px-row:last-child { border-bottom:none; }
       .px-row .nm { flex:1; min-width:150px; font-size:13px; color:var(--text); }
@@ -1422,9 +1424,11 @@
             + `<td class="${c < -0.005 ? 'px-neg' : c > 0.005 ? 'px-pos' : ''}">${pxZl(c, true)}</td></tr>`;
         });
         const t = a.table_totals || {};
-        box.innerHTML = (this._planSummaryHtml ? this._planSummaryHtml(rows) : '') + `<div class="px-tbl-wrap px-plan"><table class="px-tbl plan"><thead><tr><th>Godz.</th><th>Akcja</th><th>Kup zł</th><th>Sprz. zł</th><th>PV kWh</th><th>Dom kWh</th><th>SOC</th><th>Koszt</th></tr></thead><tbody>${html}`
+        const fold = this._exPx();
+        if (!box._foldBound) { box._foldBound = true; box.addEventListener('toggle', (ev) => { if (ev.target && ev.target.classList && ev.target.classList.contains('px-fold')) fold.tblOpen = ev.target.open; }, true); }
+        box.innerHTML = (this._planSummaryHtml ? this._planSummaryHtml(rows) : '') + `<details class="px-fold" ${fold.tblOpen ? 'open' : ''}><summary>Pokaż tabelę godzina po godzinie (${rows.length} godz.)</summary><div class="px-tbl-wrap px-plan"><table class="px-tbl plan"><thead><tr><th>Godz.</th><th>Akcja</th><th>Kup zł</th><th>Sprz. zł</th><th>PV kWh</th><th>Dom kWh</th><th>SOC</th><th>Koszt</th></tr></thead><tbody>${html}`
           + `<tr class="tot"><td colspan="2">Razem</td><td colspan="4" style="text-align:left;">pobór ${exFmt(t.import_kwh, 1)} kWh · oddanie ${exFmt(t.export_kwh, 1)} kWh</td><td></td><td class="${exNum(t.cost) < 0 ? 'px-neg' : 'px-pos'}">${pxZl(t.cost, true)}</td></tr></tbody></table></div>`
-          + '<div class="px-note">Szacunek z planu (bez strat i opłat stałych): koszt = pobór z sieci × cena zakupu − oddanie × cena sprzedaży; minus = przychód. Pomarańczowy pasek = godziny szczytu taryfy. Plan obejmuje najbliższe ~30 godzin, a gdy ceny na jutro są już znane — całą resztę dzisiaj i jutro (do ~47 h).</div>';
+          + '<div class="px-note">Szacunek z planu (bez strat i opłat stałych): koszt = pobór z sieci × cena zakupu − oddanie × cena sprzedaży; minus = przychód. Pomarańczowy pasek = godziny szczytu taryfy. Plan obejmuje najbliższe ~30 godzin, a gdy ceny na jutro są już znane — całą resztę dzisiaj i jutro (do ~47 h).</div></details>';
       },
 
       // ------------------------------------------------------------ historia SOC (20)
