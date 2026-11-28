@@ -3,7 +3,8 @@
 // w jednym stylu nie zgubiła np. strat falownika, „Do rezerwy”, zysku dziś, dziennych kWh przy węzłach czy pola pojemności baterii.
 const { openCard, chromium } = require('./ui_env');
 let fails = 0; const ok = (c, m) => { if (!c) { fails++; console.log('FAIL', m); } else console.log('ok  ', m); };
-const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+const SLOW = process.env.CI ? 4 : 1;   // na wolnym runnerze CI animacje i przeliczenia trwają dłużej
+const sleep = (ms) => new Promise(r => setTimeout(r, ms * SLOW));
 const SK = ['classic', 'm3', 'glass', 'matrix', 'space', 'comfort', 'hero'];
 const SC = {
   'ładowanie z PV i sprzedaż': { soc: 48, pv: 2100, load: 1240, grid: -800, batt: -403 },
