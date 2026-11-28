@@ -4767,6 +4767,11 @@
       const col = au.hours < 2 ? 'var(--red)' : (au.hours < 6 ? 'var(--orange)' : 'var(--green)');
       el.innerHTML = '';
       const b = document.createElement('b'); b.style.color = col; b.textContent = au.text;
+      const socNow = this._num('soc');
+      if (typeof socNow === 'number' && isFinite(socNow) && isFinite(Number(au.floor)) && socNow <= Number(au.floor) + 0.6) {
+        el.textContent = `🔋 Bateria jest na progu ${f(au.floor)}% — dom (${f(au.load_w)} W) zasila sieć albo PV.`;
+        return;
+      }
       el.append('🔋 Bateria starczy na ok. ', b, document.createTextNode(` — dom bierze ${f(au.load_w)} W, do progu ${f(au.floor)}%, bez PV i sieci.`));
       el.title = `Do progu odcięcia zostało ~${isFinite(Number(au.usable_kwh)) ? Number(au.usable_kwh).toFixed(1).replace('.', ',') : '?'} kWh (po sprawności). Pobór wygładzony z ostatnich ~5 minut; w prawdziwym zaniku sieci z PV czas będzie dłuższy.`;
       el.style.display = '';
