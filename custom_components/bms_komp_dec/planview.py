@@ -90,6 +90,43 @@ def plan_table(curve: dict | None, cap_kwh: float) -> dict[str, Any]:
     return {"rows": rows, "totals": {k: round(v, 2) for k, v in tot.items()}}
 
 
+def yesterday_rows(buckets: list | None, day: str) -> dict[str, Any]:
+    """Tabela „Wczoraj” z RZECZYWISTYCH koszyków godzinowych Insights (te same pola co wiersze planu).
+
+    Akcja wynika z liczników: ładowanie z sieci = pobór ≥ 0,3 kWh przy ładowaniu baterii ≥ 0,3 kWh; sprzedaż = oddanie
+    ≥ 0,3 kWh przy rozładowaniu ≥ 0,3 kWh. Koszt godziny = pobór × cena zakupu − oddanie × cena sprzedaży."""
+    rows: list[dict[str, Any]] = []
+    tot = {"import_kwh": 0.0, "export_kwh": 0.0, "cost": 0.0}
+    for h in range(24):
+        x = buckets[h] if buckets and h < len(buckets) else None
+        if x is None:
+            continue
+        soc = _num(x[_SOC])
+        imp, exp, bch, bdis, pv, load = x[_IMP], x[_EXP], x[_BCH], x[_BDIS], x[_PV], x[_LOAD]
+        buy = x[_BUY_S] / x[_BUY_T] if x[_BUY_T] > 0 else None
+        sell = x[_SELL_S] / x[_SELL_T] if x[_SELL_T] > 0 else None
+        d = bch - bdis
+        if imp >= 0.3 and bch >= 0.3:
+            kind = "grid"
+        elif exp >= 0.3 and bdis >= 0.3 and pv < exp:
+            kind = "sell"
+        elif d > MOVE_KWH:
+            kind = "pv"
+        elif d < -MOVE_KWH:
+            kind = "home"
+        else:
+            kind = "idle"
+        cost = (imp * buy if buy is not None else 0.0) - (exp * sell if sell is not None else 0.0)
+        tot["import_kwh"] += imp
+        tot["export_kwh"] += exp
+        tot["cost"] += cost
+        rows.append({"h": h, "day": day, "action": kind, "label": ACTIONS[kind], "peak": False,
+                     "buy": None if buy is None else round(buy, 3), "sell": None if sell is None else round(sell, 3),
+                     "pv": round(pv, 2), "load": round(load, 2), "soc": None if soc is None else round(soc, 1),
+                     "import_kwh": round(imp, 2), "export_kwh": round(exp, 2), "cost": round(cost, 2)})
+    return {"rows": rows, "totals": {k: round(v, 2) for k, v in tot.items()} if rows else None}
+
+
 def soc_history(buckets_by_day: dict[str, list], plan_by_day: dict[str, list | None] | None = None,
                 days: int = 7, today: date | None = None) -> list[dict[str, Any]]:
     """Godzinowy SOC z kilku ostatnich dób wraz ze znacznikami: ładowanie z sieci / sprzedaż (z koszyków Insights).

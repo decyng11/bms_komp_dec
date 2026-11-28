@@ -1924,6 +1924,10 @@ class BmsRuntime:
             _LOGGER.debug("EMS: prognoza kosztu nieudana", exc_info=True)
             return {}
 
+    def yesterday_table(self) -> dict[str, Any]:
+        y = (dt_util.now().date() - timedelta(days=1)).isoformat()
+        return planview.yesterday_rows(self.insights._buckets(y), y)  # noqa: SLF001
+
     def soc_history(self, days: int = 7) -> list[dict[str, Any]]:
         today = dt_util.now().date()
         keys = [(today - timedelta(days=i)).isoformat() for i in range(days)]

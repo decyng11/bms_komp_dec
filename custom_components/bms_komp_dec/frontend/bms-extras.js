@@ -1287,7 +1287,7 @@
     const pxDayLabel = (iso) => {
       const t = new Date(); const p = (d) => d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
       const tm = new Date(t.getTime() + 86400000);
-      if (iso === p(t)) return 'Dziś'; if (iso === p(tm)) return 'Jutro'; return iso;
+      const yd = new Date(t.getTime() - 86400000); if (iso === p(yd)) return 'Wczoraj'; if (iso === p(t)) return 'Dziś'; if (iso === p(tm)) return 'Jutro'; return iso;
     };
     const pxZl = (v, sign) => { const n = exNum(v); if (n === null) return '—'; const a = Math.abs(n).toFixed(2).replace('.', ','); return (sign ? (n > 0 ? '+' : n < 0 ? '−' : '') : (n < 0 ? '−' : '')) + a + ' zł'; };
     const pxZl0 = (v) => { const n = exNum(v); if (n === null) return '—'; return (n < 0 ? '−' : '') + String(Math.round(Math.abs(n))).replace(/\B(?=(\d{3})+(?!\d))/g, ' ') + ' zł'; };
@@ -1408,12 +1408,13 @@
         const box = this._el('exTblBox'); if (!box) return;
         const a = this._pvAttrs ? this._pvAttrs() : {};
         const rows = Array.isArray(a.table) ? a.table : [];
-        const key = JSON.stringify([a.generated_at, rows.length, TC('text'), new Date().getHours()]);
+        const yrows = (a.yesterday && Array.isArray(a.yesterday.rows)) ? a.yesterday.rows : [];
+        const key = JSON.stringify([a.generated_at, rows.length, yrows.length, TC('text'), new Date().getHours()]);
         if (box.dataset.exKey === key) return;
         box.dataset.exKey = key;
         if (!rows.length) { box.innerHTML = '<div class="chart-empty">Plan jeszcze nie jest policzony albo nie ma danych (SOC, prognozy).</div>'; return; }
         let day = '', html = '';
-        rows.forEach((r) => {
+        yrows.concat(rows).forEach((r) => {
           if (r.day !== day) { day = r.day; html += `<tr class="day"><td colspan="8">${exEsc(pxDayLabel(day))}</td></tr>`; }
           const c = exNum(r.cost);
           html += `<tr class="${r.peak ? 'peak' : ''}"><td>${String(r.h).padStart(2, '0')}:00</td><td><span class="px-act ${exEsc(r.action)}">${exEsc(r.label)}</span></td>`

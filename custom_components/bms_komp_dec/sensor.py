@@ -136,7 +136,7 @@ class BmsRuntimeSensor(BmsBaseEntity, SensorEntity):
         "price_buy_tomorrow_state", "price_buy_tomorrow_note", "prices_buy_tomorrow_est", "price_buy_tomorrow_est_note",
         "pv_forecast_source", "pv_hourly_today", "pv_hourly_tomorrow", "pv_daily", "pv_sources", "pv_fallback", "assumptions",
         "prices_today", "prices_tomorrow", "rce_today", "rce_tomorrow",
-        "devices", "power_total", "accuracy", "table", "overrides", "soc_history", "why", "control_test", "issues", "reviews",
+        "devices", "power_total", "accuracy", "table", "yesterday", "overrides", "soc_history", "why", "control_test", "issues", "reviews",
     })
 
     def __init__(self, coordinator, key, name, unit, icon):
@@ -389,6 +389,7 @@ class BmsRuntimeSensor(BmsBaseEntity, SensorEntity):
             now = dt_util.now()
             pt = rt.plan_table()
             return {"why": rt.why_now(now), "table": pt["rows"], "table_totals": pt["totals"],
+                    "yesterday": rt.yesterday_table(),
                     "today_text": planview.day_sentence(pt["rows"], now.date().isoformat(), now.hour),
                     "overrides": [dict(o, text=rt.override_text(o)) for o in rt.override_list(now)],
                     "soc_history": rt.soc_history(7), "control_test": rt.state.get("control_test"),
