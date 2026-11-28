@@ -16,7 +16,8 @@ const SC = {
 const TOK = () => {
   const s = __el.shadowRoot, tc = s.querySelector('[data-tab-content="main"]');
   const pb = s.getElementById('priceBar');
-  const txt = [(tc.innerText || ''), pb ? pb.innerText : '', ...[...tc.querySelectorAll('svg[aria-label]')].map(n => n.getAttribute('aria-label'))].join('\n').toLowerCase();
+  const txt = [(tc.innerText || ''), pb ? pb.innerText : '', ...[...tc.querySelectorAll('svg[aria-label]')].map(n => n.getAttribute('aria-label'))].join('\n').toLowerCase()
+    .replace(/ok\.\s*\d{1,2}:\d{2}/g, 'ok.');   // „pełna ok. 14:29” zależy od zegara: na granicy minuty style dałyby różne liczby
   const nums = new Set((txt.match(/\d+(?:[.,]\d+)?/g) || []).map(x => x.replace(',', '.')).map(x => String(+x)));
   const flow = s.querySelector('[data-tile="main-flow"]');
   const labels = (flow.innerText + '\n' + [...flow.querySelectorAll('svg[aria-label]')].map(n => n.getAttribute('aria-label')).join('\n')).toLowerCase();
