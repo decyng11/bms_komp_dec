@@ -1,5 +1,10 @@
 # EMS komp-dec 0.9.6.4
 
+## Rezerwa SOC naprawdę utrzymywana
+„Rezerwa SOC — minimum” tylko ograniczała rozładowanie: gdy bateria była już poniżej ustawionej rezerwy (np. rezerwa 30%, SOC 20%), plan czekał z ładowaniem do nocnego okna. Teraz przy SOC poniżej rezerwy (i rezerwie wyższej niż próg falownika) EMS ładuje z sieci od razu, do rezerwy +3 pkt (z uwzględnieniem zużycia do początku okna nocnego). Uzasadnienie w planie mówi, że to doładowanie pod rezerwę. Przy rezerwie nie wyższej niż próg falownika nic się nie zmienia.
+
+Komunikat „Bateria starczy na ok. …” przy SOC na progu zastąpiło „Bateria jest na progu X% — dom zasila sieć albo PV”.
+
 ## Wczoraj w planie godzina po godzinie
 Tabela na karcie Plan zaczyna się teraz od „Wczoraj” (rzeczywiste dane z liczników godzinowych: akcja, ceny, PV, dom, SOC, koszt godziny), potem „Dziś” i „Jutro”. Plan dziś i jutro bez zmian. Sama tabela jest domyślnie zwinięta („Pokaż tabelę godzina po godzinie”), a nad nią zostaje podsumowanie „Co EMS planuje na najbliższe 24 h”; stan zwinięcia pamięta się do odświeżenia karty.
 

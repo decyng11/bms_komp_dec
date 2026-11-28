@@ -1276,12 +1276,21 @@ class ScheduleOptimizer:
         # Pilnie: SOC tuż nad progiem falownika (≤ próg + 5 pkt) w taniej porze → ładujemy od bieżącej godziny, bez czekania na „najlepszą”.
         floor_now = max(float(ctx.get("inv_now") or 0.0), float(HARD_FLOOR_SOC))
         urgent = bool(ctx["soc"] is not None and ctx["soc"] <= floor_now + URGENT_MARGIN_PCT and not prof.is_peak(ctx["now"]))
+        # SOC poniżej rezerwy ustawionej przez użytkownika („Rezerwa SOC — minimum”): doładuj od razu do rezerwy, nie czekaj do nocy.
+        # Rezerwa nie wyższa niż próg falownika nic nie zmienia (wtedy działa zwykła ścieżka „pilnie”).
+        rsv = float(ctx.get("reserve_floor") or 0.0)
+        rsv_low = bool(ctx["soc"] is not None and rsv > floor_now + 1.0 and ctx["soc"] < rsv - 1.0 and not prof.is_peak(ctx["now"]))
+        ctx["reserve_low"] = rsv_low
+        urgent = urgent or rsv_low
         if now_h >= ns or ne_today is None:
             earliest, end_h = now_h + 1, ne_next
             nxt = True
         elif now_h >= ne_today - 1:
             if urgent and now_h < ne_today:     # ostatnia godzina taniego okna, a bateria przy progu: ładujemy teraz, nie planujemy dopiero następnej nocy
                 earliest, end_h = now_h + 1, ne_today
+                nxt = False
+            elif rsv_low and now_h + 1 < ns:    # między oknami, SOC pod rezerwą: ładuj od razu, aż do początku okna nocnego
+                earliest, end_h = now_h + 1, ns
                 nxt = False
             else:                               # tuż przed końcem okna nocnego — planujemy nadchodzącą noc
                 earliest, end_h = ns, ne_next
@@ -1322,7 +1331,10 @@ class ScheduleOptimizer:
         target = min(ctx["target_cfg"], res["pct"] + ctx["dawn_margin"])
         floor_note = (f" Próg odcięcia falownika: {ctx['inv_dawn']:.0f}% ({ctx['inv']['source']})."
                       if ctx["inv_dawn"] > ctx["reserve_floor"] else "")
-        if urgent:
+        if ctx.get("reserve_low"):
+            floor_note += (f" SOC {ctx['soc']:.0f}% jest poniżej ustawionej rezerwy ({ctx['reserve_floor']:.0f}%), więc ładowanie "
+                           f"startuje od razu, aż bateria wróci do rezerwy.")
+        elif urgent:
             floor_note += (f" SOC {ctx['soc']:.0f}% jest tuż nad progiem falownika ({floor_now:.0f}%), więc ładowanie startuje od razu, "
                            f"a nie dopiero w najlepszej godzinie.")
 
@@ -1358,6 +1370,9 @@ class ScheduleOptimizer:
             ago = f"{fd['days']} dni temu" if fd.get("days") is not None else "jeszcze nie odnotowano"
             floor_note += f" Pełne ładowanie co {fd['every']} dni (kalibracja baterii): ostatnie 100% — {ago}, więc cel to 100%."
         ctx["full_act"] = full_act
+        if ctx.get("reserve_low") and not full_act:     # doładowanie pod rezerwę: tylko do rezerwy (+3 pkt), nie do celu nocnego
+            target = min(ctx["target_cfg"], ctx["reserve_floor"] + 3.0)
+            peak_note = ""
         # „Cel” to SOC potrzebny na KONIEC okna nocnego (tuż przed szczytem), więc porównujemy go z SOC, jaki zostanie
         # po nocy bez ładowania — a nie z SOC z początku nocy (przez noc dom zużywa energię z baterii).
         soc_dawn = self._simulate(ctx, soc_start, earliest, end)
